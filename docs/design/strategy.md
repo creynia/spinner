@@ -944,3 +944,498 @@ Condition chips are created from a picker generated from the fact schema: choose
 ### 13.5 Templates
 
 "New strategy from a system" offers the classic presets (§15) as starting points; the builder treats them as ordinary JSON once inserted.
+
+---
+
+## 14. Prior-art coverage
+
+The language was checked against every strategy in the sibling repos (read-only prior art, `/home/user/creynia/*`). Each must be expressible; the craps ones become goldens C1–C7 and acceptance fixtures for the craps app.
+
+### 14.1 crappy (`src/sim/strategy/presets.ts`, `custom.ts`, `primitives.ts`)
+
+| crappy | In this language | Notes |
+|---|---|---|
+| `pass-max-odds`, `pass-2x-odds`, `dont-pass-max-lay` | layout `pass-line` when come-out + `pass-odds` `{ times: [{ amountOn: 'pass-line' }, k] }` (or `{ tableMax: 'pass-odds' }` for max) when point | golden C2. `tableMax` must be state-aware (odds max depends on the point): §18 |
+| `three-point-molly`, `dont-come-molly`, custom `come.count` | `come` when point and `comePoints < n` and not `onTable('come')`; one `come-odds:<n>` entry per point number sized from `amountOn('come:<n>')` | golden C3; needs the plugin to expose a come bet that travelled as a distinct table id (`come:6`) or `amountOn` with a point arg (§18) |
+| `place-6-8`, `across`, `iron-cross`, `buy-4-10`, `lay-4-10` | layout entries with `{ units: 1.2 }` etc.; reconcile rounds to the bet's proper unit ($6 on 6/8, buy/lay vig sizing), as crappy's `numberAmount`/`suggestAmount` do | golden C4 |
+| `place-6-8-press` (press 1 unit after a hit, cap 5×) | `{ keepOr: 1200 }` layout + rule `event bet-won place-6 → press place-6 by 600 cap 6000` | golden C5 |
+| `inside-regress` (after the first hit keep 6/8 only) | var `regressed`, 5/9 entries `when regressed == 0`, rule on any place `bet-won` → `set regressed 1`, `seven-out` → `set 0` | golden C7 |
+| `martingale-pass` (double after each pass-line loss, `maxDoublings`) | martingale tracking `pass-line`, `feed: 'sized'`; resolutions on later rolls feed it (§7.2) | golden C6. crappy's `maxDoublings: d` = `maxSteps: d + 1` |
+| `pass-hedge-any-craps` | `any-craps` entry `{ units: 0.2 }` when come-out | |
+| `field-every-roll`, `any-7-every-roll`, `hardways-all` | plain layout entries (no `when`) | |
+| bonus bets placed at each new shooter (`fire`, `all`, `tall`, `small`) | entries `when: { fact: ['handStart', '==', true] }` (plugin fact) | |
+| `my-layout` (re-place a snapshot) | a stage whose layout is the snapshot | |
+| custom `stopWin`/`stopLoss` | session config, or rules with `stop` | |
+| crappy `Plan.blocked` (core bets unaffordable ⇒ bust) | `Reconciliation.affordable` and §3.7 phase 5 | |
+
+### 14.2 baccaratton (`src/sim/strategy/presets.ts`)
+
+| baccaratton | In this language |
+|---|---|
+| flat banker / player / tie | one layout entry |
+| martingale (`maxSteps` 7, reset over the limit) | `martingale` `maxSteps: 7`, `onCap: 'reset'`; baccaratton's `step + 1 >= max → reset` is exactly §7.5 with `L = maxSteps` |
+| paroli [1,2,4], 1-3-2-6 | `paroli` `maxSteps: 3`; `1-3-2-6` (both reset after the last win) |
+| fibonacci (`maxSteps` 11 = the 89-unit step) | `fibonacci` `maxSteps: 11`, `onCap: 'reset'` |
+| d'Alembert (`maxUnits` 20, stays at the cap) | `dalembert` `maxSteps: 20`, `onCap: 'stay'` |
+| labouchère (line 1-2-3-4, reset when the next bet exceeds `maxBetUnits` 100) | `labouchere` `line: [1,2,3,4]`, `maxAmount: { units: 100 }`, `onCap: 'reset'` |
+| table-max rule ("a next bet above the table max resets the system", `caps` counter) | `maxAmount: { tableMax: 'banker' }` with `onCap: 'reset'`; `{ progCaps: p }` exposes the counter |
+| ties push: the progression stays | §7.1 push ⇒ stay |
+| follow-the-shoe (bet the last non-tie winner; banker at a new shoe) | var `side`; rules `fact lastWinner == 'player' → set side 1`, `'banker' → set side 0`, `event new-shoe → set side 0`; entries `player when side == 1`, `banker when side == 0` |
+| side-bet sprinkler (fixed side bets every hand) | extra layout entries |
+| Banker commission (wins pay 0.95) | Oscar's Grind `need` formula uses the actual payout (§7.4) |
+
+### 14.3 holdumb (Ultimate Texas Hold'em, `src/sim/strategy/rules.ts`, `predicates.ts`)
+
+UTH strategies are **play decisions inside a hand** (4x preflop with a chart of hand classes, 2x on the flop with made-hand / hidden-pair / flush-draw predicates, 1x or fold on the river by dealer outs). They fit if the UTH plugin defines a **round as one street** (preflop decision, flop decision, river decision; a hand spans several rounds like a craps hand spans rolls) and exposes the predicates as facts:
+
+- `basic` preflop: layout `play` `{ times: [{ amountOn: 'ante' }, 4] }` when `{ fact: ['street', '==', 'preflop'] }` and `{ fact: ['handClass', 'in', ['33', '44', ..., 'JTo']] }` (69 values).
+- flop 2x: `{ any: [ { fact: ['flopMade', '==', true] }, { fact: ['hiddenPair', '==', true] }, { fact: ['flushDraw', '==', true] } ] }`; parameterised variants (`hiddenPairExcept(22)`) as fact args.
+- river: `play` 1x when `{ any: [hidden, { cmp: [ 'dealerOuts', '<', 21 ] }] }`, else `{ act: 'fold' }` (§6.11).
+- `perfect` / `expert`: a plugin fact `bestAction` (computed by the plugin's exact solver) tested with `fact ... == 'raise-4x'`.
+- ante / blind / trips: layout entries when `street == 'start'`.
+
+The only additions this needed are the `act` effect and `FactSchema.actions` (§6.11); nothing in the semantics assumes one decision per random event beyond "a round is a decision window followed by a random event", which a street satisfies.
+
+---
+
+## 15. Golden strategies
+
+Every golden validates against the provisional roulette/craps schemas, runs, and has a pinned trace (§12). Bet ids and game facts are provisional (game.md wins); the craps ids follow crappy. Assumed roulette facts: `lastNumber` (number, round, nullable), `lastColor` (`red | black | green`), `lastDozen` (`0 | 1 | 2 | 3`, 0 for a zero pocket), `lastParity`, `lastHalf`; event `zero`. Assumed craps facts: `phase` (`come-out | point`), `point`, `comePoints` (come bets sitting on numbers), `handStart`; events `point-made`, `seven-out`.
+
+Unit is $25 (2500) unless the strategy says otherwise, to match the $25 minimum (decisions #3). Coverage of features is tabulated in §15.3.
+
+### 15.1 Roulette
+
+**R1 flat-red**: $25 on red every spin.
+
+```json
+{ "schema": 1, "id": "flat-red", "name": "Flat red", "game": "roulette", "unit": 2500,
+  "stages": [ { "id": "play", "layout": [ { "bet": "red", "amount": { "units": 1 } } ] } ] }
+```
+
+**R2 martingale-red**: double after each loss, 8 levels ($25 … $3,200), back to $25 after a win or at the cap.
+
+```json
+{ "schema": 1, "id": "martingale-red", "name": "Martingale on red", "game": "roulette", "unit": 2500,
+  "progressions": { "m": { "kind": "martingale", "track": "red", "maxSteps": 8, "onCap": "reset" } },
+  "stages": [ { "id": "play", "layout": [ { "bet": "red", "amount": { "prog": "m" } } ] } ] }
+```
+
+**R3 grand-martingale-black**: 1, 3, 7, 15, 31, 63 units; stop the session if the sixth bet loses.
+
+```json
+{ "schema": 1, "id": "grand-martingale-black", "name": "Grand Martingale on black", "game": "roulette", "unit": 2500,
+  "progressions": { "g": { "kind": "grand-martingale", "track": "black", "maxSteps": 6, "onCap": "stop" } },
+  "stages": [ { "id": "play", "layout": [ { "bet": "black", "amount": { "prog": "g" } } ] } ] }
+```
+
+**R4 fibonacci-red**: Fibonacci, 12 levels (up to 144 units), back two after a win.
+
+```json
+{ "schema": 1, "id": "fibonacci-red", "name": "Fibonacci on red", "game": "roulette", "unit": 2500,
+  "progressions": { "f": { "kind": "fibonacci", "track": "red", "maxSteps": 12, "onCap": "reset" } },
+  "stages": [ { "id": "play", "layout": [ { "bet": "red", "amount": { "prog": "f" } } ] } ] }
+```
+
+**R5 dalembert-even**: +1 unit after a loss, −1 after a win, stay at 20 units.
+
+```json
+{ "schema": 1, "id": "dalembert-even", "name": "d'Alembert on even", "game": "roulette", "unit": 2500,
+  "progressions": { "d": { "kind": "dalembert", "track": "even", "maxSteps": 20, "onCap": "stay" } },
+  "stages": [ { "id": "play", "layout": [ { "bet": "even", "amount": { "prog": "d" } } ] } ] }
+```
+
+**R6 labouchere-red**: line 1-2-3-4; a bet over 100 units resets the line; quit after five completed lines.
+
+```json
+{ "schema": 1, "id": "labouchere-red", "name": "Labouchere on red", "game": "roulette", "unit": 2500,
+  "vars": { "lines": 0 },
+  "progressions": { "l": { "kind": "labouchere", "track": "red", "line": [1, 2, 3, 4],
+                            "onEmpty": "reset", "maxAmount": { "units": 100 }, "onCap": "reset" } },
+  "stages": [ { "id": "play",
+    "layout": [ { "bet": "red", "amount": { "prog": "l" } } ],
+    "rules": [
+      { "id": "count-line", "when": { "event": "prog-done", "prog": "l" }, "then": [ { "inc": "lines" } ] },
+      { "id": "five-lines", "when": { "cmp": [ { "var": "lines" }, ">=", 5 ] }, "then": [ { "stop": "five-lines" } ] }
+    ] } ] }
+```
+
+**R7 paroli-red**: let it ride twice (1, 2, 4), bank after three wins.
+
+```json
+{ "schema": 1, "id": "paroli-red", "name": "Paroli on red", "game": "roulette", "unit": 2500,
+  "progressions": { "p": { "kind": "paroli", "track": "red", "maxSteps": 3 } },
+  "stages": [ { "id": "play", "layout": [ { "bet": "red", "amount": { "prog": "p" } } ] } ] }
+```
+
+**R8 one-three-two-six-black**
+
+```json
+{ "schema": 1, "id": "one-three-two-six-black", "name": "1-3-2-6 on black", "game": "roulette", "unit": 2500,
+  "progressions": { "s": { "kind": "1-3-2-6", "track": "black" } },
+  "stages": [ { "id": "play", "layout": [ { "bet": "black", "amount": { "prog": "s" } } ] } ] }
+```
+
+**R9 oscars-grind-red**: aim for +1 unit per cycle, at most 10 units.
+
+```json
+{ "schema": 1, "id": "oscars-grind-red", "name": "Oscar's Grind on red", "game": "roulette", "unit": 2500,
+  "progressions": { "o": { "kind": "oscars-grind", "track": "red", "maxSteps": 10, "onCap": "stay" } },
+  "stages": [ { "id": "play", "layout": [ { "bet": "red", "amount": { "prog": "o" } } ] } ] }
+```
+
+**R10 james-bond**: $200 per spin: $140 on high (19–36), $50 on the 13–18 six-line, $10 on zero.
+
+```json
+{ "schema": 1, "id": "james-bond", "name": "James Bond", "game": "roulette", "unit": 1000,
+  "stages": [ { "id": "play", "layout": [
+    { "bet": "high", "amount": { "units": 14 } },
+    { "bet": "sixline:13-18", "amount": { "units": 5 } },
+    { "bet": "straight:0", "amount": { "units": 1 } } ] } ] }
+```
+
+**R11 dozens-progression**: one unit on each of the first two dozens; triple both after a loss (1, 3, 9, 27), reset after a win or at the cap.
+
+```json
+{ "schema": 1, "id": "dozens-progression", "name": "Two dozens, tripling", "game": "roulette", "unit": 2500,
+  "progressions": { "d": { "kind": "martingale", "multiplier": 3, "maxSteps": 4, "onCap": "reset",
+                            "track": { "bets": ["dozen:1", "dozen:2"] } } },
+  "stages": [ { "id": "play", "layout": [
+    { "bet": "dozen:1", "amount": { "prog": "d" } },
+    { "bet": "dozen:2", "amount": { "prog": "d" } } ] } ] }
+```
+
+**R12 red-mart-then-flat**: PLAYBOOK §3.6, verbatim. Its $5 unit is below the $25 outside minimum (`E_BELOW_MIN` at the default rules), so its golden experiment overrides the outside minimum to $5 (Open question 1); R12b is the same plan at $25 with thresholds ×5.
+
+```json
+{
+  "schema": 1, "id": "red-mart-then-flat", "name": "Red Martingale, then flat", "game": "roulette", "unit": 500,
+  "progressions": { "m": { "kind": "martingale", "base": { "units": 1 }, "maxSteps": 6, "onCap": "reset", "track": "red" } },
+  "stages": [
+    { "id": "mart",
+      "layout": [ { "bet": "red", "amount": { "prog": "m" } } ],
+      "rules": [
+        { "when": { "cmp": ["net", ">=", 10000] }, "then": [ { "goto": "flat" } ] },
+        { "when": { "cmp": ["net", "<=", -30000] }, "then": [ { "stop": "stop-loss" } ] }
+      ] },
+    { "id": "flat",
+      "layout": [ { "bet": "red", "amount": { "units": 1 } } ],
+      "rules": [
+        { "when": { "cmp": ["roundsInStage", ">=", 50] }, "then": [ { "stop": "plan-complete" } ] }
+      ] }
+  ]
+}
+```
+
+(The playbook's example omits `name`; it is added here because `name` is required.)
+
+**R12b red-mart-then-flat-25**
+
+```json
+{ "schema": 1, "id": "red-mart-then-flat-25", "name": "Red Martingale, then flat ($25)", "game": "roulette", "unit": 2500,
+  "progressions": { "m": { "kind": "martingale", "maxSteps": 6, "onCap": "reset", "track": "red" } },
+  "stages": [
+    { "id": "mart", "layout": [ { "bet": "red", "amount": { "prog": "m" } } ],
+      "rules": [
+        { "when": { "cmp": ["net", ">=", 50000] }, "then": [ { "goto": "flat" } ] },
+        { "when": { "cmp": ["net", "<=", -150000] }, "then": [ { "stop": "stop-loss" } ] } ] },
+    { "id": "flat", "layout": [ { "bet": "red", "amount": { "units": 1 } } ],
+      "rules": [ { "when": { "cmp": ["roundsInStage", ">=", 50] }, "then": [ { "stop": "plan-complete" } ] } ] } ] }
+```
+
+**R13 wait-for-three-reds**: sit out until red comes up three times in a row, then bet black with a 4-level Martingale until it wins or caps, then wait again.
+
+```json
+{ "schema": 1, "id": "wait-for-three-reds", "name": "Wait for three reds", "game": "roulette", "unit": 2500,
+  "progressions": { "m": { "kind": "martingale", "track": "black", "maxSteps": 4, "onCap": "reset" } },
+  "stages": [
+    { "id": "watch",
+      "rules": [ { "when": { "streak": { "fact": "lastColor", "equals": "red", "atLeast": 3 } }, "then": [ { "goto": "bet" } ] } ] },
+    { "id": "bet",
+      "onEnter": [ { "prog": "m", "do": "reset" } ],
+      "layout": [ { "bet": "black", "amount": { "prog": "m" } } ],
+      "rules": [
+        { "when": { "event": "bet-won", "bet": "black" }, "then": [ { "goto": "watch" } ] },
+        { "when": { "event": "prog-cap", "prog": "m" }, "then": [ { "goto": "watch" } ] } ] } ] }
+```
+
+**R14 sleeping-number-17**: when 17 has not come up for 74 spins, bet it for up to 36 spins; give up after three chases.
+
+```json
+{ "schema": 1, "id": "sleeping-number-17", "name": "Chase a sleeping 17", "game": "roulette", "unit": 2500,
+  "stages": [
+    { "id": "wait",
+      "rules": [
+        { "when": { "cmp": [ { "stageEntries": "chase" }, ">=", 3 ] }, "then": [ { "stop": "three-chases" } ] },
+        { "when": { "since": { "fact": "lastNumber", "equals": 17, "atLeast": 74 } }, "then": [ { "goto": "chase" } ] } ] },
+    { "id": "chase",
+      "layout": [ { "bet": "straight:17", "amount": { "units": 1 } } ],
+      "rules": [
+        { "when": { "event": "bet-won", "bet": "straight:17" }, "then": [ { "goto": "wait" } ] },
+        { "when": { "cmp": ["roundsInStage", ">=", 36] }, "then": [ { "goto": "wait" } ] } ] } ] }
+```
+
+**R15 hot-dozen-follower**: bet the dozen that just hit; sit out after a zero and at the start.
+
+```json
+{ "schema": 1, "id": "hot-dozen-follower", "name": "Follow the last dozen", "game": "roulette", "unit": 2500,
+  "stages": [ { "id": "play", "layout": [
+    { "bet": "dozen:1", "amount": { "units": 1 }, "when": { "fact": ["lastDozen", "==", 1] } },
+    { "bet": "dozen:2", "amount": { "units": 1 }, "when": { "fact": ["lastDozen", "==", 2] } },
+    { "bet": "dozen:3", "amount": { "units": 1 }, "when": { "fact": ["lastDozen", "==", 3] } } ] } ] }
+```
+
+**R16 trailing-stop-red**: flat red; once $200 up, lock in $100 less than the best net seen and stop if net falls to the lock.
+
+```json
+{ "schema": 1, "id": "trailing-stop-red", "name": "Red with a trailing stop", "game": "roulette", "unit": 2500,
+  "vars": { "armed": 0, "lock": 0 },
+  "stages": [ { "id": "play",
+    "layout": [ { "bet": "red", "amount": { "units": 1 } } ],
+    "rules": [
+      { "id": "arm", "once": true, "when": { "cmp": ["net", ">=", 20000] },
+        "then": [ { "set": "armed", "to": 1 }, { "set": "lock", "to": { "sub": ["net", 10000] } } ] },
+      { "id": "raise", "when": { "all": [ { "cmp": [ { "var": "armed" }, "==", 1 ] },
+                                           { "cmp": [ { "sub": ["net", 10000] }, ">", { "var": "lock" } ] } ] },
+        "then": [ { "set": "lock", "to": { "sub": ["net", 10000] } } ] },
+      { "id": "hit", "when": { "all": [ { "cmp": [ { "var": "armed" }, "==", 1 ] },
+                                         { "cmp": ["net", "<=", { "var": "lock" }] } ] },
+        "then": [ { "stop": "trailing-stop" } ] } ] } ] }
+```
+
+**R17 fallacy-count-black**: bet red only when black came up at least 7 of the last 10 spins (a gambler's-fallacy system; it does not change the edge).
+
+```json
+{ "schema": 1, "id": "fallacy-count-black", "name": "Red after a run of blacks", "game": "roulette", "unit": 2500,
+  "stages": [ { "id": "play", "layout": [
+    { "bet": "red", "amount": { "units": 1 },
+      "when": { "countInLast": { "fact": "lastColor", "equals": "black", "n": 10, "atLeast": 7 } } } ] } ] }
+```
+
+**R18 percent-bankroll-red**: bet 2% of bankroll on red, rounded down to $25 and never below the table minimum, re-sized every 50 spins.
+
+```json
+{ "schema": 1, "id": "percent-bankroll-red", "name": "2% of bankroll on red", "game": "roulette", "unit": 2500,
+  "vars": { "stake": 2500 },
+  "stages": [ { "id": "play",
+    "layout": [ { "bet": "red", "amount": { "var": "stake" } } ],
+    "rules": [ { "id": "resize", "when": { "everyN": 50 },
+      "then": [ { "set": "stake", "to": { "max": [ { "tableMin": "red" },
+                                                    { "floorTo": [ { "pctOfBankroll": 2 }, 2500 ] } ] } } ] } ] } ] }
+```
+
+**R19 red-with-zero-boost**: flat red; after two zeros in the last 20 spins, a `boost` stage that extends the base adds $5 on zero and doubles red for 10 spins; the zero bet comes off as soon as the session is ahead.
+
+```json
+{ "schema": 1, "id": "red-with-zero-boost", "name": "Red with a zero boost", "game": "roulette", "unit": 2500,
+  "vars": { "boosts": 0 },
+  "stages": [
+    { "id": "base",
+      "layout": [ { "bet": "red", "amount": { "units": 1 } } ],
+      "rules": [
+        { "id": "boost-on", "when": { "countInLast": { "event": "zero", "n": 20, "atLeast": 2, "partial": true } },
+          "cooldown": 20, "then": [ { "goto": "boost" } ] } ] },
+    { "id": "boost", "extends": "base",
+      "onEnter": [ { "inc": "boosts" } ],
+      "onExit": [ { "set": "boosts", "to": { "min": [ { "var": "boosts" }, 99 ] } } ],
+      "layout": [ { "bet": "red", "amount": { "units": 2 } },
+                  { "bet": "straight:0", "amount": 500 } ],
+      "rules": [
+        { "id": "zero-off", "once": "stage", "when": { "cmp": ["net", ">", 0] }, "then": [ { "remove": "straight:0" } ] },
+        { "id": "boost-off", "when": { "cmp": ["roundsInStage", ">=", 10] }, "then": [ { "goto": "base" } ] } ] } ] }
+```
+
+Here the child's `red` entry overrides the parent's; the inherited `boost-on` rule runs after the child's rules and shares its cooldown across both stages. `zero-off` is a patch, so it removes the zero bet only in the window it fires (`once: 'stage'` keeps it from firing again in that boost), illustrating that patches do not persist; the trace shows the zero bet back the next window. (Golden test asserts exactly that.)
+
+**R20 cooldown-pause**: flat black; after three losses in a row sit out five spins, at most once every 30 spins.
+
+```json
+{ "schema": 1, "id": "cooldown-pause", "name": "Pause after three losses", "game": "roulette", "unit": 2500,
+  "vars": { "pause": 0 },
+  "stages": [ { "id": "play",
+    "layout": [ { "bet": "black", "amount": { "units": 1 } } ],
+    "rules": [
+      { "id": "start-pause", "cooldown": 30, "when": { "cmp": ["lossStreak", ">=", 3] }, "then": [ { "set": "pause", "to": 5 } ] },
+      { "id": "sit-out", "when": { "cmp": [ { "var": "pause" }, ">", 0 ] },
+        "then": [ { "skipRound": true }, { "inc": "pause", "by": -1 } ] } ] } ] }
+```
+
+Note: `lossStreak` is unchanged by sat-out rounds (`none`), so the cooldown is what prevents an immediate second pause.
+
+**R21 voisins-stop-win**: the voisins du zéro call bet (9 chips, $27 total) every spin; stop when $300 up.
+
+```json
+{ "schema": 1, "id": "voisins-stop-win", "name": "Voisins du zéro", "game": "roulette", "unit": 2700,
+  "stages": [ { "id": "play",
+    "layout": [ { "bet": "voisins", "amount": { "units": 1 } } ],
+    "rules": [ { "when": { "cmp": ["net", ">=", 30000] }, "then": [ { "stop": "target" } ] } ] } ] }
+```
+
+**R22 sequence-high-1248**: 1-2-4-8 units on high; reset after a win; stop if all four lose.
+
+```json
+{ "schema": 1, "id": "sequence-high-1248", "name": "1-2-4-8 on high", "game": "roulette", "unit": 2500,
+  "progressions": { "q": { "kind": "sequence", "track": "high", "onWin": "reset", "onLoss": "advance", "onCap": "stop",
+    "amounts": [ { "units": 1 }, { "units": 2 }, { "units": 4 }, { "units": 8 } ] } },
+  "stages": [ { "id": "play", "layout": [ { "bet": "high", "amount": { "prog": "q" } } ] } ] }
+```
+
+**R23 corners-manual-dalembert**: four corners ($25 total), a d'Alembert fed by the rules: a winning spin counts as a win only if it netted at least one unit.
+
+```json
+{ "schema": 1, "id": "corners-manual-dalembert", "name": "Four corners, d'Alembert", "game": "roulette", "unit": 625,
+  "progressions": { "d": { "kind": "dalembert", "track": "manual", "maxSteps": 10, "onCap": "stay" } },
+  "stages": [ { "id": "play",
+    "layout": [ { "bet": "corner:1-2-4-5", "amount": { "prog": "d" } },
+                { "bet": "corner:8-9-11-12", "amount": { "prog": "d" } },
+                { "bet": "corner:25-26-28-29", "amount": { "prog": "d" } },
+                { "bet": "corner:32-33-35-36", "amount": { "prog": "d" } } ],
+    "rules": [
+      { "when": { "cmp": ["lastNet", ">=", 625] }, "then": [ { "prog": "d", "do": "win" } ] },
+      { "when": { "cmp": ["lastNet", "<", 0] }, "then": [ { "prog": "d", "do": "loss" } ] } ] } ] }
+```
+
+**R24 skip-after-zero-if**: red, two units after a black and one otherwise; sit out the spin after a zero.
+
+```json
+{ "schema": 1, "id": "skip-after-zero-if", "name": "Red, double after black, skip after zero", "game": "roulette", "unit": 2500,
+  "stages": [ { "id": "play",
+    "layout": [ { "bet": "red", "amount": { "if": [ { "fact": ["lastColor", "==", "black"] }, { "units": 2 }, { "units": 1 } ] } } ],
+    "rules": [ { "when": { "event": "zero" }, "then": [ { "skipRound": true } ] } ] } ] }
+```
+
+### 15.2 Craps (fixtures for the craps app; crappy ids)
+
+**C1 pass-then-inside**: PLAYBOOK §3.6 verbatim (plus `name`).
+
+```json
+{
+  "schema": 1, "id": "pass-then-inside", "name": "Pass, then inside", "game": "craps", "unit": 1000,
+  "vars": { "pointsInRow": 0 },
+  "stages": [
+    { "id": "line",
+      "layout": [ { "bet": "pass-line", "amount": { "units": 1 }, "when": { "fact": ["phase", "==", "come-out"] } },
+                  { "bet": "pass-odds", "amount": { "times": [ { "amountOn": "pass-line" }, 2 ] }, "when": { "fact": ["phase", "==", "point"] } } ],
+      "rules": [
+        { "when": { "event": "point-made" }, "then": [ { "set": "pointsInRow", "to": { "add": [ { "var": "pointsInRow" }, 1 ] } } ] },
+        { "when": { "event": "seven-out" }, "then": [ { "set": "pointsInRow", "to": 0 } ] },
+        { "when": { "cmp": [ { "var": "pointsInRow" }, ">=", 2 ] }, "then": [ { "goto": "inside" } ] },
+        { "when": { "cmp": ["net", ">=", 20000] }, "then": [ { "stop": "stop-win" } ] }
+      ] },
+    { "id": "inside",
+      "extends": "line",
+      "layout": [ { "bet": "place-6", "amount": 1200, "when": { "fact": ["phase", "==", "point"] } },
+                  { "bet": "place-8", "amount": 1200, "when": { "fact": ["phase", "==", "point"] } } ],
+      "rules": [
+        { "when": { "cmp": ["net", "<=", -15000] }, "then": [ { "goto": "line" } ] }
+      ] }
+  ]
+}
+```
+
+Semantics worth pinning: in `inside`, the inherited `pointsInRow >= 2 → goto inside` rule fires again every window while the count stays at 2+, which is a **re-entry** each window (resets `roundsInStage`). The golden pins this behaviour and the validator emits no error (the condition is not `always`). The pass-line bet left out of the point-phase layout is kept by §3.5.3, so reconcile reports zero rejections.
+
+**C2 pass-2x-odds**
+
+```json
+{ "schema": 1, "id": "pass-2x-odds", "name": "Pass line with 2x odds", "game": "craps", "unit": 1000,
+  "stages": [ { "id": "play", "layout": [
+    { "bet": "pass-line", "amount": { "units": 1 }, "when": { "fact": ["phase", "==", "come-out"] } },
+    { "bet": "pass-odds", "parent": "pass-line", "amount": { "times": [ { "amountOn": "pass-line" }, 2 ] },
+      "when": { "all": [ { "fact": ["phase", "==", "point"] }, { "onTable": "pass-line" } ] } } ] } ] }
+```
+
+**C3 three-point-molly**: pass plus up to two come bets, 2x odds on each.
+
+```json
+{ "schema": 1, "id": "three-point-molly", "name": "Three-point Molly, 2x odds", "game": "craps", "unit": 1000,
+  "stages": [ { "id": "play", "layout": [
+    { "bet": "pass-line", "amount": { "units": 1 }, "when": { "fact": ["phase", "==", "come-out"] } },
+    { "bet": "pass-odds", "parent": "pass-line", "amount": { "times": [ { "amountOn": "pass-line" }, 2 ] },
+      "when": { "all": [ { "fact": ["phase", "==", "point"] }, { "onTable": "pass-line" } ] } },
+    { "bet": "come", "amount": { "units": 1 },
+      "when": { "all": [ { "fact": ["phase", "==", "point"] }, { "onTable": "pass-line" },
+                         { "cmp": ["comePoints", "<", 2] }, { "not": { "onTable": "come" } } ] } },
+    { "bet": "come-odds:4", "parent": "come:4", "amount": { "times": [ { "amountOn": "come:4" }, 2 ] }, "when": { "onTable": "come:4" } },
+    { "bet": "come-odds:5", "parent": "come:5", "amount": { "times": [ { "amountOn": "come:5" }, 2 ] }, "when": { "onTable": "come:5" } },
+    { "bet": "come-odds:6", "parent": "come:6", "amount": { "times": [ { "amountOn": "come:6" }, 2 ] }, "when": { "onTable": "come:6" } },
+    { "bet": "come-odds:8", "parent": "come:8", "amount": { "times": [ { "amountOn": "come:8" }, 2 ] }, "when": { "onTable": "come:8" } },
+    { "bet": "come-odds:9", "parent": "come:9", "amount": { "times": [ { "amountOn": "come:9" }, 2 ] }, "when": { "onTable": "come:9" } },
+    { "bet": "come-odds:10", "parent": "come:10", "amount": { "times": [ { "amountOn": "come:10" }, 2 ] }, "when": { "onTable": "come:10" } } ] } ] }
+```
+
+**C4 iron-cross**: field, place 5, 6 and 8 after the point.
+
+```json
+{ "schema": 1, "id": "iron-cross", "name": "Iron Cross", "game": "craps", "unit": 1000,
+  "stages": [ { "id": "play", "layout": [
+    { "bet": "field", "amount": { "units": 1 }, "when": { "fact": ["phase", "==", "point"] } },
+    { "bet": "place-5", "amount": { "units": 1 }, "when": { "fact": ["phase", "==", "point"] } },
+    { "bet": "place-6", "amount": { "units": 1.2 }, "when": { "fact": ["phase", "==", "point"] } },
+    { "bet": "place-8", "amount": { "units": 1.2 }, "when": { "fact": ["phase", "==", "point"] } } ] } ] }
+```
+
+**C5 place-6-8-press**: place 6 and 8 at $12, press $6 after each hit up to $60 (crappy's `PRESS_CAP` 5×); after a seven-out start again at $12.
+
+```json
+{ "schema": 1, "id": "place-6-8-press", "name": "Place 6 and 8, press", "game": "craps", "unit": 1200,
+  "stages": [ { "id": "play",
+    "layout": [ { "bet": "place-6", "amount": { "keepOr": { "units": 1 } }, "working": "auto" },
+                { "bet": "place-8", "amount": { "keepOr": { "units": 1 } }, "working": "auto" } ],
+    "rules": [
+      { "when": { "event": "bet-won", "bet": "place-6" }, "then": [ { "press": "place-6", "by": 600, "cap": 6000 } ] },
+      { "when": { "event": "bet-won", "bet": "place-8" }, "then": [ { "press": "place-8", "by": 600, "cap": 6000 } ] } ] } ] }
+```
+
+**C6 martingale-pass**: double the pass line after each loss, 10 levels.
+
+```json
+{ "schema": 1, "id": "martingale-pass", "name": "Martingale on the pass line", "game": "craps", "unit": 1000,
+  "progressions": { "m": { "kind": "martingale", "track": "pass-line", "maxSteps": 10, "onCap": "reset" } },
+  "stages": [ { "id": "play", "layout": [
+    { "bet": "pass-line", "amount": { "prog": "m" }, "when": { "fact": ["phase", "==", "come-out"] } } ] } ] }
+```
+
+**C7 inside-regress**: place 5, 6, 8, 9; after the first hit take the 5 and 9 down; start over after a seven-out.
+
+```json
+{ "schema": 1, "id": "inside-regress", "name": "Inside, regress after a hit", "game": "craps", "unit": 1000,
+  "vars": { "regressed": 0 },
+  "stages": [ { "id": "play",
+    "layout": [
+      { "bet": "place-5", "amount": { "units": 1 }, "when": { "all": [ { "fact": ["phase", "==", "point"] }, { "cmp": [ { "var": "regressed" }, "==", 0 ] } ] } },
+      { "bet": "place-9", "amount": { "units": 1 }, "when": { "all": [ { "fact": ["phase", "==", "point"] }, { "cmp": [ { "var": "regressed" }, "==", 0 ] } ] } },
+      { "bet": "place-6", "amount": 1200, "when": { "fact": ["phase", "==", "point"] } },
+      { "bet": "place-8", "amount": 1200, "when": { "fact": ["phase", "==", "point"] } } ],
+    "rules": [
+      { "when": { "all": [ { "cmp": [ { "var": "regressed" }, "==", 0 ] },
+                           { "any": [ { "event": "bet-won", "bet": "place-5" }, { "event": "bet-won", "bet": "place-6" },
+                                      { "event": "bet-won", "bet": "place-8" }, { "event": "bet-won", "bet": "place-9" } ] } ] },
+        "then": [ { "set": "regressed", "to": 1 } ] },
+      { "when": { "event": "seven-out" }, "then": [ { "set": "regressed", "to": 0 } ] } ] } ] }
+```
+
+### 15.3 Feature coverage
+
+| Feature | Goldens |
+|---|---|
+| every progression kind | R1 (implicit flat), R2, R3, R4, R5, R6, R7, R8, R9, R11 (`multiplier`), R22 (`sequence`), R23 (`manual`) |
+| `onCap` reset / stay / stop | R2 / R5, R9, R23 / R3, R22 |
+| `maxAmount`, `prog-done`, `onEmpty` | R6 |
+| `track` group / round-less / persistent bet | R11 / R23 / C6 |
+| `feed: 'sized'` drift case | R12, R12b |
+| `goto`, stage ending evaluation, `roundsInStage` | R12, R13, R14, R19 |
+| `extends` (layout override, inherited rule order, shared cooldown) | R19, C1 |
+| `onEnter`, `onExit` | R13, R19 |
+| `once: true`, `once: 'stage'`, `cooldown` | R16, R19, R19 + R20 |
+| `stop` from rule / from cap | R6, R12, R14, R16, R21, C1 / R3, R22 |
+| `skipRound` | R20, R24 |
+| `set`, `inc` (negative) | R6, R16, R18, R20, C1, C7 |
+| `remove` patch, `press`, `keepOr`, implicit contract keep | R19, C5, C5, C1–C3, C6 |
+| `streak`, `countInLast` (fact, event, `partial`), `since` | R13, R17, R19, R14 |
+| `everyN`, `pctOfBankroll`, `tableMin`, `floorTo`, `max` | R18 |
+| `if`, `sub`, `min`, `times`, `amountOn`, `onTable`, `stageEntries` | R24, R16, R19, C1, C2, C3, R14 |
+| `event` plugin / core `bet-won` / `prog-cap` | R24, C1 / R13, C5 / R13 |
+| call bet, six-line, straight, corner, dozens | R21, R10, R10/R14, R23, R11/R15 |
+| fractional units | C4 |
+| sitting out by empty layout | R13, R14, R15, R17 |
