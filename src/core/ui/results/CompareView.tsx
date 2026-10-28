@@ -168,57 +168,64 @@ export function CompareView({ runs, tableMax, framing }: CompareViewProps) {
       <div class="metric-cards">
         {METRICS.map((def) => (
           <Card key={def.id} title={def.label} level={3} class="metric-card">
-            <table class="plain-table" data-metric={def.id}>
-              <caption class="visually-hidden">
-                {def.label} for each run, with the difference from the first run
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Run</th>
-                  <th scope="col" class="num">
-                    Value
-                  </th>
-                  <th scope="col" class="num">
-                    Difference (95% CI)
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((r, i) => {
-                  const m = result.metrics[i]!;
-                  const v = def.value(m);
-                  const c = def.ci(m);
-                  const d = i > 0 ? def.diff(result.diffs[i - 1]!) : null;
-                  return (
-                    <tr key={r.id}>
-                      <th scope="row">{r.label}</th>
-                      <td class="num">
-                        {fmt(def, v)}
-                        {c ? (
-                          <span class="ci-line">
-                            {fmt(def, c[0])} to {fmt(def, c[1])}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td class="num" data-diff={i}>
-                        {i === 0 ? (
-                          <span class="muted">baseline</span>
-                        ) : d ? (
-                          <>
-                            {fmt(def, d.value, true)}
+            <div
+              class="table-scroll"
+              tabIndex={0}
+              role="region"
+              aria-label="Table, scrolls sideways"
+            >
+              <table class="plain-table" data-metric={def.id}>
+                <caption class="visually-hidden">
+                  {def.label} for each run, with the difference from the first run
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Run</th>
+                    <th scope="col" class="num">
+                      Value
+                    </th>
+                    <th scope="col" class="num">
+                      Difference (95% CI)
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {runs.map((r, i) => {
+                    const m = result.metrics[i]!;
+                    const v = def.value(m);
+                    const c = def.ci(m);
+                    const d = i > 0 ? def.diff(result.diffs[i - 1]!) : null;
+                    return (
+                      <tr key={r.id}>
+                        <th scope="row">{r.label}</th>
+                        <td class="num">
+                          {fmt(def, v)}
+                          {c ? (
                             <span class="ci-line">
-                              {fmt(def, d.ci.lo, true)} to {fmt(def, d.ci.hi, true)}
+                              {fmt(def, c[0])} to {fmt(def, c[1])}
                             </span>
-                          </>
-                        ) : (
-                          <span class="muted">n/a</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          ) : null}
+                        </td>
+                        <td class="num" data-diff={i}>
+                          {i === 0 ? (
+                            <span class="muted">baseline</span>
+                          ) : d ? (
+                            <>
+                              {fmt(def, d.value, true)}
+                              <span class="ci-line">
+                                {fmt(def, d.ci.lo, true)} to {fmt(def, d.ci.hi, true)}
+                              </span>
+                            </>
+                          ) : (
+                            <span class="muted">n/a</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </Card>
         ))}
       </div>

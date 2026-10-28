@@ -90,10 +90,24 @@ async function loadVerdict(meta: RunMeta, sink: RunSink | null): Promise<RunVerd
 }
 
 /** Most recent first. `definitionNames` maps definitionId -> name. */
+/** Dry runs (Define's one-session Watch runs) carry this tag on their definition. */
+export const DRY_RUN_TAG = 'dry-run';
+
+/** Ids of definitions tagged as dry runs; their runs stay out of lists and pickers. */
+export async function dryRunDefinitionIds(): Promise<Set<string>> {
+  const defs = await (await getCoreRepo()).listDefinitions();
+  return new Set(defs.filter((d) => d.definition.tags?.includes(DRY_RUN_TAG)).map((d) => d.id));
+}
+
 export async function listRecentRuns(limit = 5): Promise<RunListItem[]> {
   const repo = await getRepo();
   const [all, defs] = await Promise.all([repo.listRuns(), repo.listDefinitions()]);
-  const runs = [...all].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const dry = new Set(
+    defs.filter((d) => d.definition.tags?.includes(DRY_RUN_TAG)).map((d) => d.id),
+  );
+  const runs = all
+    .filter((m) => !dry.has(m.definitionId))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const names = new Map(defs.map((d) => [d.id, d.definition.name]));
   // Only the newest `limit` runs are touched; their verdicts are cached per run id.
   const top = runs.slice(0, limit);

@@ -20,39 +20,41 @@ export interface KeyNumbersProps {
 
 export function KeyNumbers({ rows, caption }: KeyNumbersProps) {
   return (
-    <table class="keynums">
-      <caption class="visually-hidden">{caption}</caption>
-      <thead class="visually-hidden">
-        <tr>
-          <th scope="col">Measure</th>
-          <th scope="col">Value</th>
-          <th scope="col">95% interval</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id} data-metric={r.id} class={r.tone ? `kn-${r.tone}` : undefined}>
-            <th scope="row">
-              {r.label}
-              {r.hint ? <span class="kn-hint">{r.hint}</span> : null}
-            </th>
-            <td class="kn-value">{r.value}</td>
-            <td class="kn-ci">
-              {r.interval ? (
-                <>
-                  {r.interval.lo} to {r.interval.hi}
-                </>
-              ) : r.tooFew ? (
-                <span class="muted" title={TOO_FEW}>
-                  too few sessions
-                </span>
-              ) : (
-                <span class="muted">exact</span>
-              )}
-            </td>
+    <div class="table-scroll" tabIndex={0} role="region" aria-label="Table, scrolls sideways">
+      <table class="keynums">
+        <caption class="visually-hidden">{caption}</caption>
+        <thead class="visually-hidden">
+          <tr>
+            <th scope="col">Measure</th>
+            <th scope="col">Value</th>
+            <th scope="col">95% interval</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} data-metric={r.id} class={r.tone ? `kn-${r.tone}` : undefined}>
+              <th scope="row">
+                {r.label}
+                {r.hint ? <span class="kn-hint">{r.hint}</span> : null}
+              </th>
+              <td class="kn-value">{r.value}</td>
+              <td class="kn-ci">
+                {r.interval ? (
+                  <>
+                    {r.interval.lo} to {r.interval.hi}
+                  </>
+                ) : r.tooFew ? (
+                  <span class="muted" title={TOO_FEW}>
+                    too few sessions
+                  </span>
+                ) : (
+                  <span class="muted">exact</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

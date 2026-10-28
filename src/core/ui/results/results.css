@@ -75,7 +75,18 @@
 .kn-value,
 .num {
   text-align: right !important;
+}
+.kn-value {
+  overflow-wrap: anywhere;
+}
+.plain-table .num,
+.sessions-table .num {
   white-space: nowrap;
+}
+.two-col > *,
+.metric-cards > *,
+.export-grid > * {
+  min-width: 0;
 }
 .kn-ci {
   color: var(--muted);
@@ -195,6 +206,14 @@ details.luck summary {
   margin: 0 0 12px;
   padding: 0;
 }
+.chip-row > li {
+  max-width: 100%;
+  min-width: 0;
+}
+.run-chip > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .run-chip {
   display: inline-flex;
   align-items: center;
@@ -218,4 +237,10 @@ details.luck summary {
   .bar-fill {
     transition: none;
   }
+}
+
+/* The shell's single grid column sizes itself from content; this keeps wide tables and charts
+   inside their own scrollers instead of widening the page. */
+.results-screen {
+  contain: inline-size;
 }

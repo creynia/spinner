@@ -281,9 +281,9 @@ function ShowSweep({ groupId }: { groupId: string }) {
 export function Sweep({ params, query }: ScreenProps) {
   const groupId = params.groupId ?? '';
   return (
-    <>
+    <div class="results-screen">
       <h1>Sweep</h1>
       {groupId === 'new' ? <NewSweep query={query} /> : <ShowSweep groupId={groupId} />}
-    </>
+    </div>
   );
 }

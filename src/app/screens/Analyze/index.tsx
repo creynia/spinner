@@ -47,7 +47,7 @@ export function Analyze({ params, query }: ScreenProps) {
   const data = run.data;
   const status = data.meta.status;
   return (
-    <>
+    <div class="results-screen">
       <h1>Analyze: {data.definition.name}</h1>
       <div class="actions">
         <Button href={`#/define?from=${encodeURIComponent(data.meta.runId)}`}>Run again</Button>
@@ -65,6 +65,6 @@ export function Analyze({ params, query }: ScreenProps) {
         sessionHref={(i) => `#/watch/${encodeURIComponent(data.meta.runId)}/${i}`}
         onOpenSession={(i) => navigate(`/watch/${encodeURIComponent(data.meta.runId)}/${i}`)}
       />
-    </>
+    </div>
   );
 }

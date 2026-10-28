@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import type { RunData, RunMeta } from '@core/contracts/run';
 import { Button, Card, CompareView, Field, Select, type CompareRun } from '@core/ui';
 import { navigate } from '../../router';
-import { getCoreRepo } from '../../services/runs';
+import { dryRunDefinitionIds, getCoreRepo } from '../../services/runs';
 import { settingsStore } from '../../services/settings';
 import { useStore } from '../../state/store';
 import { NotFoundCard, loadRunData, tableMaxFor } from '../Analyze/data';
@@ -42,9 +42,10 @@ export function Compare({ query }: ScreenProps) {
     };
   }, [key]);
   useEffect(() => {
-    void getCoreRepo()
-      .then((r) => r.listRuns())
-      .then((l) => setLibrary(l.filter((m) => m.status === 'done')))
+    void Promise.all([getCoreRepo().then((r) => r.listRuns()), dryRunDefinitionIds()])
+      .then(([l, dry]) =>
+        setLibrary(l.filter((m) => m.status === 'done' && !dry.has(m.definitionId))),
+      )
       .catch(() => undefined);
   }, []);
 
@@ -63,7 +64,7 @@ export function Compare({ query }: ScreenProps) {
   const sameGame = loaded.every((d) => d.meta.gameId === loaded[0]?.meta.gameId);
 
   return (
-    <>
+    <div class="results-screen">
       <h1>Compare</h1>
       <ul class="chip-row" aria-label="Runs being compared">
         {ids.map((id, i) => (
@@ -131,6 +132,6 @@ export function Compare({ query }: ScreenProps) {
           These runs are of different games and cannot be compared.
         </p>
       ) : null}
-    </>
+    </div>
   );
 }

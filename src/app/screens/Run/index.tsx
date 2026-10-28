@@ -6,7 +6,10 @@ import { readUsage, type StorageUsage } from '../../services/db';
 import { cancelRun, pauseRun, resumeStored } from '../../services/runs';
 import type { ScreenProps } from '../types';
 import { NotFoundCard } from '../Analyze/data';
+import { installResultsHook } from './e2eHook';
 import { useRun } from './useRun';
+
+installResultsHook();
 
 function useUsage(active: boolean): StorageUsage | null {
   const [u, setU] = useState<StorageUsage | null>(null);
@@ -138,7 +141,7 @@ export function Run({ params }: ScreenProps) {
   );
 
   return (
-    <>
+    <div class="results-screen">
       <h1>Run</h1>
       <ProgressCard
         status={status}
@@ -163,6 +166,6 @@ export function Run({ params }: ScreenProps) {
           {fmtInt(completed)} sessions saved.
         </p>
       </section>
-    </>
+    </div>
   );
 }

@@ -301,7 +301,7 @@ function Overview({
         <Card title="Result distribution">
           <Histogram
             histogram={m.net.histogram}
-            title={`Net result per session (${fr.unit})`}
+            title={`Net result ${fr.unit}`}
             fmt={money}
             axisFmt={money}
             xLabel="Net result"
@@ -458,40 +458,47 @@ function Money({
                 valueLabel="Net"
                 signed
               />
-              <table class="plain-table">
-                <caption class="visually-hidden">Bet categories</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Category</th>
-                    <th scope="col" class="num">
-                      Wagered
-                    </th>
-                    <th scope="col" class="num">
-                      Net
-                    </th>
-                    <th scope="col" class="num">
-                      Expected loss
-                    </th>
-                    <th scope="col" class="num">
-                      Edge (realized / analytic)
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {b.categories.map((c) => (
-                    <tr key={c.id}>
-                      <th scope="row">{c.id}</th>
-                      <td class="num">{fmtMoney(c.wagered)}</td>
-                      <td class="num">{fmtMoney(c.net, { sign: true })}</td>
-                      <td class="num">{fmtMoney(c.expected)}</td>
-                      <td class="num">
-                        {c.realizedEdge === null ? 'n/a' : fmtPct(c.realizedEdge)} /{' '}
-                        {c.analyticEdge === null ? 'n/a' : fmtPct(c.analyticEdge)}
-                      </td>
+              <div
+                class="table-scroll"
+                tabIndex={0}
+                role="region"
+                aria-label="Table, scrolls sideways"
+              >
+                <table class="plain-table">
+                  <caption class="visually-hidden">Bet categories</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Category</th>
+                      <th scope="col" class="num">
+                        Wagered
+                      </th>
+                      <th scope="col" class="num">
+                        Net
+                      </th>
+                      <th scope="col" class="num">
+                        Expected loss
+                      </th>
+                      <th scope="col" class="num">
+                        Edge (realized / analytic)
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {b.categories.map((c) => (
+                      <tr key={c.id}>
+                        <th scope="row">{c.id}</th>
+                        <td class="num">{fmtMoney(c.wagered)}</td>
+                        <td class="num">{fmtMoney(c.net, { sign: true })}</td>
+                        <td class="num">{fmtMoney(c.expected)}</td>
+                        <td class="num">
+                          {c.realizedEdge === null ? 'n/a' : fmtPct(c.realizedEdge)} /{' '}
+                          {c.analyticEdge === null ? 'n/a' : fmtPct(c.analyticEdge)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           ) : (
             <EmptyState title="No bets were placed" />
@@ -501,43 +508,50 @@ function Money({
           {b.stages.length ? (
             <>
               <Bars rows={stageRows(b)} title="Net result by stage" valueLabel="Net" signed />
-              <table class="plain-table">
-                <caption class="visually-hidden">Stages</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Stage</th>
-                    <th scope="col" class="num">
-                      Rounds
-                    </th>
-                    <th scope="col" class="num">
-                      Wagered
-                    </th>
-                    <th scope="col" class="num">
-                      Net
-                    </th>
-                    <th scope="col" class="num">
-                      Entries
-                    </th>
-                    <th scope="col" class="num">
-                      Ended here
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {b.stages.map((s) => (
-                    <tr key={s.id}>
-                      <th scope="row">{s.id}</th>
-                      <td class="num">
-                        {fmtInt(s.rounds)} ({fmtPct(s.roundShare)})
-                      </td>
-                      <td class="num">{fmtMoney(s.wagered)}</td>
-                      <td class="num">{fmtMoney(s.net, { sign: true })}</td>
-                      <td class="num">{fmtInt(s.entries)}</td>
-                      <td class="num">{fmtInt(s.stops)}</td>
+              <div
+                class="table-scroll"
+                tabIndex={0}
+                role="region"
+                aria-label="Table, scrolls sideways"
+              >
+                <table class="plain-table">
+                  <caption class="visually-hidden">Stages</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Stage</th>
+                      <th scope="col" class="num">
+                        Rounds
+                      </th>
+                      <th scope="col" class="num">
+                        Wagered
+                      </th>
+                      <th scope="col" class="num">
+                        Net
+                      </th>
+                      <th scope="col" class="num">
+                        Entries
+                      </th>
+                      <th scope="col" class="num">
+                        Ended here
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {b.stages.map((s) => (
+                      <tr key={s.id}>
+                        <th scope="row">{s.id}</th>
+                        <td class="num">
+                          {fmtInt(s.rounds)} ({fmtPct(s.roundShare)})
+                        </td>
+                        <td class="num">{fmtMoney(s.wagered)}</td>
+                        <td class="num">{fmtMoney(s.net, { sign: true })}</td>
+                        <td class="num">{fmtInt(s.entries)}</td>
+                        <td class="num">{fmtInt(s.stops)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           ) : (
             <EmptyState title="No stages" />

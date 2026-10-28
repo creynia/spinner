@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   createInThreadTransport,
+  decodeRunBundle,
+  definitionId,
+  encodeRunBundle,
+  resultsDigest,
   createPool,
   normalizeDefinition,
   type NormalizedDefinition,
@@ -12,7 +16,13 @@ import { roulette } from '@game/roulette';
 import { Analyze } from '@app/screens/Analyze';
 import { Run } from '@app/screens/Run';
 import { setPoolForTests } from '@app/services/pool';
-import { getController, startRun } from '@app/services/runs';
+import {
+  dryRunDefinitionIds,
+  getController,
+  getCoreRepo,
+  listRecentRuns,
+  startRun,
+} from '@app/services/runs';
 import { onRunActive } from '../../src/pwa/register';
 
 const strategy = JSON.parse(
@@ -78,4 +88,33 @@ describe('Run to Analyze with a real roulette run', () => {
     await waitFor(() => expect(r.container.querySelector('[role=alert]')).not.toBeNull());
     expect(r.container.querySelectorAll('h1')).toHaveLength(1);
   });
+
+  it('a run started by services/runs.startRun exports (json and gz) and imports back', async () => {
+    const runId = await startRun(definition);
+    const c = getController(runId)!;
+    while (c.status !== 'done') await c.settled();
+    const repo = await getCoreRepo();
+    const data = (await repo.loadRun(runId))!;
+    expect(data.meta.definitionId).toBe(await definitionId(definition));
+    expect(data.meta.resultsDigest).toBe(await resultsDigest(data));
+    for (const gzip of [false, true]) {
+      const bytes = await encodeRunBundle(data, { gzip });
+      expect(gzip ? bytes[0] === 0x1f && bytes[1] === 0x8b : bytes[0] === 0x7b).toBe(true);
+      const back = await decodeRunBundle(bytes, 'roulette');
+      if ('error' in back) throw new Error(back.error);
+      expect(back.data.meta.definitionId).toBe(data.meta.definitionId);
+      expect(await resultsDigest(back.data)).toBe(data.meta.resultsDigest);
+      expect(back.data.sessions).toBe(data.sessions);
+    }
+  }, 60_000);
+
+  it('dry-run runs stay out of the recent list and the pickers', async () => {
+    const dry = { ...definition, name: 'Dry', tags: ['dry-run'] };
+    const runId = await startRun(dry);
+    const c = getController(runId)!;
+    while (c.status !== 'done') await c.settled();
+    expect((await listRecentRuns(50)).some((r) => r.runId === runId)).toBe(false);
+    expect((await dryRunDefinitionIds()).size).toBeGreaterThan(0);
+    expect((await (await getCoreRepo()).loadRun(runId))?.meta.status).toBe('done');
+  }, 60_000);
 });

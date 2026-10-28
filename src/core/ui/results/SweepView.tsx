@@ -39,7 +39,7 @@ export function SweepView({ path, values, runs, tableMax, framing, valueFmt }: S
         </p>
       </Card>
       <Card title="Variants">
-        <div class="table-scroll">
+        <div class="table-scroll" tabIndex={0} role="region" aria-label="Table, scrolls sideways">
           <table class="plain-table" data-variants>
             <caption class="visually-hidden">One row per value of {path}</caption>
             <thead>
