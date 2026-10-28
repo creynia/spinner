@@ -52,6 +52,7 @@ A throwaway prototype confirmed the compile path on the real code (since deleted
 | D10 | Inline chips | Yes: every stage can tap chips without saving a layout, and save them as a layout later | Library-only layouts (more steps for a one-off) |
 | D11 | Existing presets | **Not migrated** (goldens untouched). Chip-shaped stages, such as James Bond's, can be lifted on demand ("Edit on the table") with identical rows | Rewriting presets to `x-chips` (changes `definitionId`s for no behaviour gain) |
 | D12 | Versions | No `CORE_VERSION`, plugin version, `STRATEGY_SCHEMA`, `DEFINITION_SCHEMA` or bundle-version bump. `DB_VERSION` 1 → 2. New `LAYOUT_SCHEMA = 1` | Bumping `CORE_VERSION` (would orphan resume and re-simulation of every existing run while no output changes) |
+| D13 | Sweeps | A stage's numeric chip value is sweepable and recompiles the rows (§8.1); every other `x-chips` path and the compiled chip-row amounts are denied. `simKey` ignores `x-chips.from` | Denying all `x-chips` paths (loses "my layout at $5 / $25 / $100") |
 
 ---
 
@@ -233,8 +234,12 @@ interpreter never looks at the library. Alternatives considered:
   - Open a definition in Define whose `from.hash` no longer equals the library record's `hash`. The
     stage panel shows the banner; Update re-copies the spots (a new `definitionId`), Keep dismisses
     it for the session.
-  - Library → layout → "Used in": the saved definitions whose stages have `from.id === id`, found by
-    a scan of `definitions` (cheap; at most a few thousand records).
+  - Library → layout → "Used in": the saved definitions **and saved strategies** whose stages have
+    `from.id === id`. It is found by scanning the `definitions` and `strategies` stores (cheap; at
+    most a few thousand records).
+  - The Update / Keep banner lives in the builder's chips panel. It therefore appears wherever a
+    stage is edited: a definition opened in Define, and a library strategy loaded through "From
+    library".
 - **Editing chips in a stage that came from a layout** keeps `from`. The panel then reads
   "Corners and red (edited)", because `sameSpots(spots, library spots)` is false. It offers "Save
   as new layout" and "Update layout Corners and red".
@@ -255,13 +260,13 @@ this:
     "chip": 500,
     "from": { "id": "corners-and-red", "hash": "9f2c…", "name": "Corners and red" },
     "spots": [
-      { "bet": "red", "chips": 2 },
+      { "bet": "red", "chips": 5 },
       { "bet": "corner:1-2-4-5", "chips": 1 },
       { "bet": "voisins", "chips": 9 }
     ]
   },
   "layout": [
-    { "bet": "red", "amount": 1000 },
+    { "bet": "red", "amount": 2500 },
     { "bet": "corner:1-2-4-5", "amount": 500 },
     { "bet": "voisins", "amount": 4500 },
     { "bet": "dozen:3", "amount": { "units": 1 }, "when": { "cmp": ["net", "<", 0] } }
@@ -269,6 +274,9 @@ this:
   "rules": []
 }
 ```
+
+This example is legal at the default table: Red $25 meets the $25 outside minimum, and the inside
+chips total $50 (corner $5 plus voisins $45) against the $25 inside minimum.
 
 - **Generated prefix.**
   - The first `spots.length` rows of `layout` are generated, in spot order. The remaining rows are
@@ -278,7 +286,7 @@ this:
     the JSON, marks the chips **stale**: every row is shown as manual, with the banner "These chips
     no longer match this stage's bets (edited as JSON): Rebuild bets from chips / Forget chips".
   - The interpreter runs `layout` as written, so a stale block can never change a run.
-- **First-decided wins** (strategy.md §3.5.1): a manual row for a bet that is also a chip spot is
+- **First-decided wins** (strategy.md §3.5, item 1): a manual row for a bet that is also a chip spot is
   ignored, and the builder flags it `W_CHIPS_SHADOWED`.
 - **`extends`:**
   - A child stage's flattened layout is its rows, then its parent's (strategy.md §3.6), so parent
@@ -339,9 +347,44 @@ are made **visible before a run**:
 | Bankroll short | Earlier spots funded in full, then reduced; spots below their minimum rejected (OQ4) | Under the session bankroll: "With $300 cash: 3 of 5 spots placed"; it lists which |
 | Progression top level above a max | Cut at that level | "At level 6 ($160 a chip) straight 0 is cut to $500" (computed from `progressionTop`, §5.1) |
 
-- **How the checks are computed.** `checkAtTable(plugin, rules, rows, bankroll)` (§6.3) runs the
-  real `plugin.reconcile` on a fresh `createState({ rules, rng, bankroll })` and reads `rejected`
-  and `adjusted`. It is generic, needs no game code, and is exactly what the run will do.
+- **Single denomination versus mixed limits.** One chip value serves spots with very different
+  minimums:
+  - an outside spot needs `chips × value ≥ $25`;
+  - an inside chip needs only $1, but the inside chips together need $25;
+  - a straight's maximum is $500.
+
+  So a layout of "1 chip on Red, 1 chip on 17" has no legal single denomination below $25, and at
+  $25 or more the straight is fine but large. The layout itself cannot be "legal"; only a
+  (layout, chip value) pair can. The editor therefore shows legality *at the preview value*, and
+  the List tab names the fix ("Red needs 5 chips at $5"). The default chip value (below) picks the
+  smallest legal one.
+- **What the check takes** (S3). `checkAtTable(plugin, rules, rows, bankroll)` takes
+  **resolved rows** `readonly { bet: BetId; cents: Cents }[]`, already in cents at one chosen
+  level. It never evaluates expressions.
+  - The caller resolves the chip value first with L1's pure
+    `resolveChipValue(chip, { unit, progressions }) → { base: Cents | null; top: Cents | null }`:
+
+    | Chip value | `base` | `top` |
+    |---|---|---|
+    | a literal `d` | `d` | `d` |
+    | `{ units: 1 }` | `unit` | `unit` |
+    | `{ prog: p }` | `p`'s base when it is a constant (a literal or `{ units: n }`) | `progressionTop(p, unit)` |
+
+    Both are `null` when the base is a formula. The panel then says "can't preview: the base is a
+    formula".
+  - It then builds rows as `cents = chips × value` per spot. A call bet's chips × value is its
+    total.
+  - The callers are L4's editor (one level, the preview value) and L5's chips panel (two levels).
+- **How the check runs.** It applies the real `plugin.reconcile` to a fresh
+  `createState({ rules, rng, bankroll })` and reads `rejected` and `adjusted`. It is generic,
+  needs no game code, and is exactly what the run will do.
+- **Which levels are checked** (S2). The stage panel checks **both the base level and the top
+  level**: once for a literal or unit chip value (they coincide), twice for a progression.
+  - At the **base** level, any spot that is rejected `below-min` (or by `inside-min-total`) is a
+    warning, `W_CHIPS_TABLE`: "At the starting $5 chip, Red ($5) is below the $25 minimum and is
+    dropped every spin until the progression rises." A below-minimum spot is otherwise silently
+    dropped by `reconcile`, so this warning is the only signal.
+  - At the **top** level, `clamped` spots are reported as in the table above.
 - **Funding order** is the spot order, which is placement order. The spot list (§4.5) shows the
   order and lets the user move a spot up or down for that reason.
 - **Default chip value:**
@@ -396,27 +439,47 @@ Phone first: 360 px portrait, 390 px, landscape at 844 × 390 (the e2e viewport)
 ┌──────────────────────────────────────┐
 │ ←  Corners and red            [Save] │ 48  header (name is a field in ⋯)
 │ [ Table ][ Call bets ][ List ]       │ 44  tabs (Call bets: European only)
-│ (●Add)(○Remove)   ↶  ↷   Clear  ⋯   │ 48  tool row (sticky)
-│ Bet: [Auto][1][Split][Street][Corner][Line] │ 44  bet-type lock (game row, h-scroll)
+│ [+][−]  [↶][↷][⌫][⋯]                │ 48  tool row (sticky, icon-only, §4.1.1)
+│ Bet [Auto][1][2][3][4][6]           │ 44  bet-type lock (radiogroup "Bet type")
 │ ┌────┬────┬────────────────────────┐ │
 │ │    │    │           0            │ │
 │ │1–18│    ├───────┬───────┬────────┤ │
-│ │    │1st │   1   │   2 ② │   3    │ │ board: Board geometry, scaled to
+│ │    │1st │   1   │   2 ④ │   3    │ │ board: Board geometry, scaled to
 │ ├────┤ 12 ├──●────┼───────┼────────┤ │ 328 px (cell ≈ 74 × 42 px)
-│ │EVEN│    │   4   │   5   │   6    │ │ ② = chip with a count badge
+│ │EVEN│    │   4   │   5   │   6    │ │ ④ = chip with a count badge
 │ ├────┤    │  ...  │       │        │ │ ● = chip on a line (split 1|4)
-│ │RED③│    │       │       │        │ │
+│ │RED⑤│    │       │       │        │ │
 │ │ ...│ ...│  34   │  35   │  36    │ │
 │ ├────┴────┼───────┼───────┼────────┤ │
 │ │         │  2:1  │  2:1  │  2:1   │ │
 │ └─────────┴───────┴───────┴────────┘ │
-│ 12 chips · 6 spots · Preview $5: $60 ✓│ 40  status (sticky bottom, aria-live)
+│ 10 chips · 3 spots · at $5: $50 ✓    │ 40  status (sticky bottom, aria-live)
 └──────────────────────────────────────┘
 ```
 
-The header, tabs, tool row, lock and status take 224 px and the board ≈ 600 px. The tool row and
-status are sticky, so the page scrolls only the board at 360 × 780; there is no horizontal scroll
-(e2e asserts it).
+The example is legal at $5 chips: Red has 5 chips ($25), and the inside chips are straight 2 ×4
+plus split 1|4 ×1, a $25 inside total.
+
+#### 4.1.1 Fit at 328 px (360 px minus two 16 px gutters)
+
+- **Vertical fit:**
+  - The header, tabs, tool row, lock and status take 48 + 44 + 48 + 44 + 40 = 224 px.
+  - The board is 328 / 374 × 684 ≈ 600 px tall.
+  - So at 360 × 780 the page scrolls vertically by about 45 px, with the tool row and status
+    sticky.
+  - There is no horizontal page scroll (e2e asserts it).
+- **Tool row,** icon-only: each control is a 44 × 44 px button.
+  - Its accessible name and `title` are "Add chips", "Remove chips", "Undo", "Redo", "Clear" and
+    "More".
+  - Add and Remove are a two-button radiogroup.
+  - Width: 6 × 44 + 5 × 8 gaps = **304 px ≤ 328**.
+- **Lock row:**
+  - A visible label "Bet" (≈ 36 px) names the radiogroup through `aria-labelledby`; its
+    accessible name is "Bet type".
+  - Six 44 px options show the number of pockets covered: "Auto", "1", "2", "3", "4", "6". Their
+    accessible names are "Auto", "Straight", "Split", "Street", "Corner, trio or basket" and
+    "Six line".
+  - Width: 36 + 6 × 44 + 6 × 4 gaps = **324 px ≤ 328**.
 
 ### 4.2 Landscape (844 × 390 and wider; `useOrientation` → `landscape` above 600 px)
 
@@ -428,9 +491,9 @@ status are sticky, so the page scrolls only the board at 360 × 780; there is no
 │ │  │ 3│ 6│ 9│12│15│18│21│24│27│30│33│36│2:1│              │ ↶   ↷  Clear │
 │ │0 │ 2│ 5│ 8│11│14│17│20│23│26│29│32│35│2:1│              │ Bet: Auto ▾  │
 │ │  │ 1│ 4│ 7│10│13│16│19│22│25│28│31│34│2:1│              │ Call bets ▸  │
-│ │  ├──┴──┴──┴──┼──┴──┴──┴──┼──┴──┴──┴──┤   │              │ 12 chips     │
-│ │  │  1st 12   │  2nd 12   │  3rd 12   │   │              │ 6 spots      │
-│ │  │1–18│EVEN│ RED │BLACK│ODD │19–36  │   │              │ $5: $60 ✓    │
+│ │  ├──┴──┴──┴──┼──┴──┴──┴──┼──┴──┴──┴──┤   │              │ 10 chips     │
+│ │  │  1st 12   │  2nd 12   │  3rd 12   │   │              │ 3 spots      │
+│ │  │1–18│EVEN│ RED │BLACK│ODD │19–36  │   │              │ $5: $50 ✓    │
 │ └──┴────┴────┴─────┴─────┴────┴───────┴───┘              │ List ▸       │
 └──────────────────────────────────────────────────────────┴──────────────┘
                      board ≈ 632 px wide (cell ≈ 44 × 50 px)              rail 180 px
@@ -438,6 +501,22 @@ status are sticky, so the page scrolls only the board at 360 × 780; there is no
 
 The rail holds the tool, history, lock and totals. "Call bets" and "List" open as side sheets.
 On a desktop at 1024 px or wider, the list sits permanently under the rail.
+
+**Fit at 844 × 390.**
+
+- The header is 44 px. The board gets 346 px of height; at 632 px wide it is
+  632 / 712 × 280 ≈ 249 px tall, so it fits.
+- The rail is 180 px wide and **compact**. These rows are 44 px each:
+  - Save;
+  - Add and Remove, as two icon buttons;
+  - Undo, Redo and Clear, as three icon buttons;
+  - "Bet type", a `Select` instead of the six-option row;
+  - Call bets;
+  - List.
+
+  The status takes 40 px. With 8 px gaps that is 6 × 44 + 40 + 6 × 8 = **352 px ≤ 346 + 44**.
+- The rail also gets `overflow-y: auto` as a fallback for larger text settings. The page never
+  scrolls horizontally.
 
 ### 4.3 Interactions
 
@@ -457,6 +536,14 @@ On a desktop at 1024 px or wider, the list sits permanently under the rail.
     - tapping a stack to remove: it collides with stacking more chips, the most common action.
 - **Long-press a number (500 ms), or Enter on it with the keyboard:** opens the existing bet sheet
   "Bets on 17", extended with a − n + stepper per row.
+  - **Taps act on `click`, never on `pointerdown`,** so a scroll or pan never places a chip.
+  - The long-press timer starts on `pointerdown` and is cancelled by moving more than 8 px or by
+    `pointerup`. When it fires, it opens the sheet and swallows the following `click`.
+  - The board sets:
+    - `touch-action: manipulation` (pan and pinch stay, double-tap zoom goes);
+    - `user-select: none` and `-webkit-touch-callout: none`;
+    - `contextmenu` → `preventDefault()` in place mode only. Android Chrome fires `contextmenu`
+      on a long-press, and a mouse right-click is "remove one step".
   - It reaches every inside bet containing the number with a ≥ 48 px row each.
   - This is the precision path and the WCAG 2.5.8 equivalent control for small line zones.
 - **Undo / redo / clear:**
@@ -507,6 +594,31 @@ tests.
    - In the 0 cell, Split picks the nearest zero split along its edge, and Corner picks the nearest
      trio or basket.
    - The lock is per device (localStorage, try/catch) and shows in the status ("Split mode").
+
+- **Basket and split 0-1 (explicit special case).**
+  - In Auto mode, a tap within 10 units of the `basket` anchor (the corner where the zero row
+    meets number 1 on its dozen side) is the **basket** (first four on European, top line on
+    American and triple-zero).
+  - A tap in the band along number 1's zero-side edge but away from that corner is
+    **`split:0-1`**.
+  - Edges of the number block with no pocket across them (the dozen side), other than that corner,
+    add nothing: the tap stays a straight.
+  - In lock mode, Corner picks the basket from number 1's zero-side, dozen-side quadrant (its
+    nearest anchor), and Split picks `split:0-1` from number 1's zero-side triangle.
+  - Unit tests pin both, for every wheel and orientation.
+- **Target sizes in lock mode.** Split triangles (≈ 74 × 21 px at 360) and corner quadrants
+  (≈ 37 × 21 px) still fall **under 24 px** on their short side, as do the Auto-mode line bands.
+  The List tab and the long-press or Enter bet sheet (≥ 48 px rows) are the **equivalent
+  controls** under WCAG 2.5.8, the same argument the existing `BetPicker` uses for its hot zones.
+  Straights (≈ 56 × 25 px in Auto, the whole cell in lock mode) and outside boxes meet 24 px.
+- **Hit testing in place mode:**
+  - Chips get `pointer-events: none`, so a tap on a chip goes to the board underneath and the
+    point decides.
+  - The tap point maps to board units with the pure
+    `toBoard(rect, view, clientX, clientY) = { x: view.x + (clientX − rect.left) × view.w / rect.width, y: view.y + (clientY − rect.top) × view.h / rect.height }`.
+    It **includes `view.x` and `view.y`**: the viewBox is offset by `ZERO_PAD`.
+  - The SVG's CSS box keeps the viewBox aspect (`aspect-ratio` set from `view`, no letterboxing),
+    so the formula is exact. A unit test checks it against `getScreenCTM` in the browser e2e.
 
 Outside boxes are always direct (≥ 54 × 96 units). Fine-pointer hover highlights the covered
 pockets of the bet a click would take, which reuses `covered`.
@@ -569,10 +681,10 @@ pockets of the bet a click would take, which reuses `covered`.
 ```
 ┌ Stage 1: play  [entry] ─────────────────── Stage settings ⋯ ┐
 │ Chips on the table                                           │
-│ ┌──────────────┐  Corners and red · 6 spots · 12 chips       │
+│ ┌──────────────┐  Corners and red · 3 spots · 15 chips       │
 │ │ (thumbnail)  │  Chip value  ($1)(●$5)($25)($100)($500) ⋯  │
 │ │              │              ( ) follows progression [m ▾] │
-│ └──────────────┘  $60 a spin · ✓ fits this table             │
+│ └──────────────┘  $75 a spin · ✓ fits this table             │
 │ [Edit chips] [Use a saved layout] [Save as layout]           │
 │                                                              │
 │ Other bets (advanced)                                        │
@@ -588,8 +700,15 @@ pockets of the bet a click would take, which reuses `covered`.
 - **"Use a saved layout"** opens a sheet listing library and built-in layouts with thumbnails.
   Picking one copies it and sets `from`; when the stage already had chips, the stage's manual rows
   are kept.
-- A new strategy (`emptyStrategy`) keeps its single `red` row, which lifts to chips at `{ units: 1 }`.
-  So the first thing a new user sees is a board with one chip on Red.
+- **`emptyStrategy` output is unchanged** (orchestrator decision), so its tests and ids stay
+  stable: a new strategy still has its single `red` `{ units: 1 }` row.
+  - For a new strategy, Define's stage panel offers **"Tap chips"** as the first, primary action.
+    It lifts the red row to chips (`chip: { units: 1 }`) and opens the editor; the rows are
+    unchanged until the user taps.
+- **Who fixes tests broken by the heading and panel change:**
+  - unit tests (`src/core/ui/builder/*.test.*`, plus `src/app/screens/Define/builder.test.tsx` and
+    `define.test.tsx`, for heading and panel text only): L5;
+  - e2e (`tests/e2e/define.spec.ts`, `flow.spec.ts`, `shots.spec.ts`): L7.
 
 ---
 
@@ -614,7 +733,25 @@ export function sameSpots(a: readonly LayoutSpot[], b: readonly LayoutSpot[]): b
 export function validateChipLayout(x: unknown, ctx: ValidationContext | null): Diagnostic[];
 export function validateStageChips(def: StrategyDefinition): Diagnostic[];   // builder-level (§5.3)
 export function progressionTop(spec: ProgressionSpec, unit: Cents): Cents | null; // top-level amount, constant bases
+export function progressionBase(spec: ProgressionSpec, unit: Cents): Cents | null; // level-0 amount, constant bases
+export function resolveChipValue(
+  chip: ChipValue, ctx: { unit: Cents; progressions?: Record<Slug, ProgressionSpec> },
+): { base: Cents | null; top: Cents | null };                                 // §3.4 (S3)
+export function isChipPath(path: string): { stage: number } | null;          // '/strategy/stages/<s>/x-chips/chip'
+export function recompileStageChips(def: StrategyDefinition, stage: number): StrategyDefinition; // §8.1 sweep
 ```
+
+- **`progressionTop`** (S4, decided): a **baton-free core-strategy export** from `chips.ts`, the
+  file L1 owns. It is implemented from strategy.md §7.4's table, and `validate.ts` is not touched.
+  - It covers the kinds with a constant base: `flat`, martingale (with `multiplier`),
+    grand-martingale, fibonacci, dalembert (constant `step`), paroli, `1-3-2-6`, oscars-grind
+    (`maxSteps` units), and `sequence` (the max of the constant amounts).
+  - It returns `null` for labouchere and for formula bases. The cap at the latched `maxAmount`
+    applies when that is constant.
+  - Tests:
+    - pinned against the §7.7 reference sequences;
+    - cross-checked against the validator: for a red-only one-stage strategy at `limits(red).max`
+      ± 1 cent, `W_PROG_ABOVE_TABLE_MAX` fires exactly when `progressionTop > max`.
 
 `liftRows` accepts only rows with no `when`, `parent`, `working` or `label`, and amounts all of one
 of the following forms. The first `n` rows that qualify are lifted, and the rest stay manual.
@@ -678,7 +815,9 @@ export function decodeLayoutFile(text: string): LayoutFileV1;  // throws LayoutF
 - `useChipHistory(initial)`: the undo/redo/clear reducer over `LayoutSpot[]`.
 - `ChipRack`: the denomination radiogroup.
 - `SpotList`: the List tab, using the catalog for names and `GameUi.BetPicker` for "Add a bet".
-- `checkAtTable(plugin, rules, rows, bankroll): TableCheck` (§3.4):
+- `checkAtTable(plugin, rules, rows: readonly { bet: BetId; cents: Cents }[], bankroll): TableCheck`
+  (§3.4). The rows are already resolved to cents at one level; the caller resolves them with L1's
+  `resolveChipValue`.
 
   ```ts
   { total, perSpot: { bet, asked, placed, status: 'ok' | 'adjusted' | 'rejected', reason?: string }[],
@@ -787,23 +926,52 @@ export interface GameUi<R = unknown> {
 
 ## 8. Storage, export and import (D2)
 
-- **IndexedDB `DB_VERSION` 1 → 2:**
-  - `DB_UPGRADES[2]` creates the `layouts` store (keyPath `id`, index `byUpdated: updatedAt`);
-  - `STORE_NAMES` appends `'layouts'`, which the memory backend picks up;
-  - the upgrade is structural only. Every v1 store and record is untouched, and records still
-    migrate lazily via `v`.
-  - The existing open path already loops `DB_UPGRADES[old+1 … new]`.
+- **IndexedDB `DB_VERSION` 1 → 2** (B1: a fresh install must not break):
+  - **The trap.** Today `DB_UPGRADES[1]` iterates `STORE_NAMES`. Appending `'layouts'` to
+    `STORE_NAMES` *and* creating it in upgrade 2 would make a fresh install (`oldVersion` 0, which
+    runs 1 then 2) create `layouts` twice. That throws `ConstraintError`, and `openStore` falls back
+    to memory. The reviewer reproduced this with fake-indexeddb.
+  - **The fix:**
+    - add `const V1_STORE_NAMES = [ …the ten v1 names… ] as const`, frozen forever;
+    - `DB_UPGRADES[1]` iterates `V1_STORE_NAMES` (using `STORE_DEFS` for keyPaths and indexes);
+    - `DB_UPGRADES[2] = (db) => { if (!db.objectStoreNames.contains('layouts')) create('layouts') }`;
+    - `STORE_NAMES = [...V1_STORE_NAMES, 'layouts']`, so the memory backend and `deleteAll` pick
+      it up.
+
+    Every later version follows the same rule: an upgrade creates only its own stores, each guarded
+    by `contains`.
+  - `STORE_DEFS.layouts = { keyPath: 'id', indexes: { byUpdated: 'updatedAt' } }`.
+  - The upgrade is structural only. Every v1 store and record is untouched, and records still
+    migrate lazily via `v`. The existing open path already loops `DB_UPGRADES[old+1 … new]`.
+  - **Acceptance tests** (fake-indexeddb, L2):
+    - a **fresh** database opened at v2 has exactly the 11 stores, each with its keyPath and
+      indexes from `STORE_DEFS`, and `openStore` reports `kind: 'idb'`, not the fallback;
+    - a database created at v1 and seeded with a definition, a strategy, a run with parts and a
+      setting, then reopened at v2, keeps every record and gains `layouts`;
+    - the memory backend has the same 11 stores;
+    - the existing `expect(STORE_NAMES).toHaveLength(10)` in `backend.test.ts` becomes 11, plus
+      `V1_STORE_NAMES` length 10.
   - Edge cases:
     - Another tab still on v1: `onblocked`, then the existing "close other spinner tabs" message.
     - An older build meeting a v2 database (rollback): `VersionError`, then the memory fallback
       with "data from a newer version" (§9.3). Nothing is deleted.
 - **App repo (`src/app/services/db.ts`):**
-  - `keyOf('layouts')` returns `rec.id`. Today's `default` branch would return `runId`, a real bug
-    to avoid.
-  - `deleteAll` covers the new store automatically.
-  - `exportDefinitions` adds `layouts: LayoutRecord[]`. `AllData` stays `v: 1`, because the field
-    is optional and additive: old files import with no layouts, and an older build ignores the
-    field.
+  - **`keyOf` is derived from `STORE_DEFS`** instead of a hand-written switch:
+    `const kp = STORE_DEFS[store].keyPath; return Array.isArray(kp) ? kp.map((k) => rec[k]) : rec[kp]`.
+    Today's `default` branch returns `runId`, so a new store would silently get the wrong key.
+    `tests/app/shell.test.tsx`, which imports `keyOf`, is L2-touchable for this.
+  - `deleteAll` covers the new store automatically, through `STORE_NAMES`.
+  - **Both repos change the same way:** `createBackendRepo`, and **`createMemoryRepo`** (the
+    fallback and test fake, which duplicates export, import and deleteAll).
+    - `exportDefinitions` adds `layouts: LayoutRecord[]`.
+    - `deleteAll` clears layouts.
+    - `importDefinitions` merges layouts by id, keeping existing ones, and returns
+      `{ definitions: number; layouts: number }`.
+  - **`parseAllData` carries `layouts`.** A missing field gives `[]`; a non-array is ignored.
+  - The Settings import toast reads "Imported 3 definitions and 2 layouts." This one line of
+    `src/app/screens/Settings/index.tsx` is L2-touchable.
+  - `AllData` stays `v: 1`, because the field is optional and additive: old files import with no
+    layouts, and an older build ignores the field.
 - **A single layout file:** `<slug>.layout.json`, `LayoutFileV1`, written as canonical JSON.
   - Library → layout → Export writes one layout; "Export all layouts" writes many.
   - The Import screen's `peekFormat` routes `casino-lab-layout` to `decodeLayoutFile`, then
@@ -817,6 +985,49 @@ export interface GameUi<R = unknown> {
   not exist on this device ("Corners and red, not in your library: Save as layout").
 - **Share links:** carry `x-chips` like any other key. A 64-spot stage adds ≈ 2–3 kB raw, well
   under 1 kB after deflate, and far under `SHARE_LINK_MAX_CHARS` (tested).
+
+### 8.1 Sweeps (B3, orchestrator decision)
+
+`leafPaths` and `sweepPathAllowed` would expose `x-chips` leaves. Sweeping one would change the
+`definitionId` but not the compiled rows: every variant would play the same bets. The rules
+(owned by WP-L8):
+
+- **Allowed: the chip value of a chip stage**, `/strategy/stages/<s>/x-chips/chip`, when it is a
+  numeric denomination. This is the "run my layout at $5 / $25 / $100" case.
+  - `applySweepValue(d, path, value)` (new, `core/experiment/pointer.ts`) is `setPointer` followed,
+    when `isChipPath(path)`, by `recompileStageChips(strategy, s)`. That regenerates that stage's
+    prefix rows with `compileChips` before `normalizeDefinition`.
+  - `buildVariants` (`Sweep/sweep.ts`) calls it instead of `setPointer`.
+  - Values must be positive integer cents. A non-integer or `≤ 0` value is a variant error ("chip
+    value must be whole cents"). Values are increasing, as `parseValues` already requires.
+  - `leafPaths` lists it with the label "Stage *play*: chip value".
+  - A chip value of `{ units: 1 }` or `{ prog }` is not a numeric leaf there. Sweep the strategy
+    unit or the progression base instead, as today.
+- **Denied:**
+  - every other `x-` path (`/x-chips/spots/…`, `/x-chips/from/…`, `/x-chips/v`, and any other
+    `x-` key);
+  - the compiled `layout/<i>/amount…` paths of a chip stage, for `i < spots.length`. Sweeping
+    them would make the chips stale.
+- **Signature.** `sweepPathAllowed(path, def?)` gains an optional definition. Without it, only the
+  path rules apply (every `x-` path except the chip path is denied). With it, the chip-stage rows
+  and the "chip must be numeric" rules apply too. Existing callers stay valid, and
+  `contracts/experiment.ts`'s signature comment is updated in L0.
+- **Tests:**
+  - `pointer.test.ts`: allow and deny tables;
+  - `sweep.test.ts`: a $5 / $25 / $100 sweep of a chip stage yields three variants whose compiled
+    rows are `chips × value`, three distinct ids, and validation that runs; `leafPaths` hides the
+    denied paths.
+
+### 8.2 `simKey` ignores layout provenance
+
+`simKey` already ignores names. It now also drops every stage's `x-chips.from`, so two definitions
+that differ only by where their chips came from (or a renamed layout) still match "you already ran
+this".
+
+- **Scope.** The change is in `core/experiment/ids.ts` (WP-L8). For definitions without `x-chips`
+  the input is unchanged, so every existing `simKey` is unchanged.
+- **Not affected.** `definitionId` still hashes `from` (provenance is part of the saved
+  experiment), and `runKey`, which builds on `definitionId`, is unchanged.
 
 ---
 
@@ -842,12 +1053,14 @@ export interface GameUi<R = unknown> {
 | `src/core/contracts/layout.ts` (new) | `LAYOUT_SCHEMA`, `MAX_LAYOUT_SPOTS`, `MAX_CHIPS_PER_SPOT`, `LayoutSpot`, `ChipLayout`, `LayoutRecord`, `ChipValue`, `StageChips`, `STAGE_CHIPS_KEY`, `LAYOUT_FILE_FORMAT`, `LayoutFileV1` (types and constants only) | new `LAYOUT_SCHEMA = 1`; `CORE_VERSION` unchanged (recommended) | Layouts are game-agnostic and shared by core/store, core/strategy, core/ui and the app. contracts/ imports only `./game` and `./strategy` |
 | `src/core/ui/game-ui.ts` | Add `ChipBoardProps`, `ChipsUi`, and optional `GameUi.chips?` | additive optional member, no bump | The game draws the board and knows call-bet steps; the core owns the editor |
 | `src/core/index.ts` (barrel, append) | `export * from './contracts/layout'` | – | – |
-| `src/core/ui/index.ts` (append, orchestrator-granted) | `export * from './layout'` | – | – |
+| `src/core/ui/index.ts` (orchestrator-granted) | Append `export * from './layout'`, and **edit** the existing `export type { BetPickerProps, GameUi, … } from './game-ui'` line to add `ChipBoardProps` and `ChipsUi` | – | – |
+| `src/core/contracts/experiment.ts` (signature comment only) | `sweepPathAllowed(path, def?)`; add `applySweepValue(d, path, value)` | – | §8.1 |
+| `src/core/contracts/version.ts` (comment only) | Reword "bump whenever a contract … changes" to "bump whenever anything that feeds run ids or simulation results changes" (the orchestrator's decision) | `CORE_VERSION` stays `0.1.0` | D12 |
 | `src/core/contracts/strategy.ts` | **none**. `x-chips` uses the documented `x-` extension; `Stage` stays as is and `readStageChips` does the cast | – | Keeps the interpreter and validator untouched |
-| `src/core/contracts/{game,experiment,run,protocol}.ts` | **none** | – | – |
-| `src/core/store/backend.ts` (not a contract; versioned) | `DB_VERSION = 2`, `STORE_NAMES` + `'layouts'`, `DB_UPGRADES[2]` | DB 2 | New library entity |
+| `src/core/contracts/{game,run,protocol}.ts` | **none** | – | – |
+| `src/core/store/backend.ts` (not a contract; versioned) | `DB_VERSION = 2`, frozen `V1_STORE_NAMES` for upgrade 1, `STORE_NAMES = [...V1, 'layouts']`, guarded `DB_UPGRADES[2]` (§8) | DB 2 | New library entity |
 
-`decisions.md` should record D3, D4, D5, D7, D12 and the `CORE_VERSION` call when WP-L0 lands.
+`decisions.md` records D1–D7, D11, D12 and the `CORE_VERSION` call (done in 2538c0f).
 
 ---
 
@@ -856,12 +1069,14 @@ export interface GameUi<R = unknown> {
 | Piece | Unit (Vitest node/dom) | Golden / integration | e2e (Playwright, four projects) |
 |---|---|---|---|
 | Contracts (L0) | `contracts.test.ts`: `rouletteUi` (with and without `chips`) assignable to `GameUi`; `StageChips` and `ChipLayout` sample objects type-check; `CORE_VERSION` still `0.1.0` | All existing goldens green | – |
-| Chip math (L1) | `chipAmount` table (§3.3); `compileChips` order; `liftRows` accepts and rejects each form; `lift ∘ compile = id` and `compile ∘ lift = rows` (property test, 500 random layouts); `splitStageLayout` stale detection; `adjustSpot` steps, limits and removal; `sameSpots`; `validateChipLayout` every code; `progressionTop` against the validator's top for all kinds | `tests/build/roulette-chips.test.ts`: every chip-shaped preset lifted and compiled gives deep-equal `layout`, then `simulate` gives a byte-equal trace against `src/game/roulette/__fixtures__/golden`; a chips × Martingale stage doubles all spots (the prototype case, pinned); `normalizeStrategy` keeps `x-chips`; the flat-red `definitionId` vector is unchanged | – |
-| Store (L2) | Memory and IDB (fake-indexeddb) suites: a v1 DB with records opens as v2 with records intact and `layouts` present; CRUD and `byUpdated` order; `layoutHash` vector (pinned hex for the James Bond layout); `allocLayoutId`; the layout file encode → decode → encode is byte-identical; `decodeLayoutFile` error codes; `db.ts` export/import with and without `layouts`, an old `AllData` fixture, `keyOf('layouts')`, `deleteAll` | – | – |
-| Roulette board (L3) | `geometry.test.ts`: for every wheel × orientation, every fixed inside bet is reachable by `betAt` from some point and by `betNearest` in its family; every point of the number block maps to a legal bet on that wheel; zone sizes at 360 px are reported and pinned (straight ≥ 24 px tall); `chip-board.test.tsx`: tap adds with `step`, Remove mode, right-click, the call stepper ×pieces, neighbours add 2k+1, the Enter sheet's steppers, aria names with counts, the lock radiogroup; `ui.test.tsx` unchanged and green; built-in layouts validate | – | – |
-| Editor shell (L4) | `history.test.ts` (undo/redo/clear/limit/no-op dedupe); `LayoutEditor.test.tsx` with a fake `ChipBoard` (tool switch, shortcuts, live-region text, 64-spot refusal, unsaved guard); `SpotList` (steppers, reorder, add through a fake picker); `check.test.ts` with the core/testing coin plugin (rejected, adjusted and affordable mapping); `defaultDenom` | Roulette `checkAtTable` cases mirror game.md §8.1 rows 1–10 (in L1's tests/build file, since core cannot import the game) | – |
-| Builder (L5) | Model laws with `x-chips` (fresh, stale, extends); `ChipsPanel` (chip rack → literal rows, `units`, a progression creates `base` + `track: 'round'`, the stale banner's Rebuild and Forget, `W_CHIPS_SHADOWED`); "Edit on the table" lift on James Bond leaves `layout` untouched | Define's `builder.test.tsx` cases still green | – |
-| Library and Import (L6) | Layouts tab list, built-ins, duplicate, delete confirm, "Used in" scan; editor page save, rename and Back guard; Import routes a layout file (new, exists, renamed, foreign game, newer version) | – | – |
+| Chip math (L1) | `chipAmount` table (§3.3); `compileChips` order; `liftRows` accepts and rejects each form; `lift ∘ compile = id` and `compile ∘ lift = rows` (property test, 500 random layouts); `splitStageLayout` stale detection; `adjustSpot` steps, limits and removal; `sameSpots`; `validateChipLayout` every code; `progressionTop`/`progressionBase` against the §7.7 reference sequences and the `W_PROG_ABOVE_TABLE_MAX` threshold (S4); `resolveChipValue` for each chip-value form; `isChipPath`; `recompileStageChips` | `tests/build/roulette-chips.test.ts`: every chip-shaped preset lifted and compiled gives deep-equal `layout`, then `simulate` gives a byte-equal trace against `src/game/roulette/__fixtures__/golden`; a chips × Martingale stage doubles all spots (the prototype case, pinned); `normalizeStrategy` keeps `x-chips`; the flat-red `definitionId` vector is unchanged | – |
+| Store (L2) | Memory and IDB (fake-indexeddb) suites: a **fresh** DB opens at v2 with all 11 stores and indexes, as `idb`; a v1 DB with records opens as v2 with records intact and `layouts` present; `STORE_NAMES` length 11, `V1_STORE_NAMES` length 10; CRUD and `byUpdated` order; `layoutHash` vector (pinned hex for the James Bond layout); `allocLayoutId`; the layout file encode → decode → encode is byte-identical; `decodeLayoutFile` error codes; `db.ts` export/import with and without `layouts` on **both** `createBackendRepo` and `createMemoryRepo` (counts returned), `parseAllData` with and without `layouts`, an old `AllData` fixture, `keyOf` derived from `STORE_DEFS` for every store (`tests/app/shell.test.tsx`), `deleteAll` | – | – |
+| Roulette geometry (L3a) | `geometry.test.ts`: for every wheel × orientation, every fixed inside bet is reachable by `betAt` from some point and by `betNearest` in its family; every point of the number block maps to a legal bet on that wheel; the basket versus `split:0-1` special case (§4.4) at its corner, along the edge and in lock mode; `toBoard` with a non-zero `view.x/y`; zone sizes at 360 px are reported and pinned (straight ≥ 24 px tall) | – | – |
+| Roulette board (L3b) | `chip-board.test.tsx`: tap acts on `click` (not `pointerdown`), long-press opens the sheet and swallows the click, `contextmenu` suppressed, chips `pointer-events: none`, the lock radiogroup's name "Bet type", tap adds with `step`, Remove mode, right-click, the call stepper ×pieces, neighbours add 2k+1, the Enter sheet's steppers, aria names with counts, the lock radiogroup; `ui.test.tsx` unchanged and green; built-in layouts validate | – | – |
+| Editor shell (L4) | `history.test.ts` (undo/redo/clear/limit/no-op dedupe); `LayoutEditor.test.tsx` with a fake `ChipBoard` (tool switch, shortcuts, live-region text, 64-spot refusal, unsaved guard); `SpotList` (steppers, reorder, add through a fake picker); `check.test.ts` with the core/testing coin plugin (rejected, adjusted and affordable mapping; rows given as resolved `{ bet, cents }`); `defaultDenom` | **`tests/build/roulette-check.test.ts` (L4-owned):** roulette `checkAtTable` cases mirror game.md §8.1 rows 1–10, plus the base-level below-minimum warning (S2) | – |
+| Builder (L5) | Model laws with `x-chips` (fresh, stale, extends); base and top level table checks, with the base below-minimum `W_CHIPS_TABLE`; "Tap chips" on a new strategy leaves `emptyStrategy` output unchanged; `ChipsPanel` (chip rack → literal rows, `units`, a progression creates `base` + `track: 'round'`, the stale banner's Rebuild and Forget, `W_CHIPS_SHADOWED`); "Edit on the table" lift on James Bond leaves `layout` untouched | Define's `builder.test.tsx` cases still green | – |
+| Sweep and simKey (L8) | `pointer.test.ts` allow and deny tables (§8.1); `applySweepValue` recompiles; `ids.test.ts`: `simKey` ignores `x-chips.from`, and every existing `simKey` vector is unchanged | `sweep.test.ts`: a $5 / $25 / $100 chip-value sweep gives three variants with `chips × value` rows; `leafPaths` hides the denied paths | – |
+| Library and Import (L6) | Layouts tab list, built-ins, duplicate, delete confirm, "Used in" scan over definitions and strategies; editor page save, rename and Back guard; Import routes a layout file (new, exists, renamed, foreign game, newer version) | – | – |
 | Define wiring and e2e (L7) | Define integration: build chips, save, run Quick check; the definition holds the compiled rows | `runs.integration.test.tsx` case with chips | `tests/e2e/layouts.spec.ts` at phone-360, phone, phone-landscape and desktop: create a layout by tapping (straight, split via the lock, voisins), undo/redo, Remove, save; use it in a new experiment at $5 with a Martingale; Quick check verdict; reopen the library layout, edit, see the stale banner in Define; keyboard-only path on desktop (Tab, Enter, sheet steppers); axe in every state (§4.6); tap targets ≥ 44 px for buttons; no horizontal overflow; screenshots for `docs/screenshots` |
 
 - **Perf.** No impact is expected: the worker, the interpreter and the compiled rows are the same
@@ -874,52 +1089,65 @@ export interface GameUi<R = unknown> {
 
 ## 12. Work packages
 
-Rules: files listed are owned exclusively by that WP; everything else is read-only to it. Batons are
-granted by the orchestrator. Each WP ends green on `npm run check`, which covers typecheck, lint,
-unit tests and build; for each WP, Vitest runs through `/home/user/bin/res cpu <agent> --`. e2e runs
-through `/home/user/bin/res browser <agent> --`.
+These rules apply to every WP:
+
+- **Ownership.** Each WP owns its listed files exclusively; every other file is read-only to it.
+  The orchestrator grants batons.
+- **Done means green:** each WP ends green on `npm run check` (typecheck, lint, unit tests and
+  build).
+- **Resource baton:**
+  - Vitest runs through `/home/user/bin/res cpu <agent> --`.
+  - e2e runs through `/home/user/bin/res browser <agent> --`.
 
 ### DAG and waves
 
 ```
 Wave 1:  L0 contracts + stubs
             │
-Wave 2:  ┌──┴───────┬───────────┬────────────┐
-         L1 chips   L2 store    L3 roulette  L4 editor shell
-         (core/     (core/store  ChipBoard    (core/ui/layout)
-         strategy)   + db.ts)    + built-ins
-            │   ╲      │           │   ╱        │
-Wave 3:     └────L5 builder ◄──────┼──┴────────┘   (L1, L4; L3 for its dom tests via a fake)
-                    │   L6 Library + Import ◄── L1, L2, L3, L4
-                    │        │
-Wave 4:             └──► L7 Define wiring + e2e ◄── L5, L6 (and L3)
+Wave 2:  ┌──┴────────┬─────────────┬──────────────┬──────────────┐
+         L1 chips    L2 store      L3a geometry   L4 editor shell
+         (core/      (core/store   (pure)         (core/ui/layout,
+         strategy)    + db.ts)        │             tests/build/roulette-check)
+            │            │            ▼
+Wave 2b:    │            │          L3b ChipBoard UI + built-ins ◄── L3a
+            │            │            │
+Wave 3:     ├──► L5 builder ◄─────────┼──── L4          (fake ChipsUi; no L3b needed)
+            ├──► L8 sweep + simKey    │                  (L1 only)
+            └──► L6 Library + Import ◄┴── L2, L4         (L1, L2, L3b, L4)
+                    │
+Wave 4:      L7 Define wiring + e2e ◄── L5, L6, L8 (and L3b)
 ```
+
+Nine WPs: L3a is small, and L3b starts the moment L3a merges. At most five run at once, within the
+pool of 10.
 
 ### WP-L0 Contracts and frozen stubs (wave 1, one agent, first)
 
 - **Owns:**
   - `src/core/contracts/layout.ts` (new);
   - `src/core/contracts/contracts.test.ts` (append);
+  - `src/core/contracts/version.ts` (comment reword only, D12);
+  - `src/core/contracts/experiment.ts` (the signature comment for `sweepPathAllowed(path, def?)` and
+    `applySweepValue`, §8.1);
   - `src/core/ui/game-ui.ts`;
-  - stub files with the frozen signatures of §5–§6, each throwing `not implemented` or rendering
-    `null`:
+  - stub files with the frozen signatures of §5, §6 and §8.1, each throwing `not implemented` or
+    rendering `null`:
     - `src/core/strategy/chips.ts`;
     - `src/core/store/layouts.ts`;
-    - `src/core/ui/layout/index.ts`;
-    - `src/core/ui/layout/types.ts`.
+    - `src/core/ui/layout/index.ts` and `types.ts`.
 - **Batons:**
   - `src/core/contracts/*` and `game-ui.ts` (the contract);
   - `src/core/index.ts` (append the layout contract export);
-  - `src/core/ui/index.ts` (append `export * from './layout'`);
-  - `src/core/strategy/index.ts` and `src/core/store/index.ts` (append the stub exports);
-  - the orchestrator adds the `decisions.md` entry.
+  - `src/core/ui/index.ts`: append `export * from './layout'` **and edit** the existing
+    `export type {…} from './game-ui'` line to add `ChipBoardProps` and `ChipsUi`;
+  - `src/core/strategy/index.ts` and `src/core/store/index.ts` (append the stub exports).
 - **Acceptance:**
   - Types compile.
   - `rouletteUi` still satisfies `GameUi` with no `chips`.
   - `CORE_VERSION` is unchanged.
-  - `npm run check` is green with every golden and definitionId vector untouched.
-  - The stubs' signatures match §5.1, §5.2 and §6 exactly. Later WPs may not change them without
-    asking the orchestrator.
+  - Every golden and definitionId vector is untouched, and `npm run check` is green.
+  - The stubs' signatures match §5.1, §5.2, §6 and §8.1 exactly. Later WPs may not change them
+    without asking the orchestrator.
 - **Tests:** the `contracts.test.ts` additions (§11 row 1).
 
 ### WP-L1 Chip math (wave 2)
@@ -930,129 +1158,182 @@ Wave 4:             └──► L7 Define wiring + e2e ◄── L5, L6 (and L3
   - `tests/build/roulette-chips.test.ts`.
 - **Depends on:** L0.
 - **Batons:** none. The strategy barrel export was appended in L0. `validate.ts`, `compile.ts` and
-  `normalize.ts` are **not** touched.
+  `normalize.ts` are **not** touched; `progressionTop` lives in `chips.ts` (S4).
 - **Acceptance:**
-  - Every function of §5.1 behaves as specified.
-  - All the codes of §5.3 that `chips.ts` owns are implemented.
+  - Every function of §5.1 behaves as specified, including `resolveChipValue`, `progressionBase`,
+    `progressionTop`, `isChipPath` and `recompileStageChips`.
+  - The §5.3 codes that `chips.ts` owns are implemented.
   - The lift and compile laws hold.
-  - The golden-equivalence test passes for every chip-shaped preset (european, plus James Bond on
-    american).
+  - The golden-equivalence test passes for all 12 presets (european, plus James Bond on american).
   - The chips × Martingale doubling is pinned.
-- **Tests:** §11 rows 2 and 5 (the `checkAtTable` roulette cases), in `tests/build`.
+- **Tests:** §11 row 2. The `checkAtTable` cases are **not** here; they belong to L4 (B2).
 
 ### WP-L2 Store, files and app repo (wave 2)
 
 - **Owns:**
-  - `src/core/store/backend.ts`, `repo.ts`, `layouts.ts` and `index.ts`, plus their tests;
+  - `src/core/store/backend.ts`, `repo.ts`, `layouts.ts` and `index.ts`, plus their tests (including
+    `backend.test.ts`'s store-count assertion);
   - `src/core/store/__fixtures__/layouts/*`;
-  - `src/app/services/db.ts` (+ test).
+  - `src/app/services/db.ts`, covering both `createBackendRepo` and `createMemoryRepo`, plus its
+    tests;
+  - `tests/app/shell.test.tsx`, for `keyOf` and the import counts only;
+  - the import-toast line of `src/app/screens/Settings/index.tsx`.
 - **Depends on:** L0.
-- **Batons:** none. `STORE_NAMES` is core-store's own file.
+- **Batons:** none.
 - **Acceptance:**
-  - DB v2 upgrade with no data loss (fake-indexeddb test seeded at v1).
+  - B1 is fixed as §8 specifies: a frozen `V1_STORE_NAMES`, a guarded upgrade 2, and a **fresh DB
+    at v2 that opens as `idb` with all 11 stores and indexes**.
+  - The v1 → v2 upgrade loses no data.
   - Repo CRUD for layouts.
   - The layout file codec is canonical and round-trips.
-  - `AllData` carries `layouts` additively, and an old `AllData` fixture still imports.
-  - `keyOf('layouts')` is fixed.
+  - `AllData` carries `layouts` additively in both repos, and `parseAllData` and
+    `importDefinitions` count them.
+  - An old `AllData` fixture still imports.
+  - `keyOf` is derived from `STORE_DEFS`.
   - `deleteAll` clears layouts.
 - **Tests:** §11 row 3.
 
-### WP-L3 Roulette ChipBoard and built-in layouts (wave 2)
+### WP-L3a Roulette geometry (wave 2)
+
+- **Owns:** `src/game/roulette/ui/geometry.ts`, additive only, and `geometry.test.ts` (new):
+  - `betAt(board, point)` (Auto mode, §4.4);
+  - `betNearest(board, point, family)` (lock mode);
+  - the basket versus `split:0-1` special case;
+  - `toBoard(rect, view, clientX, clientY)`;
+  - `zoneSizes(board, cssWidth)`.
+- **Depends on:** L0 (types only).
+- **Batons:** none.
+- **Acceptance:**
+  - The coverage properties hold for all 3 wheels × 2 orientations.
+  - The special case is pinned.
+  - `toBoard` honours `view.x/y`.
+  - The 360 px zone sizes are pinned.
+  - The existing `anchorOf`, `hotZone` and `chipAt` behaviour is unchanged (`ui.test.tsx` is green).
+  - It is pure: no DOM and no Preact.
+- **Tests:** §11 row "Roulette geometry (L3a)".
+
+### WP-L3b Roulette ChipBoard UI and built-in layouts (wave 2b, after L3a)
 
 - **Owns:**
   - `src/game/roulette/ui/chip-board.tsx` (new) and its test;
-  - `src/game/roulette/ui/geometry.ts`: additive `betAt`, `betNearest`, `zoneSizes`;
-  - `src/game/roulette/ui/board.tsx`: additive `mode: 'place'`, `Chip.count`, `Chip.ghost`, flash
-    and ring;
-  - `src/game/roulette/ui/chips.ts`: `stepOf`;
-  - `src/game/roulette/ui/bet-picker.tsx`: export `CallsPanel` and `BetSheet` with optional
-    steppers, keeping the default behaviour;
+  - `src/game/roulette/ui/board.tsx`: additive `mode: 'place'`, `Chip.count`, `Chip.ghost`, flash,
+    ring, chip `pointer-events: none`, and the `click`, long-press and `contextmenu` handling of
+    §4.3;
+  - `src/game/roulette/ui/chips.ts` (`stepOf`);
+  - `src/game/roulette/ui/bet-picker.tsx`: refactor to export `CallsPanel` and `BetSheet` with
+    optional steppers, keeping the default behaviour;
   - `src/game/roulette/ui/index.ts` (`rouletteUi.chips`);
   - `src/game/roulette/ui/ui.css`;
   - `src/game/roulette/layouts.ts` (built-ins) and its test;
   - `src/game/roulette/index.ts` (append `BUILTIN_LAYOUTS`).
-- **Depends on:** L0. It uses L1's `validateChipLayout` only in a test, which may be `it.todo`
-  until L1 merges; the orchestrator rebases.
+- **Depends on:** L0 and L3a. It uses L1's `validateChipLayout` in one test, which may be
+  `it.todo` until L1 merges.
 - **Batons:** none.
 - **Acceptance:**
-  - Every behaviour of §4.3–§4.6 is covered.
-  - The `betAt` and `betNearest` coverage properties hold for all wheels and both orientations.
-  - The 360 px zone sizes are pinned.
+  - Every behaviour of §4.3–§4.6, including the lock radiogroup "Bet type", the icon-tool names and
+    the call steppers × pieces.
   - `TableView`, `BetPicker` and `ui.test.tsx` are unchanged in behaviour.
   - The built-ins are valid.
-- **Tests:** §11 row 4.
+- **Tests:** §11 row "Roulette board (L3b)".
 
-### WP-L4 Generic editor shell (wave 2)
+### WP-L4 Generic editor shell and table check (wave 2)
 
-- **Owns:** `src/core/ui/layout/*`:
-  - `LayoutEditor.tsx`, `history.ts`, `ChipRack.tsx`, `SpotList.tsx`, `LayoutThumb.tsx`;
-  - `check.ts`, `denoms.ts`, `layout.css`;
-  - `index.ts`, filling L0's stub exports;
-  - tests.
-- **Depends on:** L0.
-- **Batons:** none (the `core/ui` barrel line was added in L0).
+- **Owns:**
+  - `src/core/ui/layout/*`:
+    - `LayoutEditor.tsx`, `history.ts`, `ChipRack.tsx`, `SpotList.tsx`, `LayoutThumb.tsx`;
+    - `check.ts` (`checkAtTable` over resolved `{ bet, cents }` rows, §3.4), `denoms.ts`,
+      `layout.css`;
+    - `index.ts`, filling L0's stub exports;
+    - tests;
+  - **`tests/build/roulette-check.test.ts`** (new; B2).
+- **Depends on:** L0. `resolveChipValue` comes from L1, but L4 tests pass resolved cents directly,
+  so they do not wait on it.
+- **Batons:** none.
 - **Acceptance:**
-  - §4.1–§4.3 and §4.6 work with any `ChipsUi`, proven with a fake `ChipBoard` and the coin
-    plugin.
-  - `checkAtTable` maps `Reconciliation` generically.
+  - §4.1–§4.3 and §4.6, with the §4.1.1 fit at 328 px and the landscape rail fit, work with any
+    `ChipsUi`. This is proven with a fake `ChipBoard` and the coin plugin.
+  - `checkAtTable` maps `Reconciliation` generically, and the roulette cases mirror game.md §8.1.
   - The history limit and shortcuts work.
-  - Portrait and landscape shells (the `wide` prop) match the wireframes; this is checked in L7's
-    e2e.
-- **Tests:** §11 row 5 (dom and node).
+- **Tests:** §11 row 5.
 
 ### WP-L5 Builder integration (wave 3)
 
-- **Owns:** `src/core/ui/builder/*`:
-  - `model.ts`, `Builder.tsx`, `env.ts`, `describe.ts`, `builder.css`;
-  - the new `ChipsPanel.tsx` and `LayoutPickSheet.tsx`;
-  - `model.test.ts`, plus new dom tests;
-  - `index.ts` (its own barrel).
-- **Depends on:** L1 and L4. L3 is not needed: the tests use a fake `ChipsUi`.
+- **Owns:**
+  - `src/core/ui/builder/*`:
+    - `model.ts`, `Builder.tsx`, `env.ts`, `describe.ts`, `builder.css`;
+    - the new `ChipsPanel.tsx` and `LayoutPickSheet.tsx`;
+    - `model.test.ts`, plus new dom tests;
+    - `index.ts`, including `pathToElementId`'s `b-chips-<s>`;
+  - `src/app/screens/Define/builder.test.tsx`, `builder-model.test.ts` and `define.test.tsx`,
+    for heading and panel text fixes only (S7).
+- **Depends on:** L1 and L4. L3b is not needed: the tests use a fake `ChipsUi`.
 - **Batons:** none.
 - **Acceptance:**
   - §7.1 laws, including stale and `extends` cases.
   - The §4.7 stage panel.
-  - The chip rack, unit and progression options write exactly the §3.3 forms.
+  - The chip value options write exactly the §3.3 forms.
   - A new progression gets `base = denom` and `track: 'round'`.
-  - The stale banner works.
-  - "Edit on the table" lifts presets without changing `layout`.
-  - `env.chips` absent gives the old builder, byte-for-byte the same output.
-  - `src/app/screens/Define/builder.test.tsx` is still green; L5 may not edit it, so it reports a
-    break instead.
+  - The table check runs at the base and top levels (S2).
+  - The stale banner works, and "Update / Keep" appears for library strategies too.
+  - "Edit on the table" and "Tap chips" lift without changing `layout`.
+  - `emptyStrategy` output is unchanged.
+  - With `env.chips` absent, the builder is the old builder, with the same output byte for byte.
 - **Tests:** §11 row 6.
+
+### WP-L8 Sweep chip value and simKey (wave 3, small)
+
+- **Owns:**
+  - `src/core/experiment/pointer.ts`, `ids.ts` and `index.ts` (append `applySweepValue`), plus
+    their tests;
+  - `src/app/screens/Sweep/sweep.ts`, `index.tsx` (the leaf label only) and their tests.
+- **Depends on:** L1 (`isChipPath`, `recompileStageChips`).
+- **Batons:** none. The contract comment was updated in L0.
+- **Acceptance:**
+  - All of §8.1: the chip-value sweep recompiles rows, and the other `x-` paths and the compiled
+    chip-row amounts are denied.
+  - §8.2: `simKey` ignores `x-chips.from`, and every existing `simKey` and `definitionId` vector is
+    unchanged.
+- **Tests:** §11 row "Sweep and simKey (L8)".
 
 ### WP-L6 Library Layouts tab and Import (wave 3)
 
 - **Owns:**
   - `src/app/screens/Library/*`: `index.tsx`, `library.css`, `library.test.tsx`, and the new
     `Layouts.tsx` and `LayoutPage.tsx`;
-  - `src/app/screens/Import/*`: `importFile.ts`, `index.tsx` and their tests;
-  - `src/app/services/layouts.ts` (new): list, save, duplicate, delete, export, "used in", built-in
-    merge, and `libraryVersion` touches through `Define/data.ts`'s exported store, read-only.
-- **Depends on:** L1, L2, L3 and L4.
+  - `src/app/screens/Import/*`: `importFile.ts`, `index.tsx`, `repo.ts`, `import.css` (if needed)
+    and their tests;
+  - `src/app/services/layouts.ts` (new):
+    - list, save, duplicate, delete and export;
+    - "used in", scanning both definitions and strategies;
+    - merging the built-ins;
+    - `libraryVersion` touches through `Define/data.ts`'s exported store, read-only.
+- **Depends on:** L1, L2, L3b and L4.
 - **Batons:** none (no route change; §4.7).
 - **Acceptance:**
   - §4.7 Library behaviour, the editor page at both orientations, the unsaved guard and Back.
   - Import of layout files with every outcome of §8.
-  - The tab keeps its query param and the existing tabs are unchanged.
-- **Tests:** §11 row 7.
+  - The existing tabs are unchanged.
+- **Tests:** §11 row "Library and Import (L6)".
 
 ### WP-L7 Define wiring, end-to-end and perf check (wave 4)
 
 - **Owns:**
-  - `src/app/screens/Define/*`:
-    - `index.tsx`: `env.chips`, the `?layout=<id>` start, and merging `validateStageChips` and the
-      table-check warnings;
-    - `doc.ts`, `data.ts`, `define.css`, and the tests there;
+  - `src/app/screens/Define/*`, except the test edits L5 made:
+    - `index.tsx`: `env.chips`, the "Tap chips" first action, the `?layout=<id>` start, and
+      merging `validateStageChips` and the table-check warnings;
+    - `doc.ts`, `data.ts`, `define.css`, and the integration tests;
   - `tests/e2e/layouts.spec.ts` (new);
-  - `tests/e2e/define.spec.ts` (append);
+  - `tests/e2e/define.spec.ts`, `flow.spec.ts` and `shots.spec.ts`, for e2e breakage from the
+    panel change (S7);
   - `docs/screenshots/layouts-*` (via `SHOTS_DIR`).
-- **Depends on:** L5 and L6 (and L3 at runtime).
+- **Depends on:** L5, L6 and L8 (and L3b at runtime).
 - **Batons:** none expected. If the e2e needs a new helper in `tests/e2e/helpers.ts`, ask for it.
 - **Acceptance:**
-  - The full owner flow at four viewports: tap a layout, save it, use it in two definitions at
-    different denominations, run, and edit the layout to see the stale banner.
-  - Axe is clean in every state, there is no horizontal overflow, and the tap targets pass.
+  - The full owner flow at four viewports: tap a layout, save it, use it in two definitions at $5
+    and $25, run, edit the layout and see the stale banner, and sweep the chip value at $5 / $25 /
+    $100.
+  - Axe is clean in every state, there is no horizontal overflow, and tap targets pass (the
+    documented < 24 px line zones are exempt, with the sheet and List as equivalents).
   - The keyboard-only path works.
   - `tests/perf/budget.spec.ts` is unchanged within noise; record the run in the PR.
   - Docs follow-ups are listed for the orchestrator: game.md §12, strategy.md §13, architecture.md
@@ -1070,8 +1351,6 @@ Wave 4:             └──► L7 Define wiring + e2e ◄── L5, L6 (and L3
   (§3.3).
 - Import crappy sandbox `bets=` lists as layouts, when a craps app shares this core (§1).
 - Zoom (2×) on the phone board, if the bet-type lock proves insufficient in the owner's phone check.
-- Sweeping the chip value (`/strategy/stages/0/x-chips/chip`) needs the compile step in the sweep
-  path. Until then, sweep the unit (`chip: { units: 1 }`) or the progression base.
 
 ---
 
@@ -1083,4 +1362,4 @@ Wave 4:             └──► L7 Define wiring + e2e ◄── L5, L6 (and L3
 | Q2 | When the bankroll can't fund the whole layout (or a progression level), what happens? | **The table's existing rule**: spots are funded in placement order, the last ones are reduced or dropped, and over-max spots are cut (open questions 1 and 4); the editor previews it | Shrink every spot evenly; skip the spin; end the session | Low: generated expression (§3.4), no contract change |
 | Q3 | After editing a saved layout, should experiments that used it change? | **No.** Each stage keeps its copy, so runs stay reproducible; Define shows "Layout changed: Update / Keep" | Offer "Update everywhere", which saves new definitions for every user | Medium: a bulk tool in Library |
 | Q4 | How do I remove chips? | **An Add / Remove toggle** (plus right-click on desktop); long-press opens the bet list | Long-press removes; tapping a stack removes | Low: one handler |
-| Q5 | Should the built-in presets show as chips by default? | **No.** They stay as they are; "Edit on the table" converts a stage on request without changing its bets | Convert every preset stage to chips | Low, but changes preset `definitionId`s |
+| Q5 | Should the built-in presets show as chips by default? | **No.** They stay as they are; "Edit on the table" converts a stage on request without changing its bets | Convert every preset stage to chips | Medium: preset definition ids, the pinned id vectors and existing "already ran" matches change; traces do not |

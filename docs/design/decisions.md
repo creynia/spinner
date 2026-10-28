@@ -87,5 +87,5 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 - **A stage keeps a reference plus a frozen copy** in `stage['x-chips']`. Editing a saved layout never changes existing definitions or runs; Define offers Update / Keep (D3, D4).
 - **The denomination is per stage.** Amount per spot = chips × chip value, and a progression scales the whole layout. Compilation goes to ordinary bet rows, so there is no interpreter, worker or validator change (D5, D6).
 - **Limits follow the existing table rule** (cut to max per spot, fund in placement order), previewed in the editor through the real `reconcile` (D7).
-- **Presets are not migrated;** goldens and definitionId vectors stay unchanged. Any chip-shaped stage can be converted on request (D12).
+- **Presets are not migrated;** goldens and definitionId vectors stay unchanged. Any chip-shaped stage can be converted on request (D11).
 - **No `CORE_VERSION` or roulette version bump.** Simulation output does not change, and a bump would stop resume and Watch re-simulation of every existing run. The `version.ts` comment is read as "bump when results change" and is reworded in WP-L0 (orchestrator decision).

@@ -13,7 +13,7 @@ Each entry is a question the orchestrator would have asked the user. It was deci
 | 7 | 2026-10-28 | layouts.md Q2 | Bankroll can't fund the whole layout. | The table's existing rule: fund spots in placement order, cut over-max spots; previewed in the editor. | Shrink all spots evenly; skip the spin; end the session. | Low: a stage option later, no contract change. |
 | 8 | 2026-10-28 | layouts.md Q3 | Should experiments follow later edits to a saved layout? | No; each stage keeps its copy and Define offers Update / Keep. | Update everywhere automatically, or a bulk "update all" tool. | Low. |
 | 9 | 2026-10-28 | layouts.md Q4 | How do you remove chips? | An Add / Remove toggle (plus right-click on desktop); long-press opens a bet sheet with −/+. | Tap a stack to remove; an eraser mode. | Low: UI only. |
-| 10 | 2026-10-28 | layouts.md Q5 | Should presets show as chips by default? | No; "Edit on the table" converts a stage on request. | Convert all presets. | Medium: golden traces and definition ids would change. |
+| 10 | 2026-10-28 | layouts.md Q5 | Should presets show as chips by default? | No; "Edit on the table" converts a stage on request. | Convert all presets. | Medium: preset definition ids, the pinned id vectors and existing "already ran" matches change; traces do not. |
 
 ## Checks only you can do
 
