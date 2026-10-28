@@ -9,3 +9,12 @@ Each entry is a question the orchestrator would have asked the user. It was deci
 | 3 | 2026-10-28 | game.md | Triple-zero table layout (basket, splits with 000) could not be confirmed from a reliable source. | Kept as designed in game.md. | Drop the basket and extra zero splits. If you know the real layout, describe it. | Low: catalog entries. |
 | 4 | 2026-10-28 | game.md | Bankroll can't cover the full desired bet. | Bet what is left if it meets the minimum; otherwise the session busts. | Reject → bust immediately. | Low. |
 | 5 | 2026-10-28 | harness-data-analysis.md | Phone worker count on many-small-core phones (Pixel 6a). | `min(cores − 1, 8)`, 1 on weak phones, to be measured on a real device during polish. | Fixed 2 on phones. | Low. |
+
+## Checks only you can do
+
+The build VM cannot reach github.io or a real phone, so these PLAYBOOK §15 items are still open:
+
+1. **Phone check.** Open https://creynia.github.io/spinner/ on a mid-range Android, install it as a PWA, and run the default 10,000 × 500. Check that the 20 s budget holds and the layout works at 360 px.
+2. **Update path on the live site.** After the next deploy, Settings → Check for updates should show the toast, and the SHA in About should change. The e2e test covers this against two local builds only.
+3. **Phone sleep mid-run.** Lock the phone during a run, unlock it, and check that the run resumes, or offers Resume, with the same results digest.
+4. **Perf numbers are projected.** The browser benchmark screen is a placeholder (see `docs/chips.md`). Say whether you want it built before v1.
