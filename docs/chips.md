@@ -40,6 +40,7 @@ All "before v1" items are closed by #17 and #18:
 - **Library** (#33): there is no "Export all layouts". New layouts start on European; change the wheel from More. After the first save of a new layout the address stays `edit=new`.
 - **Builder chips panel** (#31): the table check covers the stage's chip spots, not manual or inherited rows. Rebuild drops `when`-guarded rows on a spot's bet; they were shadowed anyway.
 - **Sweep** (#30): add permanent tests for manual rows after chip rows and for `{units}` / `{prog}` chip stages. An invalid chip stage reports "too large for this layout", which misleads.
+- **Define** (#34): the first-tap minimum hint rarely shows, because the default chip ($25) already meets the outside minimum; it appears with smaller chips. `branchedFrom` isn't cleared when picking from the Presets sheet; this is harmless, since only a strategy identical to that preset gets its id back.
 - **Perf** (#34): a chip strategy with voisins runs at about 101k rounds/s serial versus 220k for the reference strategy. It still fits the budget (16.5 s projected on 3 threads); profile if layouts grow.
 - **Design docs**: game.md §12, strategy.md §13 and architecture.md §6.3 now point to `layouts.md`. Fold the details in properly the next time those docs are revised.
 
