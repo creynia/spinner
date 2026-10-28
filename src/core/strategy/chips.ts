@@ -30,6 +30,8 @@ const isInt = (x: unknown): x is number => typeof x === 'number' && Number.isInt
 const SLUG = /^[a-z][a-z0-9-]{0,39}$/;
 const esc = (s: string): string => s.replace(/~/g, '~0').replace(/\//g, '~1');
 const CHIPS_KEY = 'x-chips';
+/** Largest amount in cents anywhere (a literal chip or one spot's chips x chip), as in the validator. */
+const MAX_CENTS = 2 ** 31 - 1;
 
 /** Key-order-insensitive structural equality of JSON values. */
 function jsonEqual(a: unknown, b: unknown): boolean {
@@ -71,7 +73,7 @@ export function compileChips(c: StageChips): LayoutSpec[] {
 // ---------------------------------------------------------------- reading the block
 
 function validChip(x: unknown): x is ChipValue {
-  if (typeof x === 'number') return Number.isInteger(x) && x >= 1;
+  if (typeof x === 'number') return Number.isInteger(x) && x >= 1 && x <= MAX_CENTS;
   if (!isObj(x)) return false;
   const keys = Object.keys(x);
   if (keys.length !== 1) return false;
@@ -100,6 +102,18 @@ function validFrom(x: unknown): boolean {
   );
 }
 
+/** Index of the first spot whose bet already appeared earlier in `spots`, or -1. */
+function firstDuplicate(spots: unknown[]): number {
+  const seen = new Set<unknown>();
+  for (let i = 0; i < spots.length; i++) {
+    const bet = isObj(spots[i]) ? (spots[i] as Obj).bet : undefined;
+    if (typeof bet !== 'string') continue;
+    if (seen.has(bet)) return i;
+    seen.add(bet);
+  }
+  return -1;
+}
+
 /** The stage's `x-chips`, shape-checked (v, spots, chip, from); `null` when absent or malformed. */
 export function readStageChips(stage: unknown): StageChips | null {
   if (!isObj(stage)) return null;
@@ -108,6 +122,11 @@ export function readStageChips(stage: unknown): StageChips | null {
   if (!Array.isArray(b.spots) || b.spots.length < 1 || b.spots.length > MAX_LAYOUT_SPOTS)
     return null;
   if (!b.spots.every(validSpot) || !validChip(b.chip)) return null;
+  if (firstDuplicate(b.spots) >= 0) return null;
+  if (typeof b.chip === 'number') {
+    const c = b.chip;
+    if (b.spots.some((sp: LayoutSpot) => sp.chips * c > MAX_CENTS)) return null;
+  }
   if (b.from !== undefined && !validFrom(b.from)) return null;
   return clone(b) as unknown as StageChips;
 }
@@ -397,7 +416,10 @@ export function validateStageChips(def: StrategyDefinition): Diagnostic[] {
     if (!isObj(st) || !(CHIPS_KEY in st)) return;
     const path = `/stages/${s}/${CHIPS_KEY}`;
     if (!readStageChips(st)) {
-      out.push(diag('E_CHIPS_SHAPE', path));
+      const raw = st[CHIPS_KEY];
+      const spotList = isObj(raw) && Array.isArray(raw.spots) ? raw.spots : [];
+      const dup = firstDuplicate(spotList);
+      out.push(diag('E_CHIPS_SHAPE', dup >= 0 ? `${path}/spots/${dup}` : path));
       return;
     }
     const { chips, manual, stale } = splitStageLayout(st as unknown as Stage);
@@ -540,7 +562,8 @@ function levelAmounts(spec: ProgressionSpec, unit: Cents): number[] | null {
 
 /**
  * Largest amount a progression reaches (§5.1, S4); `null` for labouchere and formula bases. Levels
- * above a constant `maxAmount` are never reached (level 0 always is), so the result honours it.
+ * above a constant `maxAmount` are never reached (level 0 always is), so this caps at it on purpose.
+ * The validator's own top for `W_PROG_ABOVE_TABLE_MAX` ignores `maxAmount`, so the two differ there.
  */
 export function progressionTop(spec: ProgressionSpec, unit: Cents): Cents | null {
   const amounts = levelAmounts(spec, unit);
@@ -555,14 +578,25 @@ export function progressionTop(spec: ProgressionSpec, unit: Cents): Cents | null
   return Math.floor(Math.max(...reach));
 }
 
-/** Level-0 amount of a progression; `null` for formula bases. */
+/** Level-0 amount of a progression; `null` for formula bases (labouchere: `(first + last) x base`). */
 export function progressionBase(spec: ProgressionSpec, unit: Cents): Cents | null {
   const s = spec as unknown as Obj;
   if (s.kind === 'sequence') {
     const a = Array.isArray(s.amounts) ? constEval(s.amounts[0], unit) : null;
     return a === null ? null : Math.floor(a);
   }
-  if (s.kind === 'labouchere' || s.base !== undefined) {
+  if (s.kind === 'labouchere') {
+    // Level 0 is (first + last) x base, or first x base for a one-number line (§7.4).
+    const line = s.line;
+    if (!Array.isArray(line) || line.length < 1 || line.length > 64) return null;
+    if (!line.every((n) => isInt(n) && n >= 1)) return null;
+    const b = s.base === undefined ? unit || null : constEval(s.base, unit);
+    if (b === null) return null;
+    const first = line[0] as number;
+    const last = line[line.length - 1] as number;
+    return Math.floor((line.length === 1 ? first : first + last) * b);
+  }
+  if (s.base !== undefined) {
     const b = s.base === undefined ? unit || null : constEval(s.base, unit);
     return b === null ? null : Math.floor(b);
   }

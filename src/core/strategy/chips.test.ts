@@ -424,6 +424,26 @@ describe('validateChipLayout', () => {
   });
 });
 
+describe('caps and duplicates', () => {
+  it('rejects a literal chip or spot amount above 2^31-1 cents', () => {
+    expect(readStageChips({ 'x-chips': block({ chip: 2 ** 31 }) })).toBeNull();
+    expect(
+      readStageChips({ 'x-chips': block({ chip: 2 ** 31 - 1, spots: spots(['a', 1]) }) }),
+    ).not.toBeNull();
+    expect(
+      readStageChips({ 'x-chips': block({ chip: 3_000_000, spots: spots(['a', 1000]) }) }),
+    ).toBeNull();
+  });
+  it('rejects duplicate bets, and validateStageChips points at the second one', () => {
+    const st = { id: 's', 'x-chips': block({ spots: spots(['a', 1], ['b', 1], ['a', 2]) }) };
+    expect(readStageChips(st)).toBeNull();
+    const d = validateStageChips({ stages: [st] } as unknown as StrategyDefinition);
+    expect(d.map((x) => `${x.code} ${x.path}`)).toEqual([
+      'E_CHIPS_SHAPE /stages/0/x-chips/spots/2',
+    ]);
+  });
+});
+
 describe('validateStageChips', () => {
   const def = (...stages: unknown[]): StrategyDefinition =>
     ({
@@ -504,7 +524,11 @@ describe('progression top and base (§7.4, §7.7)', () => {
   it('labouchere has a base but no top', () => {
     const s = { kind: 'labouchere', line: [1, 2, 3, 4], base: 500 };
     expect(top(s)).toBeNull();
-    expect(base(s)).toBe(500);
+    expect(base(s)).toBe(2500); // (1 + 4) x 500
+    expect(base({ ...s, line: [3] })).toBe(1500);
+    expect(base({ ...s, line: [1, 2, 3] })).toBe(2000);
+    expect(base({ ...s, line: [] })).toBeNull();
+    expect(base({ ...s, line: [1, 'x'] })).toBeNull();
   });
   it('a literal, unit or expression base scales the top', () => {
     const m = { kind: 'martingale', maxSteps: 6, onCap: 'reset' };
@@ -522,6 +546,9 @@ describe('progression top and base (§7.4, §7.7)', () => {
   it('a malformed maxSteps gives null instead of throwing', () => {
     expect(top({ kind: 'martingale', maxSteps: 99, onCap: 'reset' })).toBeNull();
     expect(top({ kind: 'martingale', onCap: 'reset' })).toBeNull();
+  });
+  it('a validator top ignores maxAmount, ours does not (documented difference)', () => {
+    expect(top({ kind: 'martingale', maxSteps: 6, onCap: 'stay', maxAmount: 1 })).toBe(U);
   });
   it('a constant maxAmount stops the top at the last level below it; level 0 always counts', () => {
     const m = { kind: 'martingale', maxSteps: 6, onCap: 'stay' };
@@ -557,26 +584,29 @@ describe('progression top and base (§7.4, §7.7)', () => {
     ],
     ['literal base', { kind: 'martingale', maxSteps: 6, onCap: 'reset', base: 700, track: 'a' }],
   ];
-  it.each(specs)('cross-check against the validator: %s', (_n, spec) => {
-    const t = progressionTop(spec, U) as number;
-    expect(t).toBeGreaterThan(0);
-    const warnsAt = (max: number) => {
-      const c = makeCtx({ limits: (b: string) => (b === 'a' ? { min: 100, max } : null) });
-      const d = {
-        schema: 1,
-        id: 't',
-        name: 'T',
-        game: 'stub',
-        unit: U,
-        progressions: { p: spec },
-        stages: [{ id: 's', layout: [{ bet: 'a', amount: { prog: 'p' } }] }],
+  it.each(specs.filter(([, sp]) => (sp as { maxAmount?: unknown }).maxAmount === undefined))(
+    'cross-check against the validator: %s',
+    (_n, spec) => {
+      const t = progressionTop(spec, U) as number;
+      expect(t).toBeGreaterThan(0);
+      const warnsAt = (max: number) => {
+        const c = makeCtx({ limits: (b: string) => (b === 'a' ? { min: 100, max } : null) });
+        const d = {
+          schema: 1,
+          id: 't',
+          name: 'T',
+          game: 'stub',
+          unit: U,
+          progressions: { p: spec },
+          stages: [{ id: 's', layout: [{ bet: 'a', amount: { prog: 'p' } }] }],
+        };
+        return validateStrategy(d, c).some((x) => x.code === 'W_PROG_ABOVE_TABLE_MAX');
       };
-      return validateStrategy(d, c).some((x) => x.code === 'W_PROG_ABOVE_TABLE_MAX');
-    };
-    expect(warnsAt(t)).toBe(false);
-    expect(warnsAt(t - 1)).toBe(true);
-    expect(warnsAt(t + 1)).toBe(false);
-  });
+      expect(warnsAt(t)).toBe(false);
+      expect(warnsAt(t - 1)).toBe(true);
+      expect(warnsAt(t + 1)).toBe(false);
+    },
+  );
 });
 
 describe('resolveChipValue', () => {
@@ -606,9 +636,9 @@ describe('resolveChipValue', () => {
       top: 2500,
     });
   });
-  it('labouchere has a base only', () => {
+  it('labouchere has a (first + last) x base start and no top', () => {
     expect(resolveChipValue({ prog: 'l' }, { unit: 2500, progressions })).toEqual({
-      base: 300,
+      base: 900,
       top: null,
     });
   });

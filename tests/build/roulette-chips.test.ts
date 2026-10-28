@@ -8,9 +8,10 @@ import { canonicalJson, definitionId } from '@core/experiment';
 import { createInThreadTransport, createPool, simulate } from '@core/harness';
 import type { SimPool } from '@core/harness';
 import type { Json } from '@core/contracts/game';
-import type { Stage, StrategyDefinition } from '@core/contracts/strategy';
+import type { ProgressionSpec, Stage, StrategyDefinition } from '@core/contracts/strategy';
 import {
   compileChips,
+  progressionBase,
   liftRows,
   normalizeStrategy,
   readStageChips,
@@ -228,5 +229,44 @@ describe('chips x Martingale doubles every spot together', () => {
         500,
       ]
     `);
+  });
+});
+
+describe('progressionBase against the real harness (labouchere)', () => {
+  it('line [1,2,3], base 500: the first window bets 2000 per chip', async () => {
+    const prog = {
+      kind: 'labouchere',
+      line: [1, 2, 3],
+      base: 500,
+      track: 'round',
+    } as unknown as ProgressionSpec;
+    const strategy = {
+      schema: 1,
+      id: 'lab-chips',
+      name: 'Labouchere chips',
+      game: 'roulette',
+      unit: 2500,
+      progressions: { l: prog },
+      stages: [
+        withStageChips(
+          { id: 'play', rules: [] },
+          {
+            v: 1,
+            chip: { prog: 'l' },
+            spots: [
+              { bet: 'red', chips: 1 },
+              { bet: 'dozen:1', chips: 2 },
+            ],
+          },
+        ),
+      ],
+    } as unknown as StrategyDefinition;
+    const def = rouletteDef('flat-red', { maxRounds: 3, strategy });
+    const r = await simulate(pool, def, 0);
+    expect(r.trace[0]!.desired.map((d) => [d.bet, d.amount])).toEqual([
+      ['red', 2000],
+      ['dozen:1', 4000],
+    ]);
+    expect(progressionBase(prog, 2500)).toBe(2000);
   });
 });
