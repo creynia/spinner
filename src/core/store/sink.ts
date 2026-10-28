@@ -44,21 +44,25 @@ export interface StoreRunSink extends RunSink {
 }
 
 interface SummaryRecord {
+  v: 1;
   runId: string;
   sessions: number;
   columns: { name: string; dtype: string; width: number; data: TypedArray }[];
 }
 interface CheckpointRecord {
+  v: 1;
   runId: string;
   schedule: Int32Array;
   equity: Int32Array;
 }
 interface BreakdownRecord {
+  v: 1;
   runId: string;
   chunkSize: number;
   chunks: RunData['chunkStats'];
 }
 interface SampleRecord {
+  v: 1;
   runId: string;
   samples: SampleSession[];
 }
@@ -162,6 +166,7 @@ export async function writeCompacted(
   backend: Backend,
   data: RunData,
   meta: RunMeta,
+  origin?: DefinitionRecord['origin'],
 ): Promise<RunMeta> {
   const digest = meta.resultsDigest ?? (await resultsDigest({ ...data, meta }));
   const finalMeta: RunMeta = { ...meta, resultsDigest: digest, storage: backend.kind };
@@ -171,6 +176,7 @@ export async function writeCompacted(
   await backend.tx([...RESULT_STORES, 'definitions'], 'readwrite', (t) => {
     t.put('runs', finalMeta);
     t.put('summaries', {
+      v: 1,
       runId: meta.runId,
       sessions: data.sessions,
       columns: meta.columns.map((spec) => ({
@@ -181,16 +187,18 @@ export async function writeCompacted(
       })),
     } satisfies SummaryRecord);
     t.put('checkpoints', {
+      v: 1,
       runId: meta.runId,
       schedule: own(data.checkpoints.schedule),
       equity: own(data.checkpoints.equity),
     } satisfies CheckpointRecord);
     t.put('breakdowns', {
+      v: 1,
       runId: meta.runId,
       chunkSize: meta.chunkSize,
       chunks: data.chunkStats,
     } satisfies BreakdownRecord);
-    t.put('samples', { runId: meta.runId, samples: data.samples } satisfies SampleRecord);
+    t.put('samples', { v: 1, runId: meta.runId, samples: data.samples } satisfies SampleRecord);
     for (const k of partKeys) t.delete('runParts', k);
     if (!existing) {
       t.put('definitions', {
@@ -199,7 +207,7 @@ export async function writeCompacted(
         definition: data.definition,
         createdAt: meta.createdAt,
         updatedAt: meta.createdAt,
-        origin: meta.imported ? 'import' : 'user',
+        origin: origin ?? (meta.imported ? 'import' : 'user'),
         runIds: [meta.runId],
       } satisfies DefinitionRecord);
     } else if (!existing.runIds.includes(meta.runId)) {
@@ -249,23 +257,30 @@ export function createRunSink(backend: Backend): StoreRunSink {
   }[] = [];
   const listeners: ((r: { quota: boolean; error: unknown }) => void)[] = [];
 
-  async function degrade(runId: string, error: unknown): Promise<void> {
+  async function degrade(runIds: string[], error: unknown): Promise<void> {
     const mem = createMemoryBackend();
-    try {
-      await copyRun(current, mem, runId);
-    } catch {
-      // what was already committed stays in the old backend; analyze what the memory copy holds
+    for (const runId of runIds) {
+      try {
+        await copyRun(current, mem, runId);
+      } catch {
+        // what was already committed stays in the old backend; analyze what the memory copy holds
+      }
     }
     current = mem;
     for (const l of listeners) l({ quota: isQuotaError(error), error });
   }
 
-  async function guarded(runId: string, op: (b: Backend) => Promise<void>): Promise<void> {
+  /**
+   * Runs `op`; on ANY failure of a persistent backend (quota, blocked, closed connection, even a
+   * DataCloneError) the sink moves to an in-memory copy of the runs involved and retries there, so
+   * a run is never lost to a storage problem. A failure in memory is rethrown.
+   */
+  async function guarded(runIds: string[], op: (b: Backend) => Promise<void>): Promise<void> {
     try {
       await op(current);
     } catch (e) {
       if (current.kind === 'memory') throw e;
-      await degrade(runId, e);
+      await degrade(runIds, e);
       await op(current);
     }
   }
@@ -274,12 +289,14 @@ export function createRunSink(backend: Backend): StoreRunSink {
     scheduled = false;
     const items = pending.splice(0);
     if (items.length === 0) return;
-    const last = items[items.length - 1]!;
+    // one transaction; the last meta of each run goes with that run's parts
+    const lastMeta = new Map<string, RunMeta>();
+    for (const it of items) lastMeta.set(it.meta.runId, it.meta);
     try {
-      await guarded(last.meta.runId, (b) =>
+      await guarded([...lastMeta.keys()], (b) =>
         b.tx(['runs', 'runParts'], 'readwrite', (t) => {
           for (const it of items) if (it.part.chunkCount > 0) t.put('runParts', it.part);
-          t.put('runs', { ...last.meta, storage: b.kind });
+          for (const m of lastMeta.values()) t.put('runs', { ...m, storage: b.kind });
         }),
       );
       for (const it of items) it.resolve();
@@ -315,7 +332,7 @@ export function createRunSink(backend: Backend): StoreRunSink {
     },
     compact(data, meta) {
       return enqueue(() =>
-        guarded(meta.runId, async (b) => {
+        guarded([meta.runId], async (b) => {
           await writeCompacted(b, data, meta);
         }),
       );

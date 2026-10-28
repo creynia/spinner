@@ -13,8 +13,3 @@ export function getPool(): SimPool {
   pool ??= createPool({ spawn: spawnSimWorker, size: poolSize() });
   return pool;
 }
-
-/** Tests: install a pool (in-thread transports), or reset with null. */
-export function setPoolForTests(p: SimPool | null): void {
-  pool = p;
-}

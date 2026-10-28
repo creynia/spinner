@@ -434,6 +434,16 @@ describe('conservation and persistence', () => {
     }
     expect(roulette.serialize(b)).toEqual(roulette.serialize(a));
   });
+  it('serialize returns an isolated snapshot', () => {
+    const s = mk(eu({ enPrison: true }));
+    place(s, 'red', 2500);
+    const snap = roulette.serialize(s);
+    const frozen = JSON.stringify(snap);
+    spin(s, 0);
+    place(s, 'black', 2500);
+    s.rules.limits.outside.max = 1;
+    expect(JSON.stringify(snap)).toBe(frozen);
+  });
   it('force rejects pockets the wheel does not have', () => {
     const s = mk();
     expect(() => roulette.force!(s, ['00'])).toThrow(RangeError);

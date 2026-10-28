@@ -79,6 +79,12 @@ describe('parseBet (game.md §3.2)', () => {
   ])('rejects %j', (bad) => {
     expect(parseBet(bad)).toBeNull();
   });
+  it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty', 'prison:constructor'])(
+    'does not read the prototype: %s',
+    (s) => {
+      expect(parseBet(s)).toBeNull();
+    },
+  );
   it('rejects 200 random non-ids', () => {
     let x = 12345;
     const next = (): number => (x = (Math.imul(x, 1103515245) + 12345) >>> 0);

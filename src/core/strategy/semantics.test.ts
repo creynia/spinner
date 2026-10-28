@@ -807,7 +807,7 @@ describe('determinism, normalization and compile errors', () => {
     expect(trace(a)).toBe(trace(b));
   });
 
-  it('stepPure agrees with in-place step over 2,000 windows', () => {
+  it('stepPure agrees with in-place step over 10,000 windows', () => {
     const d = new Driver(rich());
     const rt = compileStrategy(
       rich() as StrategyDefinition,
@@ -815,7 +815,7 @@ describe('determinism, normalization and compile errors', () => {
     );
     let mem = rt.createMemory();
     rt.reset(mem);
-    const outs = script(2000);
+    const outs = script(10_000);
     let net = 0;
     for (let w = 0; w <= outs.length; w++) {
       const last = w === 0 ? null : (outs[w - 1] as ReturnType<typeof outcome>);

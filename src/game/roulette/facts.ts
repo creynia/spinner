@@ -2,7 +2,6 @@
 // `count:<n>:<target>`, `FactParam.type: 'target'`) as real data. `compileFact` is a stub (game WP).
 import type { FactRef, FactSchema } from '@core/contracts/facts';
 import type { FactAccessor } from '@core/contracts/game';
-import type { HistoryPredicate } from '@core/contracts/strategy';
 import { EXTRA_TARGETS, EVEN_MONEY_IDS, betDef, parseBet } from './bets';
 import { columnOf, dozenOf, pocketLabels, sectorOf, wheelSpec, zeroPockets } from './pockets';
 import type { RouletteRules, RouletteView, SpinHistory, WheelSpec, WindowCounter } from './types';
@@ -314,6 +313,7 @@ export function compileFact(ref: FactRef, rules: RouletteRules): FactAccessor<Ro
       };
     }
     case 'streak': {
+      // Saturates at 1,024 (the ring); a longer run is astronomically unlikely for any bet.
       const { mask } = resolveTarget(args, rules);
       return (v) => {
         const h = v.history;
@@ -349,54 +349,5 @@ export function compileFact(ref: FactRef, rules: RouletteRules): FactAccessor<Ro
     }
     default:
       return bad(ref, 'unknown fact');
-  }
-}
-
-/**
- * The fact target a generic history predicate maps to (strategy.md §8.4), or null when it has no
- * single target (arrays, `lastColor in [black, green]`, state facts).
- */
-export function historyTarget(p: HistoryPredicate): string | null {
-  if ('event' in p) return p.event === 'zero' ? 'zero' : null;
-  const v = Array.isArray(p.equals) ? null : p.equals;
-  if (v === null) return null;
-  switch (p.fact) {
-    case 'lastColor':
-      return v === 'red' || v === 'black' ? v : v === 'green' ? 'zero' : null;
-    case 'lastParity':
-      return v === 'odd' || v === 'even' ? v : v === 'zero' ? 'zero' : null;
-    case 'lastHalf':
-      return v === 'low' || v === 'high' ? v : v === 'zero' ? 'zero' : null;
-    case 'lastDozen':
-      return v === 0 ? 'zero' : v === 1 || v === 2 || v === 3 ? `dozen:${v}` : null;
-    case 'lastColumn':
-      return v === 0 ? 'zero' : v === 1 || v === 2 || v === 3 ? `column:${v}` : null;
-    case 'lastNumber':
-      return typeof v === 'string' ? `straight:${v}` : null;
-    case 'lastSector':
-      return v === 'voisins' || v === 'tiers' || v === 'orphelins' ? v : null;
-    case 'lastZero':
-      return v === true ? 'zero' : null;
-    default:
-      return null;
-  }
-}
-
-/**
- * Optional hook (strategy.md §8.4): the plugin's indexed counter for a generic history predicate.
- * A predicate carries no kind (streak/count/since), so the accessor returned is `roundsSince`
- * (= `spinsSince:<target>`); the other two are `compileFact('streak:<t>')` / `count:<n>:<t>` with
- * `t = historyTarget(predicate)`. Null when the predicate has no single target on this wheel.
- */
-export function compileHistory(
-  predicate: HistoryPredicate,
-  rules: RouletteRules,
-): FactAccessor<RouletteView> | null {
-  const t = historyTarget(predicate);
-  if (t === null) return null;
-  try {
-    return compileFact(`spinsSince:${t}`, rules);
-  } catch {
-    return null;
   }
 }

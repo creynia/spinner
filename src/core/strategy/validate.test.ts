@@ -661,6 +661,17 @@ describe('validateStrategy: warnings', () => {
 });
 
 describe('validateStrategy: robustness', () => {
+  it('a 100k-deep expression is E_LIMIT, not E_INTERNAL', () => {
+    let e: unknown = 1;
+    for (let i = 0; i < 100_000; i++) e = { abs: e };
+    const out = validateStrategy(withLayout({ bet: 'a', amount: e }), ctx);
+    expect(out.some((x) => x.code === 'E_INTERNAL')).toBe(false);
+    expect(out.some((x) => x.code === 'E_LIMIT')).toBe(true);
+    let c: unknown = { always: true };
+    for (let i = 0; i < 100_000; i++) c = { not: c };
+    expect(validateStrategy(withRule(c), ctx).some((x) => x.code === 'E_INTERNAL')).toBe(false);
+  });
+
   it('survives random mutations of a rich definition', () => {
     const rich = withRule(
       { all: [{ streak: { fact: 'color', equals: 'red', atLeast: 2 } }, { event: 'zero' }] },

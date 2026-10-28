@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { Xoshiro128ss } from '@core/rng';
 import { ROULETTE_PRESETS, betDef, resolveRules, roulette, rouletteFacts } from './index';
 import type { RouletteRules, WheelKind } from './index';
-import { compileHistory, historyTarget } from './facts';
 
 vi.setConfig({ testTimeout: 120_000 });
 
@@ -194,33 +193,5 @@ describe('facts against naive recomputation (game.md §13.8)', () => {
       'lastZero',
     ])
       expect(names.has(n)).toBe(true);
-  });
-});
-
-describe('generic history predicates (strategy.md §8.4)', () => {
-  it('maps predicates to targets', () => {
-    expect(historyTarget({ fact: 'lastColor', equals: 'red' })).toBe('red');
-    expect(historyTarget({ fact: 'lastColor', equals: 'green' })).toBe('zero');
-    expect(historyTarget({ fact: 'lastDozen', equals: 2 })).toBe('dozen:2');
-    expect(historyTarget({ fact: 'lastNumber', equals: '17' })).toBe('straight:17');
-    expect(historyTarget({ event: 'zero' })).toBe('zero');
-    expect(historyTarget({ fact: 'lastColor', equals: ['black', 'green'] })).toBeNull();
-    expect(historyTarget({ fact: 'bankroll', equals: 3 })).toBeNull();
-  });
-  it('the plugin counter agrees with a naive tracker over random spins', () => {
-    const rules = ROULETTE_PRESETS.european;
-    const s = mk(rules);
-    const acc = compileHistory({ fact: 'lastColor', equals: 'red' }, rules)!;
-    expect(compileHistory({ fact: 'lastColor', equals: ['red', 'black'] }, rules)).toBeNull();
-    const rng = new Xoshiro128ss([4, 4, 4, 4]);
-    const v = roulette.visible(s);
-    let since = 0;
-    for (let i = 0; i < 2000; i++) {
-      const p = rng.below(37);
-      spinTo(s, [p]);
-      const isRed = betDef('red', 'european')!.pockets.includes(p);
-      since = isRed ? 0 : since + 1;
-      expect(acc(v, null)).toBe(since);
-    }
   });
 });

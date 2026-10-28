@@ -151,6 +151,8 @@ function strictBackend(): Backend & { dump(): Record<string, unknown[]> } {
     kind: 'memory',
     get: (st, key) => Promise.resolve(data.get(st)!.get(id(key)) as never),
     getAll: (st) => Promise.resolve([...data.get(st)!.values()] as never),
+    getAllKeys: (st) =>
+      Promise.resolve([...data.get(st)!.keys()].map((k) => JSON.parse(k) as IDBValidKey)),
     tx(stores, _mode, fn) {
       const ops: (() => void)[] = [];
       fn({

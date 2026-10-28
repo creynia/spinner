@@ -225,6 +225,15 @@ function asError(e: unknown): Error {
   return e instanceof Error ? e : new Error(String(e));
 }
 
+/** `db.transaction()` throws synchronously on a closed connection: turn that into a rejection. */
+function attempt<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return fn();
+  } catch (e) {
+    return Promise.reject(asError(e));
+  }
+}
+
 function wrap<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
@@ -236,16 +245,23 @@ export function createIdbBackend(db: IDBDatabase): Backend {
   return {
     kind: 'idb',
     get<T>(store: StoreName, key: IDBValidKey): Promise<T | undefined> {
-      return wrap(db.transaction(store, 'readonly').objectStore(store).get(key)) as Promise<
-        T | undefined
-      >;
+      return attempt(
+        () =>
+          wrap(db.transaction(store, 'readonly').objectStore(store).get(key)) as Promise<
+            T | undefined
+          >,
+      );
     },
     getAll<T>(store: StoreName, index?: string, range?: IDBKeyRange): Promise<T[]> {
-      const os = db.transaction(store, 'readonly').objectStore(store);
-      return wrap((index ? os.index(index) : os).getAll(range)) as Promise<T[]>;
+      return attempt(() => {
+        const os = db.transaction(store, 'readonly').objectStore(store);
+        return wrap((index ? os.index(index) : os).getAll(range)) as Promise<T[]>;
+      });
     },
     getAllKeys(store: StoreName, range?: IDBKeyRange): Promise<IDBValidKey[]> {
-      return wrap(db.transaction(store, 'readonly').objectStore(store).getAllKeys(range));
+      return attempt(() =>
+        wrap(db.transaction(store, 'readonly').objectStore(store).getAllKeys(range)),
+      );
     },
     tx(stores, mode, fn): Promise<void> {
       return new Promise<void>((resolve, reject) => {
