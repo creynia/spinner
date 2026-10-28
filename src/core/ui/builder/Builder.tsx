@@ -226,7 +226,7 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
   const stageCards = model.stages.map((s, si) => {
     const sp = `/stages/${si}`;
     return (
-      <li key={s.id} class="bstage">
+      <li key={s.id} class="bstage" id={`b-stage-${si}`}>
         <section aria-labelledby={`stage-h-${si}`}>
           <header class="bstage-head">
             <h4 id={`stage-h-${si}`} class="bstage-title">
@@ -262,7 +262,7 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
               const lp = `${sp}/layout/${li}`;
               const ds = diagsAt(diagnostics, lp);
               return (
-                <li key={li} class="blayout">
+                <li key={li} class="blayout" id={`b-lay-${si}-${li}`}>
                   <div class="brow">
                     <span class="bkw">bet</span>
                     <BChip
@@ -344,14 +344,13 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
             ) : null}
             {s.rules.map((r: RuleRow, ri) => {
               const rp = `${sp}/rules/${ri}`;
-              const ds = diagnostics.filter(
-                (d) =>
-                  d.path === rp ||
-                  (/^\/stages\/\d+\/rules\/\d+\/(id|once|cooldown|label|enabled)$/.test(d.path) &&
-                    d.path.startsWith(rp + '/')),
-              );
+              const ds = diagsAt(diagnostics, rp);
               return (
-                <li key={ri} class={`brule${r.enabled ? '' : ' brule--off'}`}>
+                <li
+                  key={ri}
+                  id={`b-rule-${si}-${ri}`}
+                  class={`brule${r.enabled ? '' : ' brule--off'}`}
+                >
                   <div class="brow brow--sentence">
                     <span class="bkw">when</span>
                     <WhenChips
@@ -373,6 +372,7 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
                           text={describeEffect(c.effect, env)}
                           diags={diagsAt(diagnostics, `${rp}/then/${ei}`)}
                           onClick={() => setEd({ t: 'effect', si, list: 'then', ri, ei })}
+                          describedBy={ds.length ? `rule-e-${si}-${ri}` : undefined}
                           label={`Effect ${ei + 1}`}
                         />
                       </>
