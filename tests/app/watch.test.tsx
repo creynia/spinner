@@ -8,7 +8,7 @@ import { roulette } from '@game/roulette';
 import { rouletteUi } from '@game/roulette/ui';
 import { WatchView } from '@app/screens/Watch/WatchView';
 import { defaultDeps, type WatchDeps } from '@app/screens/Watch/deps';
-import { rouletteRun } from './watch.fixture';
+import { rouletteDefinition, rouletteRun } from './watch.fixture';
 
 let data: RunData;
 const transport = createInThreadTransport(roulette, { hop: 'microtask' });
@@ -176,6 +176,33 @@ describe('Watch: re-simulating any index', () => {
     cleanup();
     const c = render(<WatchView {...props('abc')} deps={deps()} />);
     await waitFor(() => expect(c.container.textContent).toContain('No such session'));
+  });
+});
+
+describe('Watch: a real session with a rejected and an adjusted action', () => {
+  it('shows the rejection in red with its reason, never hidden', async () => {
+    const tight = await rouletteRun(
+      rouletteDefinition('martingale-red', {
+        bankroll: 40000,
+        maxRounds: 200,
+        sessions: 12,
+        samples: 12,
+      }),
+    );
+    const s = tight.samples.find((x) => x.row.rejected > 0 && x.row.adjusted > 0)!;
+    const at = s.trace.findIndex((w) => (w.reconcile?.rejected.length ?? 0) > 0);
+    expect(at).toBeGreaterThanOrEqual(0);
+    const { container } = render(
+      <WatchView
+        {...props(String(s.index), `round=${at + 1}`)}
+        deps={deps({ loadRun: () => Promise.resolve(tight) })}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector('.tr-replay')).not.toBeNull());
+    const row = container.querySelector('li[data-status=rejected]')!;
+    expect(row.textContent).toContain(`Rejected: ${s.trace[at]!.reconcile!.rejected[0]!.reason}`);
+    expect(container.querySelector('.tr-tag-rejected')).not.toBeNull();
+    expect(s.trace.some((w) => (w.reconcile?.adjusted.length ?? 0) > 0)).toBe(true);
   });
 });
 

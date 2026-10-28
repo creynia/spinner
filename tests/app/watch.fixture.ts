@@ -1,10 +1,14 @@
 // A real roulette run for the Watch/Gallery/Import tests: a preset through the real harness
 // (in-thread transport), read back through a memory sink.
 import {
+  CORE_VERSION,
   createInThreadTransport,
   createPool,
   createRunController,
+  definitionId,
   normalizeDefinition,
+  runKey,
+  simKey,
 } from '@core';
 import type { NormalizedDefinition } from '@core/contracts/experiment';
 import type { RunData } from '@core/contracts/run';
@@ -53,12 +57,19 @@ export async function rouletteRun(definition = rouletteDefinition()): Promise<Ru
     spawn: () => createInThreadTransport(roulette, { hop: 'microtask' }),
   });
   const sink = createMemorySink(definition);
+  const id = await definitionId(definition);
+  const keys = {
+    definitionId: id,
+    simKey: await simKey(definition, roulette.version, CORE_VERSION),
+    runKey: await runKey(id, roulette.version, CORE_VERSION),
+  };
   const c = createRunController({
     definition,
     plugin: roulette,
     pool,
     sink,
     runId: 'run-watch-test',
+    keys,
     locks: null,
     warn: () => undefined,
   });
