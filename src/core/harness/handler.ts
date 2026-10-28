@@ -119,6 +119,22 @@ export function createWorkerHandler(
           });
           return;
         }
+        if (
+          !Number.isInteger(msg.firstChunk) ||
+          !Number.isInteger(msg.chunkCount) ||
+          msg.firstChunk < 0 ||
+          msg.chunkCount < 1 ||
+          (msg.firstChunk + msg.chunkCount - 1) * run.runner.chunkSize >= run.runner.sessions
+        ) {
+          reply({
+            t: 'error',
+            runKey: msg.runKey,
+            batchId: msg.batchId,
+            code: 'bad-batch',
+            message: `chunks ${msg.firstChunk}+${msg.chunkCount} are outside the run`,
+          });
+          return;
+        }
         try {
           const o = run.runner.runBatch(msg.firstChunk, msg.chunkCount, msg.traceIndices);
           reply(

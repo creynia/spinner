@@ -149,8 +149,8 @@ export class BatchRunner {
   private readonly K: number;
   private readonly S: number;
   private readonly C: number;
-  private readonly chunkSize: number;
-  private readonly sessions: number;
+  readonly chunkSize: number;
+  readonly sessions: number;
   private readonly runSeed: number;
   private readonly bankroll: number;
   private readonly maxRounds: number;
@@ -352,8 +352,7 @@ export class BatchRunner {
     const ckBase = o * K;
 
     const rng = sessionRng(this.runSeed, index, 'engine', this.engine);
-    runtime.reset(mem);
-    let state = plugin.createState({ rules: this.rules, rng, bankroll: bankroll0 });
+    let state: unknown;
 
     let equity = bankroll0;
     let peak = bankroll0;
@@ -392,6 +391,8 @@ export class BatchRunner {
     facts.exposure = 0;
 
     try {
+      runtime.reset(mem);
+      state = plugin.createState({ rules: this.rules, rng, bankroll: bankroll0 });
       for (let w = 0; w < maxRounds; w++) {
         const tableNow: Layout = plugin.layoutOf(state);
         let exposure = 0;
@@ -412,11 +413,11 @@ export class BatchRunner {
 
         out.stop = null;
         out.error = null;
-        (out as StepOutput & { anomalies?: number }).anomalies = 0;
+        out.anomalies = 0;
         if (tracer) tracer.cur = null;
         runtime.step(mem, obs, out, tracer ? sink : undefined);
         const so = out; // fresh reference: `step` mutated what we narrowed above
-        anomalies += (so as StepOutput & { anomalies?: number }).anomalies ?? 0;
+        anomalies += so.anomalies ?? 0;
 
         const prevStage = stage;
         stage = so.stage;

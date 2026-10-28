@@ -36,7 +36,10 @@ export function simulateOn(
       if (msg.t === 'simulated' && msg.reqId === reqId) {
         off();
         resolve({ row: msg.row, checkpoints: msg.checkpoints, trace: msg.trace });
-      } else if (msg.t === 'error' && (msg.reqId === reqId || msg.reqId === undefined)) {
+      } else if (
+        msg.t === 'error' &&
+        (msg.reqId === reqId || (msg.reqId === undefined && msg.batchId === undefined))
+      ) {
         off();
         reject(new SimulateError(msg.code, msg.message));
       }

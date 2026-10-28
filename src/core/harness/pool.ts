@@ -41,7 +41,7 @@ export function createPool(opts: {
   size: number;
   idleMs?: number;
 }): SimPool {
-  const size = Math.max(1, Math.floor(opts.size));
+  const size = Math.min(16, Math.max(1, Math.floor(opts.size)));
   const idleMs = opts.idleMs ?? POOL_IDLE_MS;
   const slots: (SimTransport | null)[] = new Array<SimTransport | null>(size).fill(null);
   let auxT: SimTransport | null = null;
