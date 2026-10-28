@@ -6,3 +6,4 @@ test-results/
 .vite/
 *.log
 .DS_Store
+public/icons/

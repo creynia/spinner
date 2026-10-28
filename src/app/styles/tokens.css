@@ -1,0 +1,49 @@
+/* Theme tokens (architecture.md §6). Light by default; dark follows the OS unless forced with
+   data-theme. Owned by app-shell; chart and felt tokens are added by request. */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f4ee;
+  --surface: #ffffff;
+  --text: #1b2430;
+  --muted: #4f5b6b;
+  --border: #d5d2c8;
+  --accent: #0d3b2e;
+  --on-accent: #ffffff;
+  --felt: #0d3b2e;
+  --focus: #1f5fbf;
+  --danger: #b42318;
+  --gutter: 16px;
+  --tap: 44px;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0c1511;
+    --surface: #15221c;
+    --text: #e8efe9;
+    --muted: #a3b3a9;
+    --border: #2b3d34;
+    --accent: #7fd1a8;
+    --on-accent: #06140d;
+    --felt: #0d3b2e;
+    --focus: #8ab8ff;
+    --danger: #ff8a80;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #0c1511;
+  --surface: #15221c;
+  --text: #e8efe9;
+  --muted: #a3b3a9;
+  --border: #2b3d34;
+  --accent: #7fd1a8;
+  --on-accent: #06140d;
+  --felt: #0d3b2e;
+  --focus: #8ab8ff;
+  --danger: #ff8a80;
+}

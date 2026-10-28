@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+playwright-report
+test-results
+package-lock.json
+public/icons
+gallery/*.json
+gallery/*.gz
+docs
+PLAYBOOK.md
