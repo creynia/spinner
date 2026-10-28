@@ -22,6 +22,7 @@ const server = await createServer({
   plugins: [preact()],
   resolve: {
     alias: [
+      { find: /^@core$/, replacement: `${root}src/core/index.ts` },
       { find: /^@core\//, replacement: `${root}src/core/` },
       { find: /^@game\//, replacement: `${root}src/game/` },
     ],
@@ -84,6 +85,47 @@ try {
         console.log(`${tag}: smallest picker region ${min.toFixed(1)} px`);
         if (vp.mobile && vp.width >= 390 && min < 44)
           failures.push(`${tag}: picker region ${min.toFixed(1)} px < 44`);
+
+        // Keyboard path: Tab must reach a number cell, Enter opens the sheet, Escape closes it and
+        // gives focus back (real Chromium: SVG attributes are case-sensitive).
+        {
+          let reached = false;
+          for (let i = 0; i < 150 && !reached; i++) {
+            await page.keyboard.press('Tab');
+            reached = await page.evaluate(
+              () =>
+                document.activeElement?.closest('.rl-picker [data-pocket]') !== null &&
+                document.activeElement?.hasAttribute('data-pocket') === true,
+            );
+          }
+          if (!reached) failures.push(`${tag}: Tab never reaches a [data-pocket] cell`);
+          else {
+            const pocket = await page.evaluate(() =>
+              document.activeElement.getAttribute('data-pocket'),
+            );
+            await page.keyboard.press('Enter');
+            if (!(await page.$('.rl-sheet'))) failures.push(`${tag}: Enter did not open the sheet`);
+            await page.waitForFunction(() => document.activeElement?.closest('.rl-sheet'));
+            await page.keyboard.press('Escape');
+            await page.waitForFunction(() => !document.querySelector('.rl-sheet'));
+            await page.waitForTimeout(50);
+            const back = await page.evaluate(() =>
+              document.activeElement?.getAttribute('data-pocket'),
+            );
+            if (back !== pocket) failures.push(`${tag}: focus not restored (${back} vs ${pocket})`);
+            await page.keyboard.press('Space');
+            if (!(await page.$('.rl-sheet'))) failures.push(`${tag}: Space did not open the sheet`);
+            await page.waitForFunction(() => document.activeElement?.closest('.rl-sheet'));
+            await page.keyboard.press('Escape');
+            await page.waitForFunction(() => !document.querySelector('.rl-sheet'));
+          }
+          await page.focus('.rl-picker [role=tab][aria-selected=true]');
+          await page.keyboard.press('ArrowRight');
+          const sel = await page.evaluate(() => document.activeElement?.textContent);
+          if (sel !== 'Call bets' && wheel === 'european')
+            failures.push(`${tag}: ArrowRight tab -> ${sel}`);
+          await page.keyboard.press('Home');
+        }
 
         await page.click('.rl-picker [data-pocket="17"]');
         await page.waitForSelector('.rl-sheet');

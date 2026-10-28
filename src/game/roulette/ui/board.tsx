@@ -1,7 +1,16 @@
 // The felt as SVG (regions as data, game.md §12): shared by TableView (read-only) and BetPicker.
 import type { ComponentChildren } from 'preact';
 import { useMemo } from 'preact/hooks';
-import { anchorOf, buildBoard, hotZone, type Orientation, type Rect } from './geometry';
+import {
+  BADGE,
+  CHIP_R,
+  buildBoard,
+  chipAt,
+  hotZone,
+  isRotated,
+  type Orientation,
+  type Rect,
+} from './geometry';
 import { betName, chipText, colorOfLabel, paysText } from './names';
 import { familyOf, fixedBetIds } from '../bets';
 import type { WheelKind } from '../types';
@@ -27,7 +36,7 @@ export interface BoardProps {
   marked?: string | null;
   dolly?: string | null;
   chips?: readonly Chip[];
-  onCell?: (label: string) => void;
+  onCell?: (label: string, opener: Element) => void;
   onOutside?: (id: string) => void;
   onZone?: (id: string) => void;
   onHover?: (id: string | null) => void;
@@ -64,7 +73,7 @@ function Cell(props: {
   dolly: boolean;
   interactive: boolean;
   wheel: WheelKind;
-  onPick?: () => void;
+  onPick?: (opener: Element) => void;
 }) {
   const { label, rect, covered, dolly, interactive, wheel } = props;
   const color = colorOfLabel(label);
@@ -100,10 +109,15 @@ function Cell(props: {
     <g
       data-pocket={label}
       role="button"
-      tabIndex={0}
+      tabindex={0}
       aria-label={`${betName(id, wheel)} (${color}), ${paysText(id, wheel)}`}
-      onClick={props.onPick}
-      onKeyDown={activate(() => props.onPick?.())}
+      onClick={(e) => props.onPick?.(e.currentTarget)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          props.onPick?.(e.currentTarget);
+        }
+      }}
       class="rl-hit"
     >
       {body}
@@ -113,11 +127,8 @@ function Cell(props: {
 
 function ChipView(props: { chip: Chip; board: ReturnType<typeof buildBoard> }) {
   const { chip, board } = props;
-  const base = anchorOf(board, chip.spot);
-  if (!base) return null;
-  const box = board.outside.find((o) => o.id === chip.spot);
-  // An imprisoned bet sits on the line of its box, not in the middle.
-  const at = chip.pending && box ? { x: base.x, y: box.rect.y + 2 } : base;
+  const at = chipAt(board, chip.spot, chip.pending);
+  if (!at) return null;
   return (
     <g
       class={`rl-chip${chip.pending ? ' rl-chip--pending' : ''}`}
@@ -126,16 +137,17 @@ function ChipView(props: { chip: Chip; board: ReturnType<typeof buildBoard> }) {
       data-kind={chip.pending ? 'pending' : 'bet'}
       data-cents={chip.cents}
     >
-      <circle r="13" />
-      <circle r="9.5" class="rl-chip__ring" />
+      <circle r={CHIP_R} />
+      <circle r={CHIP_R - 3} class="rl-chip__ring" />
       <text y="0.5" text-anchor="middle" dominant-baseline="central">
         {chipText(chip.cents)}
       </text>
       {chip.pending && (
-        <g class="rl-badge" transform="translate(0 20)">
-          <rect x="-19" y="-7" width="38" height="14" rx="7" />
+        <g class="rl-badge" transform={`translate(${BADGE.dx} ${BADGE.dy})`}>
+          <title>prison</title>
+          <circle r={BADGE.r} />
           <text text-anchor="middle" dominant-baseline="central">
-            prison
+            P
           </text>
         </g>
       )}
@@ -159,7 +171,7 @@ export function Board(props: BoardProps) {
   const covered = props.covered ?? new Set<string>();
   const outsideFill: ComponentChildren = board.outside.map((o) => {
     const cls = `rl-box rl-box--${o.id.replace(':', '-')}${props.marked === o.id ? ' rl-sel' : ''}`;
-    const turn = orientation === 'portrait' && o.rect.h > o.rect.w * 1.5;
+    const turn = isRotated(board, o.rect);
     const cx = o.rect.x + o.rect.w / 2;
     const cy = o.rect.y + o.rect.h / 2;
     const body = (
@@ -188,7 +200,7 @@ export function Board(props: BoardProps) {
         key={o.id}
         data-bet={o.id}
         role="button"
-        tabIndex={0}
+        tabindex={0}
         class="rl-hit"
         aria-label={`${named(o.text, betName(o.id, wheel))}, ${paysText(o.id, wheel)}`}
         aria-pressed={props.marked === o.id}
@@ -202,13 +214,20 @@ export function Board(props: BoardProps) {
   return (
     <svg
       class={`rl-board rl-board--${orientation}`}
-      viewBox={`0 0 ${board.width} ${board.height}`}
+      viewBox={`${board.view.x} ${board.view.y} ${board.view.w} ${board.view.h}`}
       role={pick ? 'group' : 'img'}
       aria-label={props.label}
       data-orientation={orientation}
       data-wheel={wheel}
     >
-      <rect class="rl-felt" x="0" y="0" width={board.width} height={board.height} rx="6" />
+      <rect
+        class="rl-felt"
+        x={board.view.x}
+        y={board.view.y}
+        width={board.view.w}
+        height={board.view.h}
+        rx="6"
+      />
       {[...board.pockets.entries()].map(([label, rect]) => (
         <Cell
           key={label}
@@ -218,10 +237,12 @@ export function Board(props: BoardProps) {
           dolly={props.dolly === label}
           interactive={pick}
           wheel={wheel}
-          onPick={() => props.onCell?.(label)}
+          onPick={(el) => props.onCell?.(label, el)}
         />
       ))}
       {outsideFill}
+      {/* Hot zones are aria-hidden by design: they duplicate the sheet rows for fine pointers, and
+          12-unit targets would fail the target-size rule. Keyboard and touch use the sheet. */}
       {pick &&
         zones.map(({ id, rect }) => (
           <rect

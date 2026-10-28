@@ -113,11 +113,27 @@ function BetSheet(props: {
       <section
         class="rl-sheet"
         role="dialog"
+        aria-modal="true"
         aria-label={`Bets on ${label}`}
         tabIndex={-1}
         ref={ref}
         data-sheet={label}
-        onKeyDown={(e) => e.key === 'Escape' && props.onClose()}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') props.onClose();
+          if (e.key !== 'Tab') return;
+          // Trap Tab inside the sheet (the table behind it is covered by the backdrop).
+          const items = [...(ref.current?.querySelectorAll<HTMLElement>('button') ?? [])];
+          const first = items[0];
+          const last = items.at(-1);
+          const at = document.activeElement;
+          if (e.shiftKey && (at === first || at === ref.current)) {
+            e.preventDefault();
+            last?.focus();
+          } else if (!e.shiftKey && at === last) {
+            e.preventDefault();
+            first?.focus();
+          }
+        }}
       >
         <header class="rl-sheet__head">
           <h3>Bets on {label}</h3>
@@ -177,7 +193,7 @@ function CallsPanel({
   const [k, setK] = useState(2);
   const id = `neighbours:${p}:${k}`;
   return (
-    <div class="rl-calls" role="tabpanel" aria-label="Call bets">
+    <div class="rl-calls">
       <ul class="rl-rows">
         {CALLS.map((c) => (
           <li key={c.id}>
@@ -257,7 +273,7 @@ function TypePanel({ wheel, onPick }: { wheel: WheelKind; onPick: (id: string) =
   const def = canonical ? betDef(canonical, wheel) : null;
   const submit = () => def && canonical && onPick(canonical);
   return (
-    <div role="tabpanel" aria-label="Type a bet id">
+    <div>
       <form
         class="rl-type"
         onSubmit={(e) => {
@@ -295,6 +311,8 @@ function TypePanel({ wheel, onPick }: { wheel: WheelKind; onPick: (id: string) =
   );
 }
 
+let pickerCount = 0;
+
 export function BetPicker(props: BetPickerProps<RouletteRules>) {
   const { rules, value } = props;
   const wheel = rules.wheel;
@@ -310,57 +328,91 @@ export function BetPicker(props: BetPickerProps<RouletteRules>) {
     const labels = pocketLabels(wheel);
     return new Set(def ? def.pockets.map((p) => labels[p]!) : []);
   }, [shown, wheel]);
-  const pick = (id: string) => {
+  const opener = useRef<Element | null>(null);
+  const uid = useRef(++pickerCount).current;
+  const closeSheet = () => {
+    if (sheet === null) return;
     setSheet(null);
+    // Give focus back to the number that opened the sheet.
+    const el = opener.current;
+    if (el instanceof HTMLElement || el instanceof SVGElement) setTimeout(() => el.focus(), 0);
+  };
+  const pick = (id: string) => {
+    closeSheet();
     props.onPick(id);
+  };
+  const onTabKey = (e: KeyboardEvent, i: number) => {
+    const to =
+      e.key === 'ArrowRight'
+        ? (i + 1) % tabs.length
+        : e.key === 'ArrowLeft'
+          ? (i + tabs.length - 1) % tabs.length
+          : e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? tabs.length - 1
+              : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    setTab(tabs[to]!);
+    document.getElementById(`rl-tab-${uid}-${tabs[to]}`)?.focus();
   };
   const TAB_TEXT: Record<Tab, string> = { table: 'Table', calls: 'Call bets', type: 'Type an id' };
   return (
     <section class="rl-ui rl-picker" aria-label="Pick a bet" data-wheel={wheel}>
       <div class="rl-tabs" role="tablist" aria-label="How to pick">
-        {tabs.map((t) => (
+        {tabs.map((t, i) => (
           <button
             key={t}
+            id={`rl-tab-${uid}-${t}`}
             type="button"
             role="tab"
             class="rl-tab"
             aria-selected={active === t}
+            aria-controls={`rl-panel-${uid}`}
+            tabIndex={active === t ? 0 : -1}
+            onKeyDown={(e) => onTabKey(e, i)}
             onClick={() => setTab(t)}
           >
             {TAB_TEXT[t]}
           </button>
         ))}
       </div>
-      {active === 'table' && (
-        <div role="tabpanel" aria-label="Table">
-          <Board
-            wheel={wheel}
-            orientation={orientation}
-            label="Roulette table: choose a bet"
-            mode="pick"
-            covered={covered}
-            marked={shown}
-            onCell={(l) => setSheet(l)}
-            onOutside={pick}
-            onZone={pick}
-            onHover={setHover}
-          />
-          <p class="rl-hint rl-muted">
-            Tap a number for every bet that includes it, or an outside box to pick it.
-          </p>
-          {sheet !== null && (
-            <BetSheet
-              label={sheet}
+      <div role="tabpanel" id={`rl-panel-${uid}`} aria-labelledby={`rl-tab-${uid}-${active}`}>
+        {active === 'table' && (
+          <>
+            <Board
               wheel={wheel}
-              value={value}
-              onPick={pick}
-              onClose={() => setSheet(null)}
+              orientation={orientation}
+              label="Roulette table: choose a bet"
+              mode="pick"
+              covered={covered}
+              marked={shown}
+              onCell={(l, el) => {
+                opener.current = el;
+                setSheet(l);
+              }}
+              onOutside={pick}
+              onZone={pick}
+              onHover={setHover}
             />
-          )}
-        </div>
-      )}
-      {active === 'calls' && <CallsPanel wheel={wheel} value={value} onPick={pick} />}
-      {active === 'type' && <TypePanel wheel={wheel} onPick={pick} />}
+            <p class="rl-hint rl-muted">
+              Tap a number for every bet that includes it, or an outside box to pick it.
+            </p>
+            {sheet !== null && (
+              <BetSheet
+                label={sheet}
+                wheel={wheel}
+                value={value}
+                onPick={pick}
+                onClose={closeSheet}
+              />
+            )}
+          </>
+        )}
+        {active === 'calls' && <CallsPanel wheel={wheel} value={value} onPick={pick} />}
+        {active === 'type' && <TypePanel wheel={wheel} onPick={pick} />}
+      </div>
     </section>
   );
 }
