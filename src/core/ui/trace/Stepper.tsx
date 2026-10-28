@@ -15,6 +15,61 @@ export interface StepperProps {
   onScrub: (round: number) => void;
 }
 
+const I = (p: { children: preact.ComponentChildren }) => (
+  <svg
+    class="tr-icon"
+    width="20"
+    height="20"
+    viewBox="0 0 20 20"
+    aria-hidden="true"
+    focusable="false"
+    fill="currentColor"
+  >
+    {p.children}
+  </svg>
+);
+const Bar = ({ x }: { x: number }) => <rect x={x} y="3" width="2.5" height="14" />;
+const Tri = ({ x, left }: { x: number; left?: boolean }) => (
+  <path d={left ? `M${x + 7} 3v14L${x} 10z` : `M${x} 3v14l7-7z`} />
+);
+const FirstIcon = () => (
+  <I>
+    <Bar x={2} />
+    <Tri x={5} left />
+    <Tri x={11} left />
+  </I>
+);
+const PrevIcon = () => (
+  <I>
+    <Bar x={4} />
+    <Tri x={8} left />
+  </I>
+);
+const PlayIcon = () => (
+  <I>
+    <Tri x={5} />
+  </I>
+);
+const PauseIcon = () => (
+  <I>
+    <rect x="4" y="3" width="4" height="14" />
+    <rect x="12" y="3" width="4" height="14" />
+  </I>
+);
+const NextIcon = () => (
+  <I>
+    <Tri x={5} />
+    <Bar x={13.5} />
+  </I>
+);
+const LastIcon = () => (
+  <I>
+    <Tri x={3} />
+    <Tri x={9} />
+    <Bar x={15.5} />
+  </I>
+);
+
 /** |◀ ◀ ▶/❚❚ ▶ ▶| with speed and a scrubber. Every control is at least 44 px. */
 export function Stepper(p: StepperProps) {
   const last = p.count - 1;
@@ -28,7 +83,7 @@ export function Stepper(p: StepperProps) {
           disabled={p.round <= 0}
           onClick={p.onFirst}
         >
-          <span aria-hidden="true">|◀</span>
+          <FirstIcon />
         </button>
         <button
           type="button"
@@ -37,7 +92,7 @@ export function Stepper(p: StepperProps) {
           disabled={p.round <= 0}
           onClick={p.onPrev}
         >
-          <span aria-hidden="true">◀</span>
+          <PrevIcon />
         </button>
         <button
           type="button"
@@ -47,7 +102,8 @@ export function Stepper(p: StepperProps) {
           disabled={p.round >= last && !p.playing}
           onClick={p.onPlayPause}
         >
-          <span aria-hidden="true">{p.playing ? '❚❚' : '▶'}</span>
+          {p.playing ? <PauseIcon /> : <PlayIcon />}
+          <span class="tr-btn-text">{p.playing ? 'Pause' : 'Play'}</span>
         </button>
         <button
           type="button"
@@ -56,7 +112,7 @@ export function Stepper(p: StepperProps) {
           disabled={p.round >= last}
           onClick={p.onNext}
         >
-          <span aria-hidden="true">▶</span>
+          <NextIcon />
         </button>
         <button
           type="button"
@@ -65,7 +121,7 @@ export function Stepper(p: StepperProps) {
           disabled={p.round >= last}
           onClick={p.onLast}
         >
-          <span aria-hidden="true">▶|</span>
+          <LastIcon />
         </button>
       </div>
       <div class="tr-stepper-row">

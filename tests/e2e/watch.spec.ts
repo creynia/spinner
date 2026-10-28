@@ -95,6 +95,13 @@ test('Watch: step, keyboard, play, re-simulate, no overflow, axe clean', async (
   expect(await cur()).toBe('4');
   await page.keyboard.press('ArrowLeft');
   expect(await cur()).toBe('3');
+  // The fixed stepper never hides content: at the end of the page the detail panel ends above it.
+  await page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)');
+  const [bottom, top] = await page.evaluate<[number, number]>(
+    "[document.querySelector('.tr-state').getBoundingClientRect().bottom, document.querySelector('.tr-stepbar').getBoundingClientRect().top]",
+  );
+  expect(bottom).toBeLessThanOrEqual(top + 1);
+  await page.evaluate('window.scrollTo(0, 0)');
   await guard.check('watch sample');
   await expectAxeClean(page, 'watch sample');
   expect(await smallTargets(page)).toEqual([]);

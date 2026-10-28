@@ -1,9 +1,14 @@
 import { cleanup, render } from '@testing-library/preact';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@app/App';
 import { resolveRoute, routes } from '@app/routes';
 
+// Screens that fetch (Gallery) must not reach the network from tests.
+beforeEach(() => {
+  vi.stubGlobal('fetch', () => Promise.reject(new Error('offline in tests')));
+});
 afterEach(() => {
+  vi.unstubAllGlobals();
   cleanup();
   window.location.hash = '';
 });
