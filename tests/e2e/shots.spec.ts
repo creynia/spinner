@@ -32,8 +32,15 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
     const size = info.project.name === 'phone' ? '390' : '1280';
     const shot = async (name: string) => {
-      await page.waitForTimeout(400);
-      await page.screenshot({ path: `${DIR}/${name}-${size}-${scheme}.png`, fullPage: true });
+      // A tall viewport instead of fullPage, so the fixed tab bar sits at the bottom, not mid-page.
+      const width = page.viewportSize()!.width;
+      await page.setViewportSize({ width, height: info.project.name === 'phone' ? 1900 : 800 });
+      await page.waitForTimeout(500);
+      const h = await page.evaluate('document.documentElement.scrollHeight');
+      await page.setViewportSize({ width, height: Math.min(Number(h), 4200) });
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: `${DIR}/${name}-${size}-${scheme}.png` });
+      await page.setViewportSize({ width, height: info.project.name === 'phone' ? 844 : 800 });
     };
 
     await page.goto('./?e2e#/');
@@ -64,7 +71,7 @@ for (const scheme of ['light', 'dark'] as const) {
     // Run mid-run
     const live = await startRun(
       page,
-      { name: 'Martingale, long run', strategy: 'martingale', sessions: 150_000, maxRounds: 500 },
+      { name: 'Martingale, long run', strategy: 'martingale', sessions: 100_000, maxRounds: 500 },
       false,
     );
     await expect(page.locator('.live-panel svg').first()).toBeVisible({ timeout: 60_000 });
@@ -79,7 +86,8 @@ for (const scheme of ['light', 'dark'] as const) {
 
     for (const tab of ['overview', 'paths', 'risk']) {
       await go(page, `#/analyze/${mart}?tab=${tab}`);
-      await expect(page.locator('[data-verdict]').or(page.locator('svg').first())).toBeVisible();
+      await expect(page.getByRole('tab', { selected: true })).toBeVisible();
+      await expect(page.locator('main svg, [data-verdict]').first()).toBeVisible();
       await shot(`analyze-${tab}`);
     }
 

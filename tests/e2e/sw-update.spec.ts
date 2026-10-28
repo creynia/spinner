@@ -36,6 +36,11 @@ let root: string;
 let server: Server;
 let origin: string;
 
+test.skip(
+  ({ viewport }) => !viewport || (viewport.width !== 390 && viewport.width !== 1280),
+  'service worker behaviour is viewport independent: phone and desktop cover the toast placement',
+);
+
 test.beforeAll(async () => {
   test.setTimeout(180_000);
   tmp = mkdtempSync(join(tmpdir(), 'spinner-sw-'));
@@ -117,7 +122,7 @@ test('while a run is active the toast says the run will resume', async ({ page }
   await controlled(page);
   await page.waitForFunction('window.__results !== undefined');
   const runId = await page.evaluate<string>(
-    "window.__results.start({ sessions: 200000, maxRounds: 300, name: 'Long run' })",
+    "window.__results.start({ sessions: 100_000, maxRounds: 300, name: 'Long run' })",
   );
   await page.evaluate((id) => void (location.hash = `#/run/${id}`), runId);
   await expect(page.locator('[data-status=running]')).toBeVisible({ timeout: 30_000 });
