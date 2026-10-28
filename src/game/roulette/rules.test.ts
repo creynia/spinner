@@ -58,6 +58,7 @@ describe('rules.resolve (game.md §1.1)', () => {
     ['pace too high', eu({ pace: { roundsPerHour: 1001 } }), 'rules/pace'],
     ['unknown preset', 'nope', 'rules/preset'],
     ['unknown key', eu({ colour: 'red' }), 'rules/unknown-key'],
+    ['pace named like a prototype key', eu({ pace: 'constructor' }), 'rules/pace'],
     ['wrong type', eu({ laPartage: 'yes' }), 'rules/type'],
   ])('rejects: %s', (_n, ref, expected) => {
     expect(code(() => resolveRules(ref as never))).toBe(expected);

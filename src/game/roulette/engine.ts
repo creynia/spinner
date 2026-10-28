@@ -265,12 +265,12 @@ export function serialize(state: RouletteState): Snapshot {
   const ring: number[] = [];
   for (let s = h.len - tail; s < h.len; s++) ring.push(h.ring[s % RING]!);
   return {
-    rules: state.rules,
+    rules: structuredClone(state.rules),
     rng: [...state.rng.snapshot()],
     forced: [...state.forced],
     bankroll: state.bankroll,
-    layout: state.layout,
-    prison: state.prison,
+    layout: structuredClone(state.layout),
+    prison: structuredClone(state.prison),
     confirmed: state.confirmed,
     round: state.round,
     history: {
