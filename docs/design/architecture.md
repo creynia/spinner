@@ -1406,7 +1406,7 @@ at a time** once reviews start.
   phone-360, phone, phone-landscape and desktop; `PORT=<p> npm run test:perf` green.
 - A deliberate `document.title` in `src/core/money` fails **both** `npm run
   lint` and `npm run typecheck` (reviewer tries it and reverts).
-- A deliberate `import '../../app/x'` in `src/core/strategy/a/b/c.ts` fails lint.
+- A deliberate `import '../../../../app/x'` (and `@app/x`) in `src/core/strategy/a/b/c.ts` fails lint.
 - Every dependency of §1.1 present at the exact version; `npm ls playwright-core`
   shows only 1.63.0.
 - Every screen folder, contract file and module `index.ts` of §3 exists; the
