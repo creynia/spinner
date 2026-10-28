@@ -3,13 +3,6 @@
 // its own module's block), the type-level assertions stay.
 import { describe, expect, it } from 'vitest';
 import {
-  ChipRack,
-  LayoutEditor,
-  LayoutThumb,
-  SpotList,
-  checkAtTable,
-  defaultDenom,
-  useChipHistory,
   type BuilderChipsEnv,
   type ChipBoardProps,
   type ChipsUi,
@@ -121,24 +114,5 @@ describe('WP-L2 stubs (core/store/layouts.ts)', () => {
   it('LayoutFileError carries a code', () => {
     const e = new store.LayoutFileError('not-json', 'bad');
     expect([e.code, e.message, e instanceof Error]).toEqual(['not-json', 'bad', true]);
-  });
-});
-
-describe('WP-L4 stubs (core/ui/layout)', () => {
-  it('components render null', () => {
-    const p = {} as never;
-    expect([LayoutEditor(p), ChipRack(p), SpotList(p), LayoutThumb(p)]).toEqual([
-      null,
-      null,
-      null,
-      null,
-    ]);
-  });
-  it.each([
-    ['useChipHistory', () => useChipHistory([])],
-    ['checkAtTable', () => checkAtTable({} as never, {}, [], 0)],
-    ['defaultDenom', () => defaultDenom({} as never, {}, [], [])],
-  ] as [string, () => unknown][])('%s throws not implemented (WP-L4)', (name, call) => {
-    expect(call).toThrow(`not implemented (WP-L4): ${name}`);
   });
 });

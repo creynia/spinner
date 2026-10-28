@@ -1,0 +1,213 @@
+/* Layout editor shell. Tokens only; every control is at least var(--tap) square or tall. */
+.layout-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 8px;
+  color: var(--text);
+}
+.le-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+}
+.le-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.05rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.le-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.le-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.le-btn[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.le-btn-wide {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+.le-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.le-tools {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  background: var(--bg);
+}
+.le-tool-group {
+  display: flex;
+  gap: 8px;
+}
+.le-board {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+}
+.le-status {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  min-height: 40px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 0.9rem;
+}
+.le-live {
+  color: var(--muted);
+}
+.le-problems {
+  padding: 6px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+.le-more {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.le-label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.le-guard {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Landscape / desktop: the board on the left, a 180 px rail on the right. */
+.le-wide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 12px;
+  align-items: start;
+}
+.le-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 100%;
+  overflow-y: auto;
+}
+.le-rail .le-tools {
+  position: static;
+  padding: 0;
+}
+.le-rail-list {
+  min-width: 0;
+}
+
+/* Chip rack. */
+.chip-rack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip-rack-opt {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.chip-rack-opt[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+/* Spot list. */
+.spot-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.spot-row {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.spot-row.is-flagged {
+  border-color: var(--danger);
+}
+.spot-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.spot-name {
+  font-weight: 600;
+}
+.spot-count {
+  color: var(--muted);
+}
+.spot-problem {
+  margin: 4px 0 0;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+.spot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* Thumbnail. */
+.layout-thumb {
+  max-width: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.layout-thumb svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
