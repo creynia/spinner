@@ -185,8 +185,8 @@ export function Settings({ query }: ScreenProps) {
           </dd>
         </dl>
         <div class="actions">
-          <Button onClick={persist}>Request persistent storage</Button>
-          <Button onClick={exportAll}>Export all</Button>
+          <Button onClick={() => void persist()}>Request persistent storage</Button>
+          <Button onClick={() => void exportAll()}>Export all</Button>
           <Button onClick={() => fileRef.current?.click()}>Import all</Button>
           <Button variant="danger" onClick={() => setConfirmDelete(true)}>
             Delete all data
@@ -200,16 +200,16 @@ export function Settings({ query }: ScreenProps) {
           aria-label="Choose an export file to import"
           tabIndex={-1}
           onChange={(e) => {
-            const f = (e.currentTarget as HTMLInputElement).files?.[0];
+            const f = e.currentTarget.files?.[0];
             if (f) void importAll(f);
-            (e.currentTarget as HTMLInputElement).value = '';
+            e.currentTarget.value = '';
           }}
         />
       </Card>
 
       <Card title="Updates">
         <div class="actions">
-          <Button onClick={check}>Check for updates</Button>
+          <Button onClick={() => void check()}>Check for updates</Button>
         </div>
         <p class="muted" role="status" data-update-status>
           {updateMsg}
@@ -246,7 +246,7 @@ export function Settings({ query }: ScreenProps) {
           keep them.
         </p>
         <div class="actions">
-          <Button variant="danger" onClick={deleteAll}>
+          <Button variant="danger" onClick={() => void deleteAll()}>
             Delete everything
           </Button>
           <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>

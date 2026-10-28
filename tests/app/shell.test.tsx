@@ -108,7 +108,7 @@ describe('settings service', () => {
     updateSettings({ theme: 'dark', framing: 'per100' });
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(localStorage.getItem('spinner:theme')).toBe('dark');
-    await waitFor(async () => expect((await repo.getSettings())?.framing).toBe('per100'));
+    await waitFor(() => expect(repo.getSettings()).resolves.toMatchObject({ framing: 'per100' }));
     updateSettings({ theme: 'system' });
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(localStorage.getItem('spinner:theme')).toBeNull();
@@ -135,7 +135,7 @@ describe('export / import', () => {
 
 describe('updates hook', () => {
   it('delegates to the registered checker', async () => {
-    setUpdateChecker(async () => 'available');
+    setUpdateChecker(() => Promise.resolve('available'));
     expect(await checkForUpdates()).toBe('available');
     setUpdateChecker(null);
   });
@@ -239,7 +239,7 @@ describe('Settings', () => {
   });
   it('offers storage, export, import, delete (with confirm) and update check', async () => {
     window.location.hash = '#/settings';
-    setUpdateChecker(async () => 'current');
+    setUpdateChecker(() => Promise.resolve('current'));
     const { container, getByText } = render(<App />);
     for (const t of [
       'Request persistent storage',
@@ -269,5 +269,15 @@ describe('More and NotFound', () => {
       a.getAttribute('href'),
     );
     expect(hrefs).toEqual(['#/gallery', '#/import', '#/settings', '#/settings?section=about']);
+  });
+});
+
+describe('settings survive a memory-only repo', () => {
+  it('restores from the local copy', async () => {
+    await loadSettings(createMemoryRepo());
+    updateSettings({ framing: 'hour', theme: 'dark' });
+    settingsStore.set(DEFAULT_SETTINGS);
+    await loadSettings(createMemoryRepo());
+    expect(settingsStore.get()).toMatchObject({ framing: 'hour', theme: 'dark' });
   });
 });

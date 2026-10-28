@@ -81,31 +81,36 @@ export function createMemoryRepo(seed?: Partial<Pick<AllData, 'definitions' | 'r
   let runs = [...(seed?.runs ?? [])];
   return {
     kind: 'memory',
-    listRuns: async () => [...runs],
-    listDefinitions: async () => [...definitions],
-    getSettings: async () => settings,
-    putSettings: async (s) => void (settings = s),
-    exportAll: async () => ({
-      format: 'spinner-all',
-      v: 1,
-      exportedAt: new Date().toISOString(),
-      settings,
-      definitions: [...definitions],
-      runs: [...runs],
-    }),
-    importAll: async (d) => {
+    listRuns: () => Promise.resolve([...runs]),
+    listDefinitions: () => Promise.resolve([...definitions]),
+    getSettings: () => Promise.resolve(settings),
+    putSettings: (s) => {
+      settings = s;
+      return Promise.resolve();
+    },
+    exportAll: () =>
+      Promise.resolve({
+        format: 'spinner-all',
+        v: 1,
+        exportedAt: new Date().toISOString(),
+        settings,
+        definitions: [...definitions],
+        runs: [...runs],
+      }),
+    importAll: (d) => {
       const dIds = new Set(definitions.map((x) => x.id));
       const rIds = new Set(runs.map((x) => x.runId));
       const newDefs = d.definitions.filter((x) => !dIds.has(x.id));
       const newRuns = d.runs.filter((x) => !rIds.has(x.runId));
       definitions = [...definitions, ...newDefs];
       runs = [...runs, ...newRuns];
-      return { definitions: newDefs.length, runs: newRuns.length };
+      return Promise.resolve({ definitions: newDefs.length, runs: newRuns.length });
     },
-    deleteAll: async () => {
+    deleteAll: () => {
       definitions = [];
       runs = [];
       settings = null;
+      return Promise.resolve();
     },
   };
 }

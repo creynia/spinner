@@ -36,7 +36,6 @@ export function MoneyInput({ id, value, onChange, min, max, describedBy }: Money
   useEffect(() => {
     // Follow outside changes, but not while the typed text already means the same amount.
     if (parseMoney(text) !== value) setText(moneyText(value));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return (
     <div class="money">
@@ -53,7 +52,7 @@ export function MoneyInput({ id, value, onChange, min, max, describedBy }: Money
         aria-invalid={bad ? 'true' : undefined}
         aria-describedby={describedBy}
         onInput={(e) => {
-          const v = (e.currentTarget as HTMLInputElement).value;
+          const v = e.currentTarget.value;
           setText(v);
           const c = parseMoney(v);
           if (c !== null && (min === undefined || c >= min) && (max === undefined || c <= max)) {

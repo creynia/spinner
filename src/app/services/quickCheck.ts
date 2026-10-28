@@ -9,9 +9,7 @@ export type QuickCheckRunner = (
   sessions: number,
 ) => Promise<VerdictInput>;
 
-let runner: QuickCheckRunner = async () => {
-  throw new Error('Quick check is not available yet.');
-};
+let runner: QuickCheckRunner = () => Promise.reject(new Error('Quick check is not available yet.'));
 export function setQuickCheckRunner(r: QuickCheckRunner): void {
   runner = r;
 }

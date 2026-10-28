@@ -14,7 +14,7 @@ export interface CardProps {
 export function Card({ title, level = 2, actions, children, class: cls }: CardProps) {
   const uid = useId('card');
   const id = title ? uid : undefined;
-  const Heading = `h${level}` as 'h2' | 'h3';
+  const Heading: 'h2' | 'h3' = level === 3 ? 'h3' : 'h2';
   return (
     <section class={`card${cls ? ` ${cls}` : ''}`} aria-labelledby={id}>
       {title ? (

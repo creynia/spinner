@@ -111,7 +111,7 @@ async function getSink(): Promise<RunSink> {
 export async function startRun(definition: NormalizedDefinition): Promise<string> {
   const c = createRunController({
     definition,
-    plugin: game.plugin as never,
+    plugin: game.plugin,
     pool: getPool(),
     sink: await getSink(),
   });

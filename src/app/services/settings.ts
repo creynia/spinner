@@ -50,18 +50,37 @@ export function applyTheme(theme: Theme): void {
   }
 }
 
+const COPY_KEY = 'spinner:settings';
+function readLocalCopy(): unknown {
+  try {
+    const raw = localStorage.getItem(COPY_KEY);
+    return raw ? (JSON.parse(raw) as unknown) : null;
+  } catch {
+    return null;
+  }
+}
+function writeLocalCopy(s: Settings): void {
+  try {
+    localStorage.setItem(COPY_KEY, JSON.stringify(s));
+  } catch {
+    // storage unavailable
+  }
+}
+
 let repo: Repo | null = null;
 
 /** Load persisted settings from the repo and apply the theme. Never throws. */
 export async function loadSettings(r: Repo): Promise<Settings> {
   repo = r;
+  let stored: unknown = null;
   try {
-    const stored = await r.getSettings();
-    const s = sanitizeSettings(stored);
-    settingsStore.set(s);
+    stored = await r.getSettings();
   } catch {
-    // keep defaults
+    // fall through to the local copy
   }
+  // A memory-only repo forgets on reload, so the localStorage copy fills in for it.
+  stored ??= readLocalCopy();
+  settingsStore.set(sanitizeSettings(stored));
   applyTheme(settingsStore.get().theme);
   return settingsStore.get();
 }
@@ -69,6 +88,7 @@ export async function loadSettings(r: Repo): Promise<Settings> {
 export function updateSettings(patch: Partial<Settings>): void {
   const next = sanitizeSettings({ ...settingsStore.get(), ...patch });
   settingsStore.set(next);
+  writeLocalCopy(next);
   if (patch.theme !== undefined) applyTheme(next.theme);
   void repo?.putSettings({ id: SETTINGS_ID, ...next }).catch(() => undefined);
 }

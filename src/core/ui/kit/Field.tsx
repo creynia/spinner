@@ -58,7 +58,7 @@ export function TextInput(p: TextInputProps) {
       inputMode={p.inputMode}
       aria-invalid={p.invalid ? 'true' : undefined}
       aria-describedby={p.describedBy}
-      onInput={(e) => p.onInput((e.currentTarget as HTMLInputElement).value)}
+      onInput={(e) => p.onInput(e.currentTarget.value)}
     />
   );
 }
@@ -76,7 +76,7 @@ export function Select<T extends string>(p: SelectProps<T>) {
       class="input"
       id={p.id}
       value={p.value}
-      onChange={(e) => p.onChange((e.currentTarget as HTMLSelectElement).value as T)}
+      onChange={(e) => p.onChange(e.currentTarget.value as T)}
     >
       {p.options.map((o) => (
         <option value={o.value}>{o.label}</option>
