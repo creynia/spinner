@@ -7,7 +7,7 @@ import { cancelRun, pauseRun, resumeStored } from '../../services/runs';
 import type { ScreenProps } from '../types';
 import { NotFoundCard } from '../Analyze/data';
 import { installResultsHook } from './e2eHook';
-import { LIVE_FAN_SESSIONS, useRun } from './useRun';
+import { LIVE_FAN_SESSIONS, useElapsed, useRun } from './useRun';
 
 installResultsHook();
 
@@ -34,6 +34,8 @@ export function Run({ params }: ScreenProps) {
   const [busy, setBusy] = useState(false);
   const running = progress?.status === 'running' || progress?.status === 'queued';
   const usage = useUsage(running);
+  const shown = controller && progress ? progress.status : meta?.status;
+  const elapsedMs = useElapsed(meta?.timing.elapsedMs ?? 0, shown === 'running');
 
   if (meta === undefined) {
     return (
@@ -150,7 +152,7 @@ export function Run({ params }: ScreenProps) {
         total={meta.sessions}
         sessionsPerSec={controller && progress ? progress.sessionsPerSec : 0}
         etaMs={controller && progress ? progress.etaMs : null}
-        elapsedMs={meta.timing.elapsedMs}
+        elapsedMs={elapsedMs}
         message={message}
         actions={actions}
       />
