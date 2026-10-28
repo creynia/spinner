@@ -87,6 +87,66 @@ describe('Histogram', () => {
   });
 });
 
+describe('review fixes (components)', () => {
+  it('draws a convergence band with NaN intervals without losing the line', () => {
+    const cv = convergenceFixture();
+    for (let i = 0; i < 5; i++) {
+      cv.lo[i] = NaN;
+      cv.hi[i] = NaN;
+    }
+    const { container } = render(<ConvergenceChart convergence={cv} title="c" />);
+    expect(container.querySelector('path.sp-band')!.getAttribute('d')).not.toContain('NaN');
+    expect(container.querySelector('path.sp-band')!.getAttribute('d')!.length).toBeGreaterThan(10);
+    expect(container.querySelector('path.sp-line')!.getAttribute('d')).not.toContain('NaN');
+  });
+  it('fan legend swatches use the band tokens', () => {
+    const { container } = render(<FanChart fan={fanFixture()} title="p" />);
+    const fills = Array.from(container.querySelectorAll('.sp-chart__legend rect')).map((r) =>
+      r.getAttribute('fill'),
+    );
+    expect(fills).toContain('var(--band-outer)');
+    expect(fills).toContain('var(--band-inner)');
+  });
+  it('skips markers outside the bins', () => {
+    const h = { ...histogramFixture(), markers: { zero: 900000, expected: -14000 } };
+    const { container } = render(<Histogram histogram={h} title="t" />);
+    expect(container.querySelector('[data-ref^="zero"]')).toBeNull();
+    expect(container.querySelector('[data-ref^="expected"]')).toBeTruthy();
+  });
+  it('whole-number y ticks on small counts', () => {
+    const h = { lo: 0, width: 10, counts: Uint32Array.of(1, 0, 1), zeroBin: null, markers: {} };
+    const { container } = render(<Histogram histogram={h} title="t" />);
+    const labels = Array.from(container.querySelectorAll('.sp-yaxis text')).map(
+      (t) => t.textContent,
+    );
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+  it('draws point markers for a single checkpoint', () => {
+    const f = fanFixture(1);
+    const { container } = render(<FanChart fan={f} title="p" />);
+    expect(container.querySelectorAll('.sp-point')).toHaveLength(5);
+  });
+  it('empty data gives summary and table only, no svg', () => {
+    const h = { lo: 0, width: 1, counts: new Uint32Array(0), zeroBin: null, markers: {} };
+    const { container } = render(<Histogram histogram={h} title="e" />);
+    expect(container.querySelector('svg[role="img"]')).toBeNull();
+    expect(container.querySelector('.sp-chart__table')).toBeTruthy();
+  });
+  it('compare-mode expected line differs from the overlay colours', () => {
+    const fan = fanFixture();
+    const { container } = render(
+      <FanChart
+        fan={fan}
+        title="p"
+        overlays={[{ id: 'm', label: 'M', rounds: fan.rounds, p50: fan.p5 }]}
+      />,
+    );
+    expect(container.querySelector('path.sp-expected')!.getAttribute('stroke')).toBe(
+      'var(--chart-text)',
+    );
+  });
+});
+
 describe('OverlayHistogram', () => {
   it('draws one outline per run with distinct dash patterns and a legend entry each', () => {
     const a = histogramFixture();

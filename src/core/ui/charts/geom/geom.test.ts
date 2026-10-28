@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  finiteOr,
+  integerTicks,
+  plural,
   downsampleIndices,
   extent,
   formatAxisCount,
@@ -90,7 +93,7 @@ describe('formatting', () => {
     expect(formatAxisMoney(125000)).toBe('$1.3k');
     expect(formatAxisMoney(-1_200_000)).toBe('-$12k');
     expect(formatAxisMoney(250_000_000)).toBe('$2.5M');
-    expect(formatAxisMoney(50)).toBe('$0.5');
+    expect(formatAxisMoney(50)).toBe('$0.50');
   });
   it('formats counts and shares', () => {
     expect(formatAxisCount(950)).toBe('950');
@@ -200,5 +203,49 @@ describe('summaries', () => {
     expect(cv).toContain('sessions the mean net is');
     expect(cv).toContain('20,000 sessions would reach');
     expect(convergenceSummary(convergenceFixture(), 'bust', String)).toContain('P(bust)');
+  });
+});
+
+describe('review fixes', () => {
+  it('splits a band at non-finite points into one polygon per finite run', () => {
+    const d = bandPath([0, 1, 2, 3, 4], [5, 5, NaN, 5, 5], [1, 1, 1, 1, 1]);
+    expect(d).toBe('M0 5L1 5L1 1L0 1ZM3 5L4 5L4 1L3 1Z');
+    expect(bandPath([0, 1], [NaN, NaN], [1, 1])).toBe('');
+    expect(bandPath([0, 1, 2], [5, 5, 5], [1, NaN, 1])).toBe('M0 5L0 1ZM2 5L2 1Z');
+  });
+  it('rounds before choosing the unit', () => {
+    expect(formatAxisMoney(-100000)).toBe('-$1k');
+    expect(formatAxisMoney(99_960_000)).toBe('$1M');
+    expect(formatAxisMoney(-50)).toBe('-$0.50');
+    expect(formatAxisMoney(2_500_000_000_00)).toBe('$2.5B');
+    expect(formatAxisMoney(99_950)).toBe('$1k');
+    expect(formatAxisMoney(NaN)).toBe('\u2013');
+    expect(formatAxisCount(999_600)).toBe('1M');
+    expect(formatAxisCount(-1000)).toBe('-1k');
+  });
+  it('formats tiny and missing shares', () => {
+    expect(formatShare(0.0004)).toBe('<0.1%');
+    expect(formatShare(NaN)).toBe('\u2013');
+  });
+  it('keeps count ticks whole and guards formatters', () => {
+    expect(integerTicks(0, 1, 4)).toEqual([0, 1]);
+    expect(finiteOr(String)(NaN)).toBe('\u2013');
+    expect(plural(1, 'session')).toBe('1 session');
+    expect(plural(2, 'session')).toBe('2 sessions');
+  });
+  it('does not print NaN when the interval is unavailable', () => {
+    const c = convergenceFixture();
+    const l = c.n.length - 1;
+    c.lo[l] = NaN;
+    c.hi[l] = NaN;
+    const s = convergenceSummary(c, 'mean', (v) => `$${v}`);
+    expect(s).toContain('not available below 30 sessions');
+    expect(s).not.toContain('NaN');
+  });
+  it('says when a marker lies outside the bins', () => {
+    const h = { ...histogramFixture(), markers: { zero: 90000, expected: -999999 } };
+    const s = histogramSummary(h, String);
+    expect(s).toContain('All sessions ended below the zero line');
+    expect(s).toContain('outside the plotted range');
   });
 });

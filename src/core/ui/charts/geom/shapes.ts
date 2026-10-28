@@ -22,18 +22,32 @@ export function linePath(xs: ArrayLike<number>, ys: ArrayLike<number>): string {
   return d;
 }
 
-/** Closed band between `lo` (forward) and `hi` (back), all in pixels. Empty for no points. */
+/**
+ * Closed band between `lo` (forward) and `hi` (back), all in pixels. Non-finite points split the
+ * band into one polygon per run of points where x, lo and hi are all finite; empty if none.
+ */
 export function bandPath(
   xs: ArrayLike<number>,
   lo: ArrayLike<number>,
   hi: ArrayLike<number>,
 ): string {
   const n = Math.min(xs.length, lo.length, hi.length);
-  if (n === 0) return '';
   let d = '';
-  for (let i = 0; i < n; i++) d += `${i === 0 ? 'M' : 'L'}${r(xs[i]!)} ${r(lo[i]!)}`;
-  for (let i = n - 1; i >= 0; i--) d += `L${r(xs[i]!)} ${r(hi[i]!)}`;
-  return `${d}Z`;
+  let start = -1;
+  const flush = (end: number): void => {
+    if (start < 0) return;
+    for (let i = start; i < end; i++) d += `${i === start ? 'M' : 'L'}${r(xs[i]!)} ${r(lo[i]!)}`;
+    for (let i = end - 1; i >= start; i--) d += `L${r(xs[i]!)} ${r(hi[i]!)}`;
+    d += 'Z';
+    start = -1;
+  };
+  for (let i = 0; i < n; i++) {
+    if (Number.isFinite(xs[i]!) && Number.isFinite(lo[i]!) && Number.isFinite(hi[i]!)) {
+      if (start < 0) start = i;
+    } else flush(i);
+  }
+  flush(n);
+  return d;
 }
 
 /** Step-after path (survival): holds each y until the next x. */

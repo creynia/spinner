@@ -98,35 +98,72 @@ export function tickCountFor(px: number, gap: number): number {
   return Math.max(2, Math.floor(px / gap));
 }
 
-/** Compact money for axis labels: "-$300", "$1.2k", "-$12k", "$2.5M". Input in cents. */
+const UNITS: [number, string][] = [
+  [1e9, 'B'],
+  [1e6, 'M'],
+  [1e3, 'k'],
+];
+
+/** For a >= 999.5: 1234 -> "1.2k", 999_600 -> "1M" (round first, then pick the unit). */
+function compact(a: number): string {
+  for (let i = 0; i < UNITS.length; i++) {
+    const [size, suffix] = UNITS[i]!;
+    if (a < size * 0.9995) continue;
+    const x = a / size;
+    const rounded = Number(x.toFixed(x >= 10 ? 0 : 1));
+    if (rounded >= 1000 && i > 0)
+      return `${Number((a / UNITS[i - 1]![0]).toFixed(1))}${UNITS[i - 1]![1]}`;
+    return `${rounded}${suffix}`;
+  }
+  return String(Math.round(a));
+}
+
+/** Compact money for axis labels: "-$300", "$1.2k", "-$1k", "$1M". Input in cents. */
 export function formatAxisMoney(cents: number): string {
-  const d = cents / 100;
-  const a = Math.abs(d);
-  const sign = d < 0 && Math.round(a * 100) > 0 ? '-' : '';
-  const trim = (x: number, digits: number): string => String(Number(x.toFixed(digits)));
-  if (a >= 1_000_000) return `${sign}$${trim(a / 1_000_000, 1)}M`;
-  if (a >= 10_000) return `${sign}$${trim(a / 1000, 0)}k`;
-  if (a >= 1000) return `${sign}$${trim(a / 1000, 1)}k`;
-  if (a >= 100) return `${sign}$${trim(a, 0)}`;
-  return `${sign}$${trim(a, a >= 10 ? 0 : 2)}`;
+  if (!Number.isFinite(cents)) return '\u2013';
+  const a = Math.abs(cents / 100);
+  let body: string;
+  if (a >= 999.5) body = compact(a);
+  else if (a >= 10) body = String(Math.round(a));
+  else {
+    const r = Math.round(a * 100) / 100;
+    body = Number.isInteger(r) ? String(r) : r.toFixed(2);
+  }
+  const zero = body === '0';
+  return `${cents < 0 && !zero ? '-' : ''}$${body}`;
 }
 
 /** Compact count: 950, 1.2k, 10k, 2.5M. */
 export function formatAxisCount(n: number): string {
+  if (!Number.isFinite(n)) return '\u2013';
   const a = Math.abs(n);
-  const trim = (x: number, d: number): string => String(Number(x.toFixed(d)));
-  if (a >= 1_000_000) return `${trim(n / 1_000_000, 1)}M`;
-  if (a >= 10_000) return `${trim(n / 1000, 0)}k`;
-  if (a >= 1000) return `${trim(n / 1000, 1)}k`;
-  return trim(n, 0);
+  const body = a >= 999.5 ? compact(a) : String(Math.round(a));
+  return `${n < 0 && body !== '0' ? '-' : ''}${body}`;
 }
 
-/** "12%" / "0.4%" from a 0..1 share. */
+/** "12%" / "0.4%" / "<0.1%" from a 0..1 share; "\u2013" when not a number. */
 export function formatShare(p: number): string {
+  if (!Number.isFinite(p)) return '\u2013';
   const pct = p * 100;
   if (pct === 0) return '0%';
+  if (Math.abs(pct) < 0.1) return pct < 0 ? '>-0.1%' : '<0.1%';
   if (Math.abs(pct) < 1) return `${Number(pct.toFixed(1))}%`;
   return `${Math.round(pct)}%`;
+}
+
+/** Wrap a formatter so non-finite input prints an en dash instead of "$NaN". */
+export function finiteOr(fmt: (v: number) => string): (v: number) => string {
+  return (v) => (Number.isFinite(v) ? fmt(v) : '\u2013');
+}
+
+/** "1 session" / "2 sessions". */
+export function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${n.toLocaleString('en-US')} ${n === 1 ? singular : pluralForm}`;
+}
+
+/** Whole-number ticks only (counts). */
+export function integerTicks(min: number, max: number, count = 4): number[] {
+  return niceTicks(min, max, count).filter(Number.isInteger);
 }
 
 /** Evenly spread indices 0..n-1, at most `max` of them, always including the last. */

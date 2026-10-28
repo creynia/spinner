@@ -21,6 +21,12 @@ export interface LegendItem {
   dash?: string;
   swatch?: 'line' | 'band' | 'box';
   opacity?: number;
+  /** explicit fill for band swatches (a CSS value, e.g. a band token); wins over colour+opacity */
+  fill?: string;
+  /** drawn beneath `fill` (the inner band sits over the outer one) */
+  under?: string;
+  /** explicit line colour (e.g. the expected line in compare mode) */
+  stroke?: string;
 }
 
 /** Colour variable for series `i`, cycling through the six chart tokens. */
@@ -56,19 +62,24 @@ export interface ChartFrameProps {
 }
 
 function LegendSwatch({ item }: { item: LegendItem }): JSX.Element {
-  const c = seriesColor(item.color);
+  const c = item.stroke ?? seriesColor(item.color);
+  const band = item.swatch === 'band' || item.swatch === 'box';
   return (
     <svg width="28" height="12" aria-hidden="true" focusable="false">
-      {item.swatch === 'band' || item.swatch === 'box' ? (
-        <rect
-          x="1"
-          y="1"
-          width="26"
-          height="10"
-          fill={c}
-          fillOpacity={item.opacity ?? 0.3}
-          stroke={c}
-        />
+      {band ? (
+        <>
+          {item.under ? <rect x="1" y="1" width="26" height="10" fill={item.under} /> : null}
+          <rect
+            x="1"
+            y="1"
+            width="26"
+            height="10"
+            fill={item.fill ?? c}
+            fill-opacity={item.fill ? undefined : (item.opacity ?? 0.3)}
+            stroke={c}
+            stroke-opacity="0.5"
+          />
+        </>
       ) : (
         <line
           x1="1"

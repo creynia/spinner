@@ -73,7 +73,11 @@ export function SurvivalChart({
   }
   const legend: LegendItem[] = [
     { label: 'Still playing', color: 0 },
-    ...reasons.map((k, i) => ({ label: REASON_LABEL[k] ?? k, color: i + 1, dash: dashFor(i + 1) })),
+    ...reasons.map((k, i) => ({
+      label: REASON_LABEL[k] ?? k,
+      color: 1 + (i % 5),
+      dash: dashFor(1 + (i % 5)),
+    })),
   ];
   const table = {
     columns: ['Round', 'Still playing', ...reasons.map((k) => REASON_LABEL[k] ?? k)],
@@ -93,74 +97,76 @@ export function SurvivalChart({
       tooltip={tooltip}
       class="sp-survival"
     >
-      <ChartSvg width={width} height={height} svgProps={cur.svgProps}>
-        <YAxis box={box} scale={y} ticks={yTicks} />
-        <XAxis box={box} scale={x} ticks={xTicks} label="Rounds" />
-        {reasons.map((k, i) => (
+      {len === 0 ? null : (
+        <ChartSvg width={width} height={height} svgProps={cur.svgProps}>
+          <YAxis box={box} scale={y} ticks={yTicks} />
+          <XAxis box={box} scale={x} ticks={xTicks} label="Rounds" />
+          {reasons.map((k, i) => (
+            <path
+              key={k}
+              class="sp-incidence"
+              data-reason={k}
+              d={stepPath(
+                xs,
+                idx.map((r) => y(s.incidence[k]![r] ?? 0)),
+              )}
+              fill="none"
+              stroke={seriesColor(1 + (i % 5))}
+              stroke-width="2"
+              stroke-dasharray={dashFor(1 + (i % 5))}
+            />
+          ))}
           <path
-            key={k}
-            class="sp-incidence"
-            data-reason={k}
+            class="sp-alive"
             d={stepPath(
               xs,
-              idx.map((r) => y(s.incidence[k]![r] ?? 0)),
+              idx.map((r) => y(s.alive[r]!)),
             )}
             fill="none"
-            stroke={seriesColor(i + 1)}
-            stroke-width="2"
-            stroke-dasharray={dashFor(i + 1)}
+            stroke={seriesColor(0)}
+            stroke-width="2.5"
           />
-        ))}
-        <path
-          class="sp-alive"
-          d={stepPath(
-            xs,
-            idx.map((r) => y(s.alive[r]!)),
-          )}
-          fill="none"
-          stroke={seriesColor(0)}
-          stroke-width="2.5"
-        />
-        {s.medianRounds !== null ? (
-          <g class="sp-median-mark">
+          {s.medianRounds !== null ? (
+            <g class="sp-median-mark">
+              <line
+                x1={x(s.medianRounds)}
+                x2={x(s.medianRounds)}
+                y1={y(0.5)}
+                y2={box.bottom}
+                stroke="var(--chart-text)"
+                stroke-dasharray="2 3"
+              />
+              <circle cx={x(s.medianRounds)} cy={y(0.5)} r="4" fill={seriesColor(0)} />
+              <text
+                class="sp-halo"
+                x={x(s.medianRounds) + (x(s.medianRounds) > (box.left + box.right) / 2 ? -6 : 6)}
+                y={y(0.5) - 6}
+                text-anchor={x(s.medianRounds) > (box.left + box.right) / 2 ? 'end' : 'start'}
+              >
+                half ended by round {s.medianRounds.toLocaleString('en-US')}
+              </text>
+            </g>
+          ) : null}
+          {ci !== null && ci < idx.length ? (
             <line
-              x1={x(s.medianRounds)}
-              x2={x(s.medianRounds)}
-              y1={y(0.5)}
+              x1={pxAll[ci]}
+              x2={pxAll[ci]}
+              y1={box.top}
               y2={box.bottom}
               stroke="var(--chart-text)"
-              stroke-dasharray="2 3"
+              stroke-opacity="0.5"
             />
-            <circle cx={x(s.medianRounds)} cy={y(0.5)} r="4" fill={seriesColor(0)} />
-            <text
-              class="sp-halo"
-              x={x(s.medianRounds) + (x(s.medianRounds) > (box.left + box.right) / 2 ? -6 : 6)}
-              y={y(0.5) - 6}
-              text-anchor={x(s.medianRounds) > (box.left + box.right) / 2 ? 'end' : 'start'}
-            >
-              half ended by round {s.medianRounds.toLocaleString('en-US')}
-            </text>
-          </g>
-        ) : null}
-        {ci !== null && ci < idx.length ? (
-          <line
-            x1={pxAll[ci]}
-            x2={pxAll[ci]}
-            y1={box.top}
-            y2={box.bottom}
-            stroke="var(--chart-text)"
-            stroke-opacity="0.5"
+          ) : null}
+          <rect
+            class="sp-hit"
+            x={box.left}
+            y={box.top}
+            width={box.width}
+            height={box.height}
+            {...cur.hitProps}
           />
-        ) : null}
-        <rect
-          class="sp-hit"
-          x={box.left}
-          y={box.top}
-          width={box.width}
-          height={box.height}
-          {...cur.hitProps}
-        />
-      </ChartSvg>
+        </ChartSvg>
+      )}
     </ChartFrame>
   );
 }
