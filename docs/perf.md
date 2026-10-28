@@ -5,4 +5,5 @@ Reference run: Settings → _Benchmark this device_. It runs 10,000 sessions × 
 | Date       | Device                           | Browser               | Workers (P) | ms        | Rounds/s | Source                    |
 | ---------- | -------------------------------- | --------------------- | ----------- | --------- | -------- | ------------------------- |
 | 2026-10-28 | Build VM (shared, 4 vCPU class)  | Headless Chromium     | 3           | 6,800–9,100 | 550k–730k | `npm run test:perf` (#19) |
+| 2026-10-28 | Pixel 11 Pro (flagship)          | Chrome (current)      | 6           | 3,976     | 1,256,807 | Owner, Settings → Benchmark |
 | _pending_  | Mid-range Android (Pixel 6a class) | Chrome              |             |           |          | Run by the owner on Pages |
