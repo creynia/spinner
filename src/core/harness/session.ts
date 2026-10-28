@@ -352,7 +352,7 @@ export class BatchRunner {
     const ckBase = o * K;
 
     const rng = sessionRng(this.runSeed, index, 'engine', this.engine);
-    let state: unknown = null;
+    let state: unknown;
 
     let equity = bankroll0;
     let peak = bankroll0;
@@ -413,12 +413,11 @@ export class BatchRunner {
 
         out.stop = null;
         out.error = null;
-        // TODO(core-strategy PR #11): drop the casts once StepOutput.anomalies is in main.
-        (out as StepOutput & { anomalies?: number }).anomalies = 0;
+        out.anomalies = 0;
         if (tracer) tracer.cur = null;
         runtime.step(mem, obs, out, tracer ? sink : undefined);
         const so = out; // fresh reference: `step` mutated what we narrowed above
-        anomalies += (so as StepOutput & { anomalies?: number }).anomalies ?? 0;
+        anomalies += so.anomalies ?? 0;
 
         const prevStage = stage;
         stage = so.stage;

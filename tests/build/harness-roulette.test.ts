@@ -1,15 +1,8 @@
-// Real roulette through the harness: 1 vs 2 workers are byte-identical (the strategy is the
-// test driver until core-strategy lands).
+// Real roulette through the harness: 1 vs 2 workers are byte-identical (real strategy interpreter).
 import { describe, expect, it } from 'vitest';
 import type { GamePlugin } from '@core/contracts/game';
 import { createInThreadTransport, createPool } from '@core/harness';
-import {
-  FLAT_COIN,
-  coinDefinition,
-  coinRun,
-  compileTestStrategy,
-  digestRunData,
-} from '@core/testing';
+import { FLAT_COIN, coinDefinition, coinRun, digestRunData } from '@core/testing';
 import { roulette } from '@game/roulette';
 
 const plugin = roulette as unknown as GamePlugin<unknown, unknown, unknown, unknown>;
@@ -37,8 +30,7 @@ async function run(workers: number, batchChunks: number): Promise<string> {
   def.game = { id: 'roulette', rules: { preset: 'european', overrides: {} } };
   const pool = createPool({
     size: workers,
-    spawn: () =>
-      createInThreadTransport(plugin, { compile: compileTestStrategy, hop: 'microtask' }),
+    spawn: () => createInThreadTransport(plugin, { hop: 'microtask' }),
   });
   const r = coinRun(def, { pool, batchChunks, plugin });
   const settled = r.controller.settled();
