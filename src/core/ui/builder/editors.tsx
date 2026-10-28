@@ -171,11 +171,17 @@ export function AmountFields(p: {
   env: BuilderEnv;
   allowKeep?: boolean;
   nested?: boolean;
+  /** A plain number (variables, counters), not dollars. */
+  plain?: boolean;
 }) {
   const a = p.value;
   const kinds = AMOUNT_KINDS.filter((k) =>
-    k.value === 'keep' ? p.allowKeep !== false && !p.nested : true,
-  );
+    p.plain
+      ? k.value === 'cents' || k.value === 'units' || k.value === 'formula' || k.value === a.kind
+      : k.value === 'keep'
+        ? p.allowKeep !== false && !p.nested
+        : true,
+  ).map((k) => (p.plain && k.value === 'cents' ? { ...k, label: 'Number' } : k));
   return (
     <div class="ed-amount">
       <SelectField
@@ -195,9 +201,9 @@ export function AmountFields(p: {
       )}
       {a.kind === 'cents' && (
         <NumField
-          label="Dollars"
-          money
-          min={0}
+          label={p.plain ? 'Number' : 'Dollars'}
+          money={!p.plain}
+          min={p.plain ? undefined : 0}
           value={a.cents}
           onChange={(c) => p.onChange({ kind: 'cents', cents: c })}
         />
@@ -591,7 +597,7 @@ export function ConditionEditor(p: {
                 { value: 'round', label: 'rounds of the session' },
                 { value: 'stage', label: 'rounds in this stage' },
               ]}
-              onChange={(of) => setC({ everyN: o.everyN, of } as Condition)}
+              onChange={(of) => setC({ ...(o as object), of } as Condition)}
             />
           </>
         )}
@@ -880,6 +886,7 @@ export function EffectEditor(p: {
               env={p.env}
               progressions={p.progressions}
               allowKeep={false}
+              plain
               onChange={(a) =>
                 set(kind === 'set' ? { ...o, to: amountTo(a) } : { ...o, by: amountTo(a) })
               }
@@ -1002,6 +1009,7 @@ export function ProgressionEditor(p: {
   const [name, setName] = useState(p.name);
   const [spec, setSpec] = useState<Obj>(p.spec as unknown as Obj);
   const [pick, setPick] = useState(false);
+  const [rev, setRev] = useState(0);
   const track = spec.track;
   const dup = name !== p.name && p.existing.includes(name);
   const badName = !/^[a-z][a-z0-9-]{0,39}$/.test(name);
@@ -1013,24 +1021,48 @@ export function ProgressionEditor(p: {
           value={typeof track === 'string' ? track : undefined}
           onBack={() => setPick(false)}
           onPick={(id) => {
-            setSpec({ ...spec, track: id });
+            formSet({ ...spec, track: id });
             setPick(false);
           }}
         />
       </EditorSheet>
     );
   }
-  const num = (k: string, label: string, min = 1) =>
-    spec[k] !== undefined || ['maxSteps'].includes(k) ? (
+  const kind = str(spec.kind);
+  const fields = PROG_FIELDS[kind] ?? [];
+  const formSet = (x: Obj) => {
+    setSpec(x);
+    setRev((r) => r + 1);
+  };
+  const setKey = (k: string, v: unknown) => {
+    const n = { ...spec };
+    if (v === undefined) delete n[k];
+    else n[k] = v;
+    formSet(n);
+  };
+  const unitsOf = (e: unknown): number | null | 'other' =>
+    e === undefined
+      ? null
+      : isObj(e) && Object.keys(e).length === 1 && typeof e.units === 'number'
+        ? e.units
+        : 'other';
+  const unitsField = (k: 'base' | 'maxAmount', label: string, hint: string) => {
+    const u = unitsOf(spec[k]);
+    return u === 'other' ? (
+      <p class="hint" key={k}>
+        {label} is a formula; edit it in the JSON below.
+      </p>
+    ) : (
       <NumField
         key={k}
         label={label}
-        integer
-        min={min}
-        value={Number(spec[k] ?? 0)}
-        onChange={(n) => setSpec({ ...spec, [k]: n })}
+        min={0}
+        value={u ?? 0}
+        hint={hint}
+        onChange={(n) => setKey(k, n === 0 ? undefined : { units: n })}
       />
-    ) : null;
+    );
+  };
   return (
     <EditorSheet
       title="Progression"
@@ -1056,7 +1088,7 @@ export function ProgressionEditor(p: {
         label="Kind"
         value={str(spec.kind)}
         options={PROGRESSION_KINDS.map((k) => ({ value: k, label: k }))}
-        onChange={(kind) => setSpec(defaultSpec(kind, track))}
+        onChange={(k) => formSet(defaultSpec(k, track))}
       />
       <div class="field">
         <span class="field-label">Tracks</span>
@@ -1069,35 +1101,71 @@ export function ProgressionEditor(p: {
               { value: 'round', label: 'Each round' },
               { value: 'manual', label: 'Manual' },
             ]}
-            onChange={(v) => (v === 'bet' ? setPick(true) : setSpec({ ...spec, track: v }))}
+            onChange={(v) => (v === 'bet' ? setPick(true) : formSet({ ...spec, track: v }))}
           />
         </div>
         {typeof track === 'string' && track !== 'round' && track !== 'manual' ? (
           <p class="hint">Tracking {betLabel(p.env, track)}.</p>
         ) : null}
       </div>
-      {num('maxSteps', 'Maximum steps')}
-      {spec.kind === 'martingale' ||
-      spec.kind === 'grand-martingale' ||
-      spec.kind === 'paroli' ||
-      spec.kind === 'fibonacci' ||
-      spec.kind === 'dalembert' ||
-      spec.kind === 'oscars-grind' ? (
+      {fields.includes('maxSteps') ? (
+        <NumField
+          label={REQUIRED_STEPS.includes(kind) ? 'Maximum steps' : 'Maximum steps (0 = no limit)'}
+          integer
+          min={REQUIRED_STEPS.includes(kind) ? 1 : 0}
+          value={Number(spec.maxSteps ?? 0)}
+          onChange={(n) =>
+            setKey('maxSteps', n === 0 && !REQUIRED_STEPS.includes(kind) ? undefined : n)
+          }
+        />
+      ) : null}
+      {fields.includes('multiplier') ? (
+        <NumField
+          label="Multiplier (0 = default)"
+          min={0}
+          value={Number(spec.multiplier ?? 0)}
+          onChange={(n) => setKey('multiplier', n === 0 ? undefined : n)}
+        />
+      ) : null}
+      {fields.includes('back') ? (
+        <NumField
+          label="Steps back after a win (0 = default)"
+          integer
+          min={0}
+          value={Number(spec.back ?? 0)}
+          onChange={(n) => setKey('back', n === 0 ? undefined : n)}
+        />
+      ) : null}
+      {fields.includes('onCap') ? (
         <SelectField
           label="When the cap is reached"
           value={str(
-            spec.onCap ??
-              (spec.kind === 'martingale' || spec.kind === 'grand-martingale' ? 'reset' : 'stay'),
+            spec.onCap ?? (kind === 'martingale' || kind === 'grand-martingale' ? 'reset' : 'stay'),
           )}
           options={[
             { value: 'reset', label: 'reset' },
             { value: 'stay', label: 'stay at the cap' },
             { value: 'stop', label: 'stop the session' },
           ]}
-          onChange={(onCap) => setSpec({ ...spec, onCap })}
+          onChange={(onCap) => setKey('onCap', onCap)}
         />
       ) : null}
+      {kind !== 'sequence'
+        ? unitsField('base', 'Base amount (units, 0 = 1)', 'The first bet of each cycle.')
+        : null}
+      {unitsField(
+        'maxAmount',
+        'Cap on the bet (units, 0 = none)',
+        'A step above this counts as the cap.',
+      )}
+      {kind === 'labouchere' || kind === 'sequence' ? (
+        <p class="hint">
+          {kind === 'labouchere' ? 'The line' : 'The amounts and rules'} are edited in the JSON
+          below.
+        </p>
+      ) : null}
       <JsonField
+        key={rev}
         label="Full specification (JSON)"
         value={spec}
         rows={8}
@@ -1106,6 +1174,20 @@ export function ProgressionEditor(p: {
     </EditorSheet>
   );
 }
+
+const PROG_FIELDS: Record<string, string[]> = {
+  flat: [],
+  martingale: ['maxSteps', 'onCap', 'multiplier'],
+  'grand-martingale': ['maxSteps', 'onCap'],
+  fibonacci: ['maxSteps', 'back', 'onCap'],
+  dalembert: ['maxSteps', 'onCap'],
+  paroli: ['maxSteps', 'multiplier', 'onCap'],
+  '1-3-2-6': [],
+  'oscars-grind': ['maxSteps'],
+  labouchere: [],
+  sequence: [],
+};
+const REQUIRED_STEPS = ['martingale', 'grand-martingale'];
 
 function defaultSpec(kind: string, track: unknown): Obj {
   const t = track ?? 'red';

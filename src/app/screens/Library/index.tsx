@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { DefinitionRecord, StrategyRecord } from '@core/contracts/experiment';
 import type { RunMeta } from '@core/contracts/run';
 
+import { definitionId } from '@core';
 import { Button, Card, Chip, EmptyState, Field, Sheet, Tabs, TextInput, showToast } from '@core/ui';
 import { STRATEGY_PRESETS } from '@game/roulette';
 import { href, navigate } from '../../router';
@@ -12,7 +13,7 @@ import type { ScreenProps } from '../types';
 import {
   deleteDefinition,
   deleteStrategy,
-  isDryRun,
+  isDryRunId,
   libraryRepo,
   libraryVersion,
   saveDefinition,
@@ -61,9 +62,11 @@ export function Library({ query }: ScreenProps) {
         ]);
         if (!live) return;
         setStrategies(s);
-        const dryIds = new Set(d.filter((x) => isDryRun(x.definition)).map((x) => x.id));
-        setDefinitions(d.filter((x) => !dryIds.has(x.id)));
-        setRuns(r.filter((x) => !dryIds.has(x.definitionId)));
+        const dryDefs = new Set(
+          d.filter((x) => x.definition.name.startsWith('Dry run: ')).map((x) => x.id),
+        );
+        setDefinitions(d.filter((x) => !dryDefs.has(x.id)));
+        setRuns(r.filter((x) => !isDryRunId(x.runId)));
       } catch {
         if (live) {
           setStrategies([]);
@@ -107,15 +110,25 @@ export function Library({ query }: ScreenProps) {
   );
 
   const duplicateStrategy = async (s: StrategyRecord) => {
-    const id = `${s.id}-copy`.slice(0, 40);
-    const copy = { ...s.strategy, id, name: `Copy of ${s.strategy.name}`.slice(0, 80) };
-    await saveStrategy(copy);
-    showToast('Strategy duplicated');
+    const taken = new Set((strategies ?? []).map((x) => x.id));
+    const base = s.id.replace(/-copy(-\d+)?$/, '').slice(0, 33);
+    let n = 1;
+    let id = `${base}-copy`;
+    while (taken.has(id)) id = `${base}-copy-${++n}`;
+    const name = `Copy${n > 1 ? ` ${n}` : ''} of ${s.strategy.name}`.slice(0, 80);
+    await saveStrategy({ ...s.strategy, id, name });
+    showToast(`Strategy duplicated as ${name}`);
   };
   const duplicateDefinition = async (d: DefinitionRecord) => {
-    const copy = { ...d.definition, name: `Copy of ${d.definition.name}`.slice(0, 120) };
+    const taken = new Set((definitions ?? []).map((x) => x.id));
+    let n = 1;
+    let copy = { ...d.definition, name: `Copy of ${d.definition.name}`.slice(0, 120) };
+    while (taken.has(await definitionId(copy))) {
+      n++;
+      copy = { ...d.definition, name: `Copy ${n} of ${d.definition.name}`.slice(0, 120) };
+    }
     await saveDefinition(copy, { derivedFrom: d.id });
-    showToast('Definition duplicated');
+    showToast(`Definition duplicated as ${copy.name}`);
   };
   const confirmDelete = async () => {
     if (!pending) return;

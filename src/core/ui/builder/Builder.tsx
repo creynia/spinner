@@ -3,7 +3,7 @@
 import type { ComponentChildren } from 'preact';
 import { useMemo, useState } from 'preact/hooks';
 import type { Condition, Diagnostic, Effect, StrategyDefinition } from '../../contracts/strategy';
-import { Select, Toggle } from '../kit';
+import { Button, Select, Toggle } from '../kit';
 import { describeAmount, describeChip, describeEffect } from './describe';
 import {
   AmountEditor,
@@ -47,7 +47,8 @@ type Ed =
   | { t: 'effect'; si: number; list: 'then' | 'onEnter' | 'onExit'; ri: number; ei: number | 'new' }
   | { t: 'prog'; name: string | null }
   | { t: 'rule'; si: number; ri: number }
-  | { t: 'stage'; si: number };
+  | { t: 'stage'; si: number }
+  | { t: 'delstage'; si: number };
 
 const isRuleAt = (w: Where): w is { si: number; ri: number } => 'ri' in w;
 
@@ -119,24 +120,36 @@ function Tools(p: {
   onDelete: () => void;
 }) {
   const n = p.index + 1;
+  // After a move the list re-renders with the item at its new place: put focus back on its button.
+  const move = (to: number, dir: 'up' | 'down') => {
+    p.onMove(to);
+    setTimeout(() => {
+      const want = (d: string) =>
+        document.querySelector<HTMLButtonElement>(
+          `button[aria-label="Move ${p.noun} ${to + 1} ${d}"]`,
+        );
+      const first = want(dir);
+      (first && !first.disabled ? first : want(dir === 'up' ? 'down' : 'up'))?.focus();
+    }, 30);
+  };
   return (
     <span class="b-tools">
       <IconBtn
         label={`Move ${p.noun} ${n} up`}
         disabled={p.index === 0}
-        onClick={() => p.onMove(p.index - 1)}
+        onClick={() => move(p.index - 1, 'up')}
       >
-        {'↑'}
+        {'\u2191'}
       </IconBtn>
       <IconBtn
         label={`Move ${p.noun} ${n} down`}
         disabled={p.index === p.count - 1}
-        onClick={() => p.onMove(p.index + 1)}
+        onClick={() => move(p.index + 1, 'down')}
       >
-        {'↓'}
+        {'\u2193'}
       </IconBtn>
       <IconBtn label={`Delete ${p.noun} ${n}`} onClick={p.onDelete}>
-        {'×'}
+        {'\u00d7'}
       </IconBtn>
     </span>
   );
@@ -199,10 +212,14 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
   const model = useMemo(() => fromJson(value), [value]);
   const [ed, setEd] = useState<Ed | null>(null);
   const close = () => setEd(null);
-  const mutate = (fn: (m: BuilderModel) => void) => {
+  const mutate = (
+    fn: (m: BuilderModel) => void,
+    post?: (j: StrategyDefinition) => StrategyDefinition,
+  ) => {
     const m = structuredClone(model);
     fn(m);
-    onChange(toJson(m));
+    const json = toJson(m);
+    onChange(post ? post(json) : json);
   };
   const stageIds = model.stages.map((s) => s.id);
   const varNames = (model.vars ?? []).map((v) => v.name);
@@ -219,6 +236,9 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
 
   const stageCards = model.stages.map((s, si) => {
     const sp = `/stages/${si}`;
+    const hookDiags = diagnostics.some(
+      (d) => d.path.startsWith(`${sp}/onEnter`) || d.path.startsWith(`${sp}/onExit`),
+    );
     return (
       <li key={s.id} class="bstage" id={`b-stage-${si}`}>
         <section aria-labelledby={`stage-h-${si}`}>
@@ -236,7 +256,7 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
                 index={si}
                 count={model.stages.length}
                 onMove={(to) => mutate((m) => (m.stages = moveItem(m.stages, si, to)))}
-                onDelete={() => mutate((m) => m.stages.splice(si, 1))}
+                onDelete={() => setEd({ t: 'delstage', si })}
               />
             </span>
           </header>
@@ -426,7 +446,7 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
             Add rule
           </button>
 
-          <details class="bhooks">
+          <details class="bhooks" open={hookDiags ? true : undefined}>
             <summary>On enter and on exit</summary>
             {(['onEnter', 'onExit'] as const).map((list) => (
               <div class="brow" key={list}>
@@ -596,14 +616,19 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
             existing={progNames}
             onClose={close}
             onSave={(name, spec) => {
-              mutate((m) => {
-                m.progressions ??= [];
-                const i = m.progressions.findIndex((p) => p.name === ed.name);
-                if (i >= 0) {
-                  m.progressions[i] = { name, spec };
-                  if (name !== ed.name) renameProg(m, ed.name!, name);
-                } else m.progressions.push({ name, spec });
-              });
+              mutate(
+                (m) => {
+                  m.progressions ??= [];
+                  const i = m.progressions.findIndex((p) => p.name === ed.name);
+                  if (i >= 0) {
+                    m.progressions[i] = { name, spec };
+                  } else m.progressions.push({ name, spec });
+                },
+                (j) =>
+                  ed.name && name !== ed.name
+                    ? renameRefs(j, ['prog', 'progStep', 'progCaps'], ed.name, name)
+                    : j,
+              );
               close();
             }}
             onDelete={
@@ -633,6 +658,31 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
                 close();
               }}
             />
+          );
+        break;
+      }
+      case 'delstage': {
+        const s = model.stages[ed.si];
+        if (s)
+          sheet = (
+            <EditorSheet title="Delete this stage?" onClose={close}>
+              <p>
+                Delete stage <strong>{s.label ?? s.id}</strong> with its {s.layout.length} bets and{' '}
+                {s.rules.length} rules? Go-to effects that point at it will show an error.
+              </p>
+              <div class="ed-actions">
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    mutate((m) => m.stages.splice(ed.si, 1));
+                    close();
+                  }}
+                >
+                  Delete stage
+                </Button>
+                <Button onClick={close}>Cancel</Button>
+              </div>
+            </EditorSheet>
           );
         break;
       }
@@ -669,25 +719,14 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
         <TextField
           label="Strategy name"
           value={model.head.name}
-          onInput={(name) =>
-            mutate((m) => {
-              m.head.name = name;
-              m.head.id = freshSlug(
-                name
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, '-')
-                  .replace(/^-+|-+$/g, ''),
-                [],
-              );
-            })
-          }
+          onInput={(name) => mutate((m) => (m.head.name = name))}
         />
       </section>
 
       <section aria-labelledby="b-vars-h">
-        <h4 id="b-vars-h" class="bsec">
+        <h3 id="b-vars-h" class="bsec">
           Variables
-        </h4>
+        </h3>
         {(model.vars ?? []).length === 0 ? (
           <p class="muted">None. Variables remember numbers between rounds.</p>
         ) : null}
@@ -697,7 +736,13 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
               <TextField
                 label={`Variable ${i + 1} name`}
                 value={v.name}
-                onInput={(name) => mutate((m) => (m.vars![i]!.name = name))}
+                onInput={(name) => {
+                  const old = v.name;
+                  mutate(
+                    (m) => (m.vars![i]!.name = name),
+                    (j) => renameRefs(j, ['set', 'inc', 'var'], old, name),
+                  );
+                }}
               />
               <NumField
                 label={`Variable ${i + 1} starts at`}
@@ -739,9 +784,9 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
       </section>
 
       <section aria-labelledby="b-prog-h">
-        <h4 id="b-prog-h" class="bsec">
+        <h3 id="b-prog-h" class="bsec">
           Progressions
-        </h4>
+        </h3>
         {(model.progressions ?? []).length === 0 ? (
           <p class="muted">
             None. A progression sizes a bet after wins and losses (Martingale, Fibonacci...).
@@ -781,23 +826,30 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
   );
 }
 
-function renameProg(m: BuilderModel, from: string, to: string): void {
+/** Rewrites references (`{ prog: x }`, `{ set: v }`, ...) to a renamed progression or variable. */
+function renameRefs(
+  def: StrategyDefinition,
+  keys: string[],
+  from: string,
+  to: string,
+): StrategyDefinition {
   const walk = (x: unknown): unknown => {
     if (Array.isArray(x)) return x.map(walk);
     if (x && typeof x === 'object') {
-      const o = x as Record<string, unknown>;
       const out: Record<string, unknown> = {};
-      for (const k of Object.keys(o)) {
-        const v = o[k];
-        out[k] =
-          (k === 'prog' || k === 'progStep' || k === 'progCaps') && v === from ? to : walk(v);
+      for (const [k, v] of Object.entries(x as Record<string, unknown>)) {
+        out[k] = keys.includes(k) && v === from ? to : walk(v);
       }
       return out;
     }
     return x;
   };
-  const m2 = walk(JSON.parse(JSON.stringify({ s: m.stages }))) as { s: BuilderModel['stages'] };
-  m.stages = m2.s;
+  const d = def as unknown as Record<string, unknown>;
+  return {
+    ...d,
+    stages: walk(d.stages),
+    ...(d.progressions ? { progressions: walk(d.progressions) } : {}),
+  } as unknown as StrategyDefinition;
 }
 
 function RuleOptions(p: { rule: RuleRow; onClose: () => void; onSave: (r: RuleRow) => void }) {

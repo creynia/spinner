@@ -158,3 +158,12 @@
     grid-column: 2;
   }
 }
+
+.define-limits summary::before {
+  content: '\25b8';
+  display: inline-block;
+  width: 1.2em;
+}
+.define-limits[open] summary::before {
+  content: '\25be';
+}

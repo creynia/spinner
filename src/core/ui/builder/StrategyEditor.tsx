@@ -55,7 +55,8 @@ export function StrategyEditor(p: StrategyEditorProps) {
       />
       {blockers.length > 0 ? (
         <p class="b-err-note" role="status">
-          The builder is unavailable until the JSON has the right shape ({blockers[0]!.message}).
+          The builder is unavailable until the JSON matches the strategy format:{' '}
+          {blockers[0]!.message} (at {blockers[0]!.path || '/'}). Fix it in the JSON tab.
         </p>
       ) : null}
       {showJson ? (

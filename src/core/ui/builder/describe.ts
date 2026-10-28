@@ -49,8 +49,28 @@ function valueText(ref: string, v: unknown, env: BuilderEnv): string {
   return str(v);
 }
 
-export function describeExpr(e: unknown, env: BuilderEnv): string {
-  if (typeof e === 'number') return money(e);
+/** True when an expression is a money amount (so a literal beside it is dollars, not a count). */
+export function isMoneyExpr(e: unknown, env: BuilderEnv): boolean {
+  if (typeof e === 'string') {
+    const f = factByName(env, e.split(':')[0]!);
+    return f?.value.type === 'number' && f.value.unit === 'money';
+  }
+  if (!isObj(e)) return false;
+  if ('fact' in e) return isMoneyExpr(e.fact, env);
+  return [
+    'units',
+    'pctOfBankroll',
+    'prog',
+    'amountOn',
+    'lastAmount',
+    'lastProfit',
+    'tableMin',
+    'tableMax',
+  ].some((k) => k in e);
+}
+
+export function describeExpr(e: unknown, env: BuilderEnv, asMoney = true): string {
+  if (typeof e === 'number') return asMoney ? money(e) : e.toLocaleString('en-US');
   if (typeof e === 'string') return factText(e, env);
   if (!isObj(e)) return str(e);
   if ('units' in e) return `${str(e.units)} unit${e.units === 1 ? '' : 's'}`;
@@ -108,7 +128,8 @@ export function describeCondition(c: unknown, env: BuilderEnv): string {
   if (c.always === true) return 'always';
   if (Array.isArray(c.cmp)) {
     const [l, op, r] = c.cmp as unknown[];
-    return `${describeExpr(l, env)} ${OP_TEXT[str(op)] ?? str(op)} ${describeExpr(r, env)}`;
+    const m = isMoneyExpr(l, env) || isMoneyExpr(r, env);
+    return `${describeExpr(l, env, m)} ${OP_TEXT[str(op)] ?? str(op)} ${describeExpr(r, env, m)}`;
   }
   if (Array.isArray(c.fact)) {
     const [ref, op, v] = c.fact as [string, string, unknown];
@@ -173,9 +194,9 @@ export function describeEffect(e: unknown, env: BuilderEnv): string {
   if (typeof e.remove === 'string') return `remove ${betLabel(env, e.remove)}`;
   if (typeof e.press === 'string')
     return `press ${betLabel(env, e.press)} by ${describeExpr(e.by, env)}${e.cap !== undefined ? ` (cap ${describeExpr(e.cap, env)})` : ''}`;
-  if (typeof e.set === 'string') return `set ${e.set} to ${describeExpr(e.to, env)}`;
+  if (typeof e.set === 'string') return `set ${e.set} to ${describeExpr(e.to, env, false)}`;
   if (typeof e.inc === 'string')
-    return `add ${e.by === undefined ? '1' : describeExpr(e.by, env)} to ${e.inc}`;
+    return `add ${e.by === undefined ? '1' : describeExpr(e.by, env, false)} to ${e.inc}`;
   if (typeof e.prog === 'string') {
     const verb: Record<string, string> = {
       win: 'count a win on',

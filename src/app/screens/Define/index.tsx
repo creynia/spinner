@@ -1,6 +1,6 @@
 // Define (architecture.md §6.3): four cards (Game & rules, Strategy, Session, Run), the strategy
 // builder, a validation panel, and the Quick check / Dry run / Run actions.
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import type { Json } from '@core/contracts/experiment';
 import type { Diagnostic, StrategyDefinition } from '@core/contracts/strategy';
@@ -128,13 +128,20 @@ function duration(seconds: number): string {
   return `about ${(seconds / 3600).toFixed(1)} h`;
 }
 
-function DiagList(p: { diags: readonly Diagnostic[]; onJump: (d: Diagnostic) => void }) {
+function DiagList(p: {
+  diags: readonly Diagnostic[];
+  onJump: (d: Diagnostic) => void;
+  rounds: number;
+}) {
   if (p.diags.length === 0) return <p class="muted">Nothing to fix.</p>;
   return (
     <ul class="define-diags" aria-label="Validation messages">
       {p.diags.map((d, i) => (
         <li key={i} class={`define-diag define-diag--${d.severity}`}>
-          <span class="b-sev">{d.severity === 'error' ? 'Error' : 'Warning'}</span> {d.message}{' '}
+          <span class="b-sev">{d.severity === 'error' ? 'Error' : 'Warning'}</span>{' '}
+          {d.code === 'W_NO_EXIT'
+            ? `This strategy never stops early. Add a stop rule, or set Stop when ahead or Stop when behind in Session; otherwise every session plays all ${fmt(p.rounds)} spins.`
+            : d.message}{' '}
           <code class="b-code">{d.code}</code> <code class="b-code">{d.path || '/'}</code>
           <button type="button" class="btn btn-ghost" onClick={() => p.onJump(d)}>
             Jump to
@@ -310,7 +317,7 @@ function OptionalMoney(p: {
 }) {
   const on = p.value !== undefined;
   return (
-    <div class="define-opt">
+    <div class="define-opt" id={`define-${p.id}-wrap`}>
       <Toggle
         label={p.label}
         checked={on}
@@ -331,25 +338,51 @@ function NumInput(p: {
   min: number;
   max: number;
   onChange: (n: number) => void;
-  step?: string;
   decimal?: boolean;
 }) {
+  const [text, setText] = useState(String(p.value));
+  const [bad, setBad] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    // Follow outside changes (hours <-> spins), but never rewrite what the person is typing.
+    if (document.activeElement !== ref.current && Number(text) !== p.value) {
+      setText(String(p.value));
+      setBad(false);
+    }
+  }, [p.value]);
+  const errId = `${p.id}-err`;
   return (
-    <input
-      class="input"
-      id={p.id}
-      type="number"
-      min={p.min}
-      max={p.max}
-      step={p.step}
-      inputMode={p.decimal ? 'decimal' : 'numeric'}
-      value={p.value}
-      onInput={(e) => {
-        const raw = Number(e.currentTarget.value);
-        const n = p.decimal ? raw : Math.round(raw);
-        if (Number.isFinite(n) && n >= p.min && n <= p.max) p.onChange(n);
-      }}
-    />
+    <>
+      <input
+        ref={ref}
+        class="input"
+        id={p.id}
+        type="text"
+        inputMode={p.decimal ? 'decimal' : 'numeric'}
+        autoComplete="off"
+        value={text}
+        aria-invalid={bad ? 'true' : undefined}
+        aria-describedby={bad ? errId : undefined}
+        onInput={(e) => {
+          const t = e.currentTarget.value;
+          setText(t);
+          const raw = t.trim() === '' ? NaN : Number(t);
+          const n = p.decimal ? raw : Math.round(raw);
+          const ok =
+            Number.isFinite(raw) &&
+            (p.decimal || Number.isInteger(raw)) &&
+            n >= p.min &&
+            n <= p.max;
+          setBad(!ok);
+          if (ok) p.onChange(n);
+        }}
+      />
+      {bad ? (
+        <p class="error" id={errId} role="alert">
+          Enter {p.decimal ? 'a number' : 'a whole number'} from {fmt(p.min)} to {fmt(p.max)}.
+        </p>
+      ) : null}
+    </>
   );
 }
 
@@ -471,7 +504,12 @@ export function Define({ params, query }: ScreenProps) {
           setDoc((cur) => docWithStrategy(cur, s, { kind: 'preset', id: preset }));
         }
       } catch (e) {
-        if (live) setLoadError(e instanceof Error ? e.message : 'Could not load that definition.');
+        if (live)
+          setLoadError(
+            e instanceof Error
+              ? `Not a valid link: ${e.message}.`
+              : 'Could not load that definition.',
+          );
       }
     })();
     return () => {
@@ -498,8 +536,14 @@ export function Define({ params, query }: ScreenProps) {
     [rules, unit],
   );
 
-  const setStrategy = (s: unknown) => {
-    const sname = (s as { name?: unknown } | null)?.name;
+  const setStrategy = (next: unknown) => {
+    let s = next;
+    const o = next as { id?: unknown; name?: unknown } | null;
+    const sname = o?.name;
+    // The first edit of a preset makes it a different strategy: new id, once.
+    if (doc.source.kind === 'preset' && o && typeof o === 'object' && o.id === doc.source.id) {
+      s = { ...o, id: `${doc.source.id}-edit`.slice(0, 40) };
+    }
     patch({
       strategy: s,
       name: doc.source.kind === 'preset' && typeof sname === 'string' ? sname : doc.name,
@@ -532,19 +576,28 @@ export function Define({ params, query }: ScreenProps) {
       ),
     });
   };
-  const paceKind = rules?.pace.label ?? 'live';
+  const [customPace, setCustomPace] = useState(false);
+  const paceKind = customPace ? 'custom' : (rules?.pace.label ?? 'live');
 
   // ---- actions
   const hasErrors = analysis.errorCount > 0;
   const jump = (d: Diagnostic) => {
     setSheet(null);
-    const card = cardOf(d.path);
-    const target = card === 'strategy' ? pathToElementId(d.path) : `define-${card}`;
+    const card = d.code === 'W_NO_EXIT' ? 'session' : cardOf(d.path);
+    const target =
+      d.code === 'W_NO_EXIT'
+        ? 'define-stop-win-wrap'
+        : card === 'strategy'
+          ? pathToElementId(d.path)
+          : `define-${card}`;
     setOpen((o) => ({ ...o, [card]: true }));
     setTimeout(() => {
       const el = document.getElementById(target) ?? document.getElementById(`define-${card}`);
       el?.scrollIntoView({ block: 'center', behavior: 'auto' });
-      el?.querySelector<HTMLElement>('button, input, select')?.focus({ preventScroll: true });
+      const chip = el?.querySelector<HTMLElement>('.bchip--err');
+      (chip ?? el?.querySelector<HTMLElement>('button, input, select'))?.focus({
+        preventScroll: true,
+      });
     }, 50);
   };
 
@@ -647,7 +700,7 @@ export function Define({ params, query }: ScreenProps) {
       );
       setSheet(null);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'That is not a definition link.');
+      setLoadError(e instanceof Error ? `Not a valid link: ${e.message}.` : 'Not a valid link.');
       setSheet(null);
     }
   };
@@ -737,9 +790,10 @@ export function Define({ params, query }: ScreenProps) {
                 { value: 'custom', label: 'Custom' },
               ]}
               onChange={(k) => {
+                setCustomPace(k === 'custom');
                 if (k === 'live') setOv(['pace'], undefined);
                 else if (k === 'electronic') setOv(['pace', 'roundsPerHour'], 100);
-                else setOv(['pace', 'roundsPerHour'], rph === 40 || rph === 100 ? 60 : rph);
+                else if (rph === 40 || rph === 100) setOv(['pace', 'roundsPerHour'], 60);
               }}
             />
           </div>
@@ -754,7 +808,7 @@ export function Define({ params, query }: ScreenProps) {
               />
             </Field>
           ) : null}
-          <details class="define-limits">
+          <details class="define-limits" open={wide ? true : undefined}>
             <summary>Table limits</summary>
             {rules ? (
               <>
@@ -782,12 +836,31 @@ export function Define({ params, query }: ScreenProps) {
                   cents={rules.limits.inside.minTotal}
                   onCents={(c) => setOv(['limits', 'inside', 'minTotal'], c)}
                 />
-                <LimitField
-                  id="lim-str"
-                  label="Straight-up, maximum"
-                  cents={rules.limits.inside.max.straight ?? 0}
-                  onCents={(c) => setOv(['limits', 'inside', 'max', 'straight'], c)}
-                />
+                {(
+                  [
+                    ['straight', 'Straight-up, maximum', ['straight']],
+                    ['split', 'Split, maximum', ['split']],
+                    ['street', 'Street and trio, maximum', ['street', 'trio']],
+                    ['corner', 'Corner, maximum', ['corner']],
+                    ['sixline', 'Six-line, maximum', ['sixline']],
+                    ['basket', 'Basket (top line), maximum', ['basket']],
+                  ] as const
+                ).map(([key, label, keys]) => (
+                  <LimitField
+                    key={key}
+                    id={`lim-${key}`}
+                    label={label}
+                    cents={rules.limits.inside.max[key] ?? 0}
+                    onCents={(c) =>
+                      patch({
+                        overrides: keys.reduce(
+                          (o, k) => setOverride(o, ['limits', 'inside', 'max', k], c),
+                          doc.overrides,
+                        ),
+                      })
+                    }
+                  />
+                ))}
               </>
             ) : null}
           </details>
@@ -865,16 +938,14 @@ export function Define({ params, query }: ScreenProps) {
               />
             </Field>
             <Field label={`Hours at ${rph} spins/h`} id="hours">
-              <input
-                class="input"
+              <NumInput
                 id="hours"
-                type="number"
+                decimal
                 min={0.01}
-                step="any"
-                inputMode="decimal"
+                max={100000 / rph}
                 value={Number(hours.toFixed(2))}
-                onInput={(e) => {
-                  const n = Math.round(Number(e.currentTarget.value) * rph);
+                onChange={(h) => {
+                  const n = Math.round(h * rph);
                   if (n >= 1 && n <= 100000) patch({ maxRounds: n });
                 }}
               />
@@ -965,7 +1036,7 @@ export function Define({ params, query }: ScreenProps) {
               <p class="muted">
                 {errCount === 0 ? 'No errors.' : `${errCount} to fix before you can run.`}
               </p>
-              <DiagList diags={allDiags} onJump={jump} />
+              <DiagList diags={allDiags} onJump={jump} rounds={doc.maxRounds} />
             </Card>
           </div>
         ) : null}
@@ -1015,7 +1086,7 @@ export function Define({ params, query }: ScreenProps) {
 
       {sheet === 'diags' ? (
         <Sheet open title="Validation" onClose={() => setSheet(null)}>
-          <DiagList diags={allDiags} onJump={jump} />
+          <DiagList diags={allDiags} onJump={jump} rounds={doc.maxRounds} />
         </Sheet>
       ) : null}
       {sheet === 'preset' ? (

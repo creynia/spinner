@@ -143,3 +143,98 @@ describe('share links', () => {
     );
   });
 });
+
+describe('review fixes', () => {
+  it('Custom pace stays selected when the typed value equals a preset', async () => {
+    const { container } = mount();
+    const toggle = screen.queryByRole('button', { name: /Game & rules/ });
+    if (toggle) fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+    const field = await waitFor(() => container.querySelector<HTMLInputElement>('#pace-custom')!);
+    expect(field).toBeTruthy();
+    fireEvent.input(field, { target: { value: '100' } });
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'Custom' }).getAttribute('aria-checked')).toBe(
+        'true',
+      ),
+    );
+    expect(container.querySelector('#pace-custom')).not.toBeNull();
+  });
+
+  it('table limits list every per-bet maximum', () => {
+    const { container } = mount();
+    const toggle = screen.queryByRole('button', { name: /Game & rules/ });
+    if (toggle) fireEvent.click(toggle);
+    for (const id of [
+      'lim-omin',
+      'lim-omax',
+      'lim-imin',
+      'lim-itot',
+      'lim-straight',
+      'lim-split',
+      'lim-street',
+      'lim-corner',
+      'lim-sixline',
+      'lim-basket',
+    ]) {
+      expect(container.querySelector(`#${id}`), id).not.toBeNull();
+    }
+  });
+
+  it('the no-exit warning is worded for people and jumps to Stop when ahead', async () => {
+    const { container } = mount();
+    const badge = screen.getByRole('button', { name: /Validation/ });
+    fireEvent.click(badge);
+    // wide screens show the panel inline, phones a sheet
+    const dlg = await waitFor(
+      () => container.querySelector<HTMLElement>('.define-panel') ?? screen.getByRole('dialog'),
+    );
+    expect(dlg.textContent).toContain('This strategy never stops early');
+    expect(dlg.textContent).toContain('all 500 spins');
+    fireEvent.click(dlg.querySelector('.define-diag button')!);
+    await waitFor(() => expect(container.querySelector('#define-stop-win-wrap')).not.toBeNull());
+  });
+
+  it('the first edit of a preset gives the strategy a new id, once', async () => {
+    const { container } = mount('preset=flat-red');
+    await waitFor(() =>
+      expect(container.querySelector<HTMLInputElement>('#exp-name')!.value).toMatch(/Flat/),
+    );
+    fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
+    const area = screen.getByLabelText<HTMLTextAreaElement>('Strategy JSON');
+    const doc = JSON.parse(area.value) as { id: string; name: string };
+    fireEvent.input(area, { target: { value: JSON.stringify({ ...doc, name: 'Mine' }) } });
+    await waitFor(() =>
+      expect(
+        (
+          JSON.parse(screen.getByLabelText<HTMLTextAreaElement>('Strategy JSON').value) as {
+            id: string;
+          }
+        ).id,
+      ).toBe('flat-red-edit'),
+    );
+    fireEvent.input(screen.getByLabelText<HTMLTextAreaElement>('Strategy JSON'), {
+      target: { value: JSON.stringify({ ...doc, id: 'flat-red-edit', name: 'Mine 2' }) },
+    });
+    expect(
+      (
+        JSON.parse(screen.getByLabelText<HTMLTextAreaElement>('Strategy JSON').value) as {
+          id: string;
+        }
+      ).id,
+    ).toBe('flat-red-edit');
+  });
+
+  it('out-of-range numbers show an inline error instead of being ignored', async () => {
+    const { container } = mount();
+    const toggle = screen.queryByRole('button', { name: /Run$/ });
+    if (toggle && toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
+    fireEvent.input(container.querySelector('#sessions')!, { target: { value: '0' } });
+    await waitFor(() => expect(container.querySelector('#sessions-err')).not.toBeNull());
+  });
+
+  it('a garbage link says it is not a valid link', async () => {
+    mount('d=!!!!');
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/Not a valid link/));
+  });
+});

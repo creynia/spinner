@@ -168,8 +168,7 @@ async function localQuickCheck(d: NormalizedDefinition, sessions: number): Promi
 
 let installed = false;
 /**
- * services/quickCheck holds the runner; until ui-results/app-shell wires its own, Define installs the
- * pool-backed one on first use. TODO(main): drop this when services/quickCheck ships a real runner.
+ * services/quickCheck holds the runner; Define installs the pool-backed one when the screen loads.
  */
 export function installQuickCheck(): void {
   if (installed) return;
@@ -179,17 +178,68 @@ export function installQuickCheck(): void {
 
 // ------------------------------------------------------------------ dry run
 
-/** Dry runs are transient: tagged, one slot (the previous dry run is deleted), hidden in the Library. */
-export const DRY_RUN_TAG = 'dry-run';
-export const isDryRun = (d: { tags?: string[] }): boolean => d.tags?.includes(DRY_RUN_TAG) === true;
+/**
+ * Dry runs are transient: the run id is remembered (module variable mirrored in localStorage), the
+ * previous dry run is deleted when a new one starts, and the Library hides them by run id. Nothing
+ * is ever matched by definition id (runs started without keys share an empty one).
+ */
+const DRY_KEY = 'spinner:dry-runs';
+let dryIds: string[] | null = null;
 
-export async function purgeDryRuns(): Promise<void> {
-  const repo = await libraryRepo();
-  for (const rec of await repo.listDefinitions()) {
-    if (!isDryRun(rec.definition)) continue;
-    for (const r of await repo.listRunsOfDefinition(rec.id)) await repo.deleteRun(r.runId);
-    await repo.backend.tx(['definitions'], 'readwrite', (t) => t.delete('definitions', rec.id));
+function readDry(): string[] {
+  if (dryIds) return dryIds;
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(DRY_KEY) ?? '[]');
+    dryIds = Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === 'string' && x !== '')
+      : [];
+  } catch {
+    dryIds = [];
   }
+  return dryIds;
+}
+function writeDry(ids: string[]): void {
+  dryIds = ids;
+  try {
+    localStorage.setItem(DRY_KEY, JSON.stringify(ids));
+  } catch {
+    // storage unavailable: the module variable still holds it for this page view
+  }
+}
+
+export const isDryRunId = (runId: string): boolean => runId !== '' && readDry().includes(runId);
+export function markDryRun(runId: string): void {
+  if (runId !== '' && !readDry().includes(runId)) writeDry([...readDry(), runId]);
+}
+
+/** Deletes the remembered dry runs (only those run ids) and their own definition records. */
+export async function purgeDryRuns(): Promise<void> {
+  const ids = readDry();
+  if (ids.length === 0) return;
+  const repo = await libraryRepo();
+  for (const runId of ids) {
+    try {
+      const meta = await repo.getRun(runId);
+      await repo.deleteRun(runId);
+      const defId = meta?.definitionId;
+      if (defId) {
+        const rec = await repo.getDefinition(defId);
+        if (
+          rec &&
+          rec.runIds.length === 0 &&
+          (await repo.listRunsOfDefinition(defId)).length === 0 &&
+          rec.definition.name.startsWith('Dry run: ')
+        ) {
+          await repo.backend.tx(['definitions'], 'readwrite', (t) =>
+            t.delete('definitions', defId),
+          );
+        }
+      }
+    } catch {
+      // already gone
+    }
+  }
+  writeDry([]);
   touch();
 }
 
@@ -199,11 +249,10 @@ export async function startDryRun(d: NormalizedDefinition): Promise<string> {
   const dry: NormalizedDefinition = {
     ...d,
     name: `Dry run: ${d.name}`,
-    tags: [...new Set([...(d.tags ?? []), DRY_RUN_TAG])].sort(),
     run: { ...d.run, sessions: 1, sampleSessions: 1 },
   };
-  await saveDefinition(dry, { derivedFrom: await definitionId(d) });
   const runId = await startRun(dry);
+  markDryRun(runId);
   await new Promise<void>((resolve) => {
     let off = (): void => undefined;
     const timer = setTimeout(() => {

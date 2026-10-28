@@ -68,4 +68,18 @@ describe('Library', () => {
       expect(document.querySelector('a[href="#/define?preset=flat-red"]')).not.toBeNull(),
     );
   });
+
+  it('duplicating twice makes two distinct copies', async () => {
+    await (await import('../Define/data')).libraryRepo();
+    await saveStrategy(strategy('gamma'));
+    render(<Library params={{}} query={new URLSearchParams()} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Duplicate Strategy gamma' }));
+    const saved = () =>
+      screen.getByRole('list', { name: 'Saved strategies' }).querySelectorAll('li');
+    const before = saved().length;
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate Strategy gamma' }));
+    await waitFor(() => expect(saved().length).toBe(before + 1));
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate Strategy gamma' }));
+    await waitFor(() => expect(saved().length).toBe(before + 2));
+  });
 });
