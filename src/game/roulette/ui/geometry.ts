@@ -1,5 +1,6 @@
 // Table geometry as data (game.md §12.1): rectangles for every pocket and outside box, anchors for
 // chips and hot zones for fine pointers. Pure: no DOM, no Preact.
+import { fixedBetIds } from '../bets';
 import { pocketRank } from '../pockets';
 import type { WheelKind } from '../types';
 
@@ -316,4 +317,252 @@ export function labelBox(b: Board, id: string): Rect | null {
   if (box) return textBox(center(box.rect), box.text, FONT_OUT, isRotated(b, box.rect));
   const r = b.pockets.get(id.replace('straight:', ''));
   return r ? textBox(center(r), id.replace('straight:', ''), FONT_NUM, false) : null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tap-to-place hit testing (layouts.md §4.4). Pure functions of a `Board` and a point in board
+// units; the ChipBoard (L3b) turns client coordinates into board units with `toBoard`.
+// ---------------------------------------------------------------------------------------------
+
+/** Auto mode: a tap this close (board units) to a cell edge also takes in the pocket across it. */
+export const EDGE_BAND = 10;
+
+/** Bet-type lock families (the lock row): corner covers corner, trio and basket; line is six line. */
+export const LOCK_FAMILIES = ['straight', 'split', 'street', 'corner', 'line'] as const;
+export type LockFamily = (typeof LOCK_FAMILIES)[number];
+
+/** The parts of a `DOMRect` that `toBoard` reads. */
+export interface ClientRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Client coordinates to board units. The viewBox is offset (`view.x/y`, the zero-side margin), so
+ * the offset is part of the formula; the SVG's CSS box keeps the viewBox aspect, so it is exact.
+ */
+export function toBoard(rect: ClientRect, view: Rect, clientX: number, clientY: number): Point {
+  return {
+    x: view.x + ((clientX - rect.left) * view.w) / rect.width,
+    y: view.y + ((clientY - rect.top) * view.h) / rect.height,
+  };
+}
+
+const within = (r: Rect, p: Point): boolean =>
+  p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
+
+interface Index {
+  /** Pocket label list in a stable order. */
+  labels: string[];
+  /** Sorted pocket labels joined by "-" -> the unique inside bet with exactly that set. */
+  bySet: Map<string, string>;
+  /** Fixed inside bet ids by lock family, with their pocket sets and anchors. */
+  byFamily: Map<LockFamily, { id: string; pockets: string[]; anchor: Point }[]>;
+  /** Bounding box of every pocket. */
+  table: Rect;
+}
+const indexCache = new Map<Board, Index>();
+const setKey = (labels: Iterable<string>): string =>
+  [...new Set(labels)].sort((a, b) => pocketRank(a) - pocketRank(b)).join('-');
+
+function lockFamilyOf(id: string): LockFamily | null {
+  const head = id.split(':')[0];
+  if (id === 'basket') return 'corner';
+  switch (head) {
+    case 'straight':
+    case 'split':
+    case 'street':
+      return head;
+    case 'trio':
+    case 'corner':
+      return 'corner';
+    case 'sixline':
+      return 'line';
+    default:
+      return null;
+  }
+}
+
+function indexOf(b: Board): Index {
+  const hit = indexCache.get(b);
+  if (hit) return hit;
+  const bySet = new Map<string, string>();
+  const byFamily = new Map<LockFamily, { id: string; pockets: string[]; anchor: Point }[]>();
+  for (const f of LOCK_FAMILIES) byFamily.set(f, []);
+  for (const id of fixedBetIds(b.wheel)) {
+    const fam = lockFamilyOf(id);
+    if (!fam) continue;
+    const pockets = idPockets(id, b.wheel);
+    const anchor = anchorOf(b, id);
+    if (!anchor) continue;
+    bySet.set(setKey(pockets), id);
+    byFamily.get(fam)!.push({ id, pockets, anchor });
+  }
+  const table = bbox([...b.pockets.values()]);
+  const idx: Index = { labels: [...b.pockets.keys()], bySet, byFamily, table };
+  indexCache.set(b, idx);
+  return idx;
+}
+
+function pocketAt(b: Board, p: Point): string | null {
+  for (const [label, r] of b.pockets) if (within(r, p)) return label;
+  return null;
+}
+
+function outsideAt(b: Board, p: Point): string | null {
+  for (const o of b.outside) if (within(o.rect, p)) return o.id;
+  return null;
+}
+
+/** Which pad strip a point is in: the zero-side margin, or portrait's right (street) margin. */
+function padOf(b: Board, p: Point, t: Rect): 'zero' | 'edge' | null {
+  if (!within(b.view, p)) return null;
+  if (b.orientation === 'portrait') {
+    if (p.y < t.y && p.x >= t.x && p.x < t.x + t.w) return 'zero';
+    if (p.x >= t.x + t.w && p.y >= b.basket.y && p.y < t.y + t.h) return 'edge';
+  } else if (p.x < t.x && p.y >= t.y && p.y < t.y + t.h) return 'zero';
+  return null;
+}
+
+const clampInto = (r: Rect, p: Point): Point => ({
+  x: Math.min(Math.max(p.x, r.x), r.x + r.w - 1e-6),
+  y: Math.min(Math.max(p.y, r.y), r.y + r.h - 1e-6),
+});
+
+interface Resolved {
+  /** A bet id already decided (outside box, or the 0-00-000 trio in the zero margin). */
+  direct?: string;
+  /** Otherwise the point inside the table (clamped out of a margin) and its pocket. */
+  p?: Point;
+  cell?: string;
+}
+
+function resolve(b: Board, point: Point, lock: boolean): Resolved | null {
+  const out = outsideAt(b, point);
+  if (out) return { direct: out };
+  const idx = indexOf(b);
+  const cell = pocketAt(b, point);
+  if (cell) return { p: point, cell };
+  const pad = padOf(b, point, idx.table);
+  if (!pad) return null;
+  if (pad === 'zero' && b.wheel === 'triple-zero' && !lock) return { direct: 'trio:0-00-000' };
+  const p = clampInto(idx.table, point);
+  const c = pocketAt(b, p);
+  return c ? { p, cell: c } : null;
+}
+
+const rowOf = (n: number): number => Math.ceil(n / 3);
+const isNumber = (label: string): boolean => /^[1-9]\d*$/.test(label);
+
+/**
+ * The bet a tap means in Auto mode (layouts.md §4.4): the unique legal bet whose pocket set is the
+ * set of pockets within `EDGE_BAND` of the point. Returns an outside box's id for a point inside it,
+ * the straight when no legal bet has the tapped set, and null off the table.
+ */
+export function betAt(b: Board, point: Point): string | null {
+  const r = resolve(b, point, false);
+  if (!r) return null;
+  if (r.direct) return r.direct;
+  const { p, cell } = r as Required<Pick<Resolved, 'p' | 'cell'>>;
+  const idx = indexOf(b);
+  // Special case: the basket corner (zero row meets number 1 on its dozen side).
+  if (Math.abs(p.x - b.basket.x) <= EDGE_BAND && Math.abs(p.y - b.basket.y) <= EDGE_BAND)
+    return 'basket';
+  // The outer (street) edge: the whole row, and the next row too near a row boundary.
+  if (isNumber(cell)) {
+    const near =
+      b.orientation === 'portrait' ? b.edge - p.x <= EDGE_BAND : b.edge - p.y <= EDGE_BAND;
+    if (near) {
+      const rows = new Set<number>();
+      for (const dx of [-EDGE_BAND, 0, EDGE_BAND])
+        for (const dy of [-EDGE_BAND, 0, EDGE_BAND]) {
+          const c = pocketAt(b, { x: p.x + dx, y: p.y + dy });
+          if (c && isNumber(c)) rows.add(rowOf(Number(c)));
+        }
+      const labels: string[] = [];
+      for (const row of rows) for (let k = 0; k < 3; k++) labels.push(String(row * 3 - 2 + k));
+      const bet = idx.bySet.get(setKey(labels));
+      if (bet) return bet;
+    }
+  }
+  const tapped = new Set<string>();
+  for (const dx of [-EDGE_BAND, 0, EDGE_BAND])
+    for (const dy of [-EDGE_BAND, 0, EDGE_BAND]) {
+      const c = pocketAt(b, { x: p.x + dx, y: p.y + dy });
+      if (c) tapped.add(c);
+    }
+  return idx.bySet.get(setKey(tapped)) ?? `straight:${cell}`;
+}
+
+/**
+ * The bet a tap means when a family is locked: among the family's bets that contain the tapped
+ * pocket, the one whose anchor is nearest the point. An outside box's id inside a box (outside
+ * boxes are always direct); null off the table, and for a family with no bet on that pocket (a
+ * street or line on a zero cell).
+ */
+export function betNearest(b: Board, point: Point, family: LockFamily): string | null {
+  const r = resolve(b, point, true);
+  if (!r) return null;
+  if (r.direct) return r.direct;
+  const { p, cell } = r as Required<Pick<Resolved, 'p' | 'cell'>>;
+  let best: string | null = null;
+  let bestD = Infinity;
+  for (const c of indexOf(b).byFamily.get(family)!) {
+    if (!c.pockets.includes(cell)) continue;
+    const d = (c.anchor.x - p.x) ** 2 + (c.anchor.y - p.y) ** 2;
+    if (d < bestD - 1e-9) {
+      best = c.id;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+export interface Size {
+  w: number;
+  h: number;
+}
+export interface ZoneSizes {
+  /** Auto mode, an interior number cell, in CSS px. */
+  auto: {
+    straight: Size;
+    /** A split on a vertical line between left and right neighbours. */
+    splitOnVerticalLine: Size;
+    splitOnHorizontalLine: Size;
+    corner: Size;
+    /** The outer-edge band (street), and the outer corner (six line). */
+    street: Size;
+    sixline: Size;
+  };
+  /** Lock mode, an interior number cell: bounding boxes of the pieces the cell divides into. */
+  lock: { cell: Size; splitTriangleBase: Size; cornerQuadrant: Size; lineHalf: Size };
+}
+
+/** Tap-zone sizes in CSS px when the SVG is `cssWidth` wide (an interior number cell). */
+export function zoneSizes(b: Board, cssWidth: number): ZoneSizes {
+  const s = cssWidth / b.view.w;
+  const cell = b.pockets.get('5')!;
+  const e = EDGE_BAND;
+  const px = (w: number, h: number): Size => ({ w: w * s, h: h * s });
+  const portrait = b.orientation === 'portrait';
+  // The street band reaches into the margin right of the edge in portrait only.
+  const band = portrait ? e + (b.view.x + b.view.w - b.edge) : e;
+  return {
+    auto: {
+      straight: px(cell.w - 2 * e, cell.h - 2 * e),
+      splitOnVerticalLine: px(2 * e, cell.h - 2 * e),
+      splitOnHorizontalLine: px(cell.w - 2 * e, 2 * e),
+      corner: px(2 * e, 2 * e),
+      street: portrait ? px(band, cell.h - 2 * e) : px(cell.w - 2 * e, band),
+      sixline: portrait ? px(band, 2 * e) : px(2 * e, band),
+    },
+    lock: {
+      cell: px(cell.w, cell.h),
+      splitTriangleBase: px(cell.w, cell.h / 2),
+      cornerQuadrant: px(cell.w / 2, cell.h / 2),
+      lineHalf: portrait ? px(cell.w, cell.h / 2) : px(cell.w / 2, cell.h),
+    },
+  };
 }
