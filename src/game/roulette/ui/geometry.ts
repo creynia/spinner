@@ -326,6 +326,12 @@ export function labelBox(b: Board, id: string): Rect | null {
 
 /** Auto mode: a tap this close (board units) to a cell edge also takes in the pocket across it. */
 export const EDGE_BAND = 10;
+/** The core of the basket corner, which wins even over an outside box. */
+const BASKET_CORE = 6;
+/** Triple zero: the top of the zero cells (this deep) is the 0-00-000 trio. */
+const ZERO_TRIO_DEPTH = 5;
+/** Lock Corner: a basket beyond its zone counts this many times as far. */
+const BASKET_FAR_WEIGHT = 16;
 
 /** Bet-type lock families (the lock row): corner covers corner, trio and basket; line is six line. */
 export const LOCK_FAMILIES = ['straight', 'split', 'street', 'corner', 'line'] as const;
@@ -453,6 +459,24 @@ function resolve(b: Board, point: Point, lock: boolean): Resolved | null {
   return c ? { p, cell: c } : null;
 }
 
+/** Triple zero: the outer few units of a zero cell, clear of the splits between zero cells. */
+function inZeroTrioStrip(b: Board, p: Point, cell: string): boolean {
+  if (cell !== '0' && cell !== '00' && cell !== '000') return false;
+  const portrait = b.orientation === 'portrait';
+  if ((portrait ? p.y : p.x) >= ZERO_TRIO_DEPTH) return false;
+  const along = portrait ? p.x : p.y;
+  const r = b.pockets.get(cell)!;
+  const lo = portrait ? r.x : r.y;
+  const hi = lo + (portrait ? r.w : r.h);
+  const ends = ['0', '00', '000'].map((z) => {
+    const q = b.pockets.get(z)!;
+    return portrait ? [q.x, q.x + q.w] : [q.y, q.y + q.h];
+  });
+  const min = Math.min(...ends.map((e) => e[0]!));
+  const max = Math.max(...ends.map((e) => e[1]!));
+  return (lo <= min || along - lo >= EDGE_BAND) && (hi >= max || hi - along > EDGE_BAND);
+}
+
 const rowOf = (n: number): number => Math.ceil(n / 3);
 const isNumber = (label: string): boolean => /^[1-9]\d*$/.test(label);
 
@@ -462,11 +486,25 @@ const isNumber = (label: string): boolean => /^[1-9]\d*$/.test(label);
  * the straight when no legal bet has the tapped set, and null off the table.
  */
 export function betAt(b: Board, point: Point): string | null {
+  // The basket corner wins over an outside box that overlaps it (landscape: the 1st 12 box).
+  if (
+    Math.abs(point.x - b.basket.x) <= BASKET_CORE &&
+    Math.abs(point.y - b.basket.y) <= BASKET_CORE &&
+    (pocketAt(b, point) !== null || outsideAt(b, point) !== null)
+  )
+    return 'basket';
+  // Landscape street chips sit on the line against the dozen boxes: the top of those boxes
+  // takes the street or six line of the column above, so the chip's lower half works too.
+  if (b.orientation === 'landscape' && point.y >= b.edge && point.y < b.edge + EDGE_BAND) {
+    const o = outsideAt(b, point);
+    if (o?.startsWith('dozen:')) return betAt(b, { x: point.x, y: b.edge - 3 });
+  }
   const r = resolve(b, point, false);
   if (!r) return null;
   if (r.direct) return r.direct;
   const { p, cell } = r as Required<Pick<Resolved, 'p' | 'cell'>>;
   const idx = indexOf(b);
+  if (b.wheel === 'triple-zero' && inZeroTrioStrip(b, p, cell)) return 'trio:0-00-000';
   // Special case: the basket corner (zero row meets number 1 on its dozen side).
   if (Math.abs(p.x - b.basket.x) <= EDGE_BAND && Math.abs(p.y - b.basket.y) <= EDGE_BAND)
     return 'basket';
@@ -496,6 +534,16 @@ export function betAt(b: Board, point: Point): string | null {
   return idx.bySet.get(setKey(tapped)) ?? `straight:${cell}`;
 }
 
+/** Lock Corner: the basket's zone is its corner and the zero-side half of number 1's cell. */
+function inBasketZone(b: Board, p: Point): boolean {
+  if (Math.abs(p.x - b.basket.x) <= EDGE_BAND && Math.abs(p.y - b.basket.y) <= EDGE_BAND)
+    return true;
+  const one = b.pockets.get('1')!;
+  return b.orientation === 'portrait'
+    ? Math.abs(p.y - b.basket.y) < one.h / 2
+    : Math.abs(p.x - b.basket.x) < one.w / 2;
+}
+
 /**
  * The bet a tap means when a family is locked: among the family's bets that contain the tapped
  * pocket, the one whose anchor is nearest the point. An outside box's id inside a box (outside
@@ -511,7 +559,8 @@ export function betNearest(b: Board, point: Point, family: LockFamily): string |
   let bestD = Infinity;
   for (const c of indexOf(b).byFamily.get(family)!) {
     if (!c.pockets.includes(cell)) continue;
-    const d = (c.anchor.x - p.x) ** 2 + (c.anchor.y - p.y) ** 2;
+    let d = (c.anchor.x - p.x) ** 2 + (c.anchor.y - p.y) ** 2;
+    if (c.id === 'basket' && !inBasketZone(b, p)) d *= BASKET_FAR_WEIGHT;
     if (d < bestD - 1e-9) {
       best = c.id;
       bestD = d;
