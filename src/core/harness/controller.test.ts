@@ -16,6 +16,7 @@ import {
 import { RunControllerError } from './controller';
 import { createInThreadTransport } from './transport';
 import { createPool } from './pool';
+import { createWorkerHandler } from './handler';
 import { RunAccumulator } from './accumulator';
 import { bitGet } from './accumulator';
 import { simulate } from './simulate';
@@ -571,5 +572,98 @@ describe('RunAccumulator (analysis domain of an incomplete run, harness doc §6.
     expect(view.sessions).toBe(192);
     expect(view.summary.final.length).toBe(192);
     expect(Array.from(view.summary.final)).toEqual(Array.from(data.summary.final.slice(0, 192)));
+  });
+});
+
+describe('review fixes', () => {
+  function brokenInitPool(): ReturnType<typeof createPool> & { spawns(): number } {
+    let spawns = 0;
+    return Object.assign(
+      createPool({
+        size: 2,
+        spawn: (): SimTransport => {
+          spawns++;
+          const listeners = new Set<(m: FromSim) => void>();
+          return {
+            mode: 'inthread',
+            post: (msg) => {
+              if (msg.t === 'init') {
+                queueMicrotask(() =>
+                  listeners.forEach((f) => f({ t: 'error', code: 'worker-error', message: 'x' })),
+                );
+              }
+            },
+            onMessage: (fn) => (listeners.add(fn), () => listeners.delete(fn)),
+            terminate: () => listeners.clear(),
+          };
+        },
+      }),
+      { spawns: () => spawns },
+    );
+  }
+
+  it('a worker that keeps failing during init ends the run instead of respawning forever', async () => {
+    const pool = brokenInitPool();
+    const run = coinRun(def, { pool });
+    await expect(run.controller.start()).rejects.toMatchObject({ code: 'worker-crash' });
+    expect(run.controller.status).toBe('error');
+    expect(pool.spawns()).toBeLessThanOrEqual(2 + 2 * 2);
+    pool.terminate();
+  });
+
+  it('flush() and noteVisibility() write nothing after cancel; hidden flushes while running', async () => {
+    const run = coinRun(def, { workers: 1, batchChunks: 1 });
+    let n = 0;
+    run.controller.subscribe((p) => {
+      if (p.completedSessions >= 128 && n++ === 0) {
+        run.controller.noteVisibility('hidden');
+        void run.controller.cancel();
+      }
+    });
+    const settled = run.controller.settled();
+    await run.controller.start();
+    await settled;
+    const flushes = run.sink.flushes;
+    expect(run.controller.meta!.visibility).toHaveLength(1);
+    await run.controller.flush();
+    run.controller.noteVisibility('visible');
+    await run.controller.flush();
+    expect(run.sink.flushes).toBe(flushes);
+    expect(run.controller.meta!.visibility).toHaveLength(1);
+  });
+
+  it('runs without the Locks API (warns once) and caps visibility at 50 entries', async () => {
+    const warnings: string[] = [];
+    const run = coinRun(coinDefinition({ sessions: 64, maxRounds: 10 }), {
+      controller: { warn: (m) => warnings.push(m), locks: undefined },
+    });
+    const settled = run.controller.settled();
+    await run.controller.start();
+    for (let i = 0; i < 60; i++) run.controller.noteVisibility(i % 2 ? 'hidden' : 'visible');
+    await settled;
+    expect(warnings.some((w) => /Locks/.test(w))).toBe(true);
+    expect(run.controller.meta!.visibility.length).toBeLessThanOrEqual(50);
+  });
+
+  it('a batch outside the run is a bad-batch error', () => {
+    const h = createWorkerHandler(coin, { compile: compileTestStrategy });
+    const out: FromSim[] = [];
+    const d = coinDefinition({ sessions: 100, maxRounds: 50 });
+    h(
+      {
+        t: 'init',
+        runKey: 'k',
+        definition: d,
+        schedule: new Int32Array([0, 50]),
+        chunkSize: 32,
+        sessions: 100,
+      },
+      (m) => out.push(m),
+    );
+    h(
+      { t: 'batch', runKey: 'k', batchId: 1, firstChunk: 3, chunkCount: 2, traceIndices: [] },
+      (m) => out.push(m),
+    );
+    expect(out[1]).toMatchObject({ t: 'error', code: 'bad-batch' });
   });
 });

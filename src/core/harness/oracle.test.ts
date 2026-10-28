@@ -38,14 +38,15 @@ describe("gambler's ruin on coin", () => {
     [10, 20],
     [5, 25],
     [20, 24],
+    [40, 80],
   ] as const) {
     it(`flat $1, start ${a} units, target ${b}: P(bust) in the Wilson interval, duration within 3 SE`, async () => {
-      const n = 20_000;
+      const n = b >= 80 ? 6000 : 20_000;
       const data = await runCoinToEnd(
         coinDefinition({
           strategy: FLAT_COIN,
           sessions: n,
-          maxRounds: 5000,
+          maxRounds: b >= 80 ? 40_000 : 5000,
           bankroll: a * 100,
           stopWin: (b - a) * 100,
           seed: 20_261_028 + a,

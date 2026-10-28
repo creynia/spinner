@@ -87,6 +87,8 @@ interface WorkerState {
   transport: SimTransport;
   off: () => void;
   ready: boolean;
+  everReady: boolean;
+  initFails: number;
   rate: number | undefined;
   k: number;
   inflight: Map<number, InFlight>;
@@ -322,6 +324,7 @@ export function createRunController(opts: RunControllerOptions): HarnessRunContr
           specs = msg.columns;
         }
         w.ready = true;
+        w.everReady = true;
         readyCount++;
         if (readyResolve) {
           if (readyCount === workers.length) {
@@ -375,12 +378,17 @@ export function createRunController(opts: RunControllerOptions): HarnessRunContr
         }
       }
     }
+    if (!w.everReady && ++w.initFails > 1) {
+      fail('worker-crash', `worker failed to start twice: ${why}`);
+      return;
+    }
     w.off();
     clearInflight(w);
     w.transport = lease.replace(w.index);
     w.k = 1;
     w.rate = undefined;
-    readyCount = Math.max(0, readyCount - 1);
+    if (w.ready) readyCount = Math.max(0, readyCount - 1);
+    w.ready = false;
     attach(w, epoch);
     initWorker(w);
   }
@@ -674,6 +682,8 @@ export function createRunController(opts: RunControllerOptions): HarnessRunContr
       transport,
       off: () => undefined,
       ready: false,
+      everReady: false,
+      initFails: 0,
       rate: undefined,
       k: 1,
       inflight: new Map<number, InFlight>(),
@@ -803,13 +813,16 @@ export function createRunController(opts: RunControllerOptions): HarnessRunContr
     },
 
     flush(): Promise<void> {
+      if (status === 'cancelled' || status === 'done' || status === 'error') return flushChain;
       return requestFlush();
     },
 
     noteVisibility(state): void {
       if (!meta) return;
+      if (status === 'cancelled' || status === 'done' || status === 'error') return;
       meta.visibility.push({ at: iso(), state });
       if (meta.visibility.length > MAX_VISIBILITY) meta.visibility.shift();
+      if (state === 'hidden' && status === 'running') void requestFlush();
     },
   };
 
