@@ -14,9 +14,13 @@ export function assertCents(x: number, what = 'amount'): Cents {
   return x;
 }
 
-/** `d` dollars in cents (`dollars(25)` is 2500). Whole dollars only. */
+/**
+ * `d` dollars in cents (`dollars(25)` is 2500, `dollars(0.29)` is 29). Rounds `d * 100` to the
+ * nearest cent first (0.29 * 100 is 28.999999999999996), then asserts integrality, so a
+ * non-finite or unsafe input still throws.
+ */
 export function dollars(d: number): Cents {
-  return assertCents(d * 100, 'dollars');
+  return assertCents(Math.round(d * 100), 'dollars');
 }
 
 /**
