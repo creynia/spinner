@@ -65,13 +65,7 @@ describe('built-in layouts', () => {
   it('every built-in passes validateChipLayout (with and without the game context)', () => {
     for (const l of BUILTIN_LAYOUTS) {
       expect(
-        validateChipLayout(l, ctx).filter(
-          // Known gap (reported): the validator looks a parameterised bet up by its bare head
-          // (`neighbours`) but the roulette catalog keys it `neighbours:<p>:<k>`.
-          (d) =>
-            d.severity === 'error' &&
-            !(d.code === 'E_BET_UNAVAILABLE' && String(d.params?.value).startsWith('neighbours:')),
-        ),
+        validateChipLayout(l, ctx).filter((d) => d.severity === 'error'),
         l.id,
       ).toEqual([]);
       expect(

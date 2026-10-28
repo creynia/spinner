@@ -5,7 +5,15 @@ import { createMemoryRepo } from '../../services/db';
 import { setRepoForTests } from '../../services/db';
 import { setQuickCheckRunner } from '../../services/quickCheck';
 import { Define } from './index';
-import { analyze, defaultDoc, docToDefinition, definitionToDoc, setOverride } from './doc';
+import { BUILTIN_LAYOUTS } from '@game/roulette';
+import {
+  analyze,
+  defaultDoc,
+  docToDefinition,
+  definitionToDoc,
+  setOverride,
+  strategyWithLayout,
+} from './doc';
 
 beforeEach(() => setRepoForTests(createMemoryRepo()));
 afterEach(() => {
@@ -48,6 +56,25 @@ describe('Define structure', () => {
     );
     expect(container.querySelectorAll('li.bstage')).toHaveLength(1);
     expect(container.textContent).toContain('martingale');
+  });
+
+  it('?layout= starts the strategy from that layout, one stage, valid and runnable', async () => {
+    const { container } = mount('layout=james-bond');
+    await waitFor(() =>
+      expect(container.querySelector<HTMLInputElement>('#exp-name')!.value).toBe('James Bond'),
+    );
+    expect(container.querySelectorAll('li.bstage')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'Chips on the table' })).toBeTruthy();
+    expect(container.textContent).toContain('Started from the layout');
+    const run = [...container.querySelectorAll('.define-bar button')].find(
+      (b) => b.textContent === 'Run',
+    )!;
+    expect(run.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('?layout= with an unknown id says so', async () => {
+    mount('layout=nope');
+    await waitFor(() => expect(screen.getByText(/layout was not found/)).toBeTruthy());
   });
 
   it('invalid JSON-level edits show errors in the panel badge and disable Run', async () => {
@@ -236,5 +263,28 @@ describe('review fixes', () => {
   it('a garbage link says it is not a valid link', async () => {
     mount('d=!!!!');
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/Not a valid link/));
+  });
+});
+
+describe('strategyWithLayout', () => {
+  const layout = BUILTIN_LAYOUTS.find((l) => l.id === 'two-dozens')!;
+  const from = { id: layout.id, hash: 'h', name: layout.name, builtin: true as const };
+  const fresh = defaultDoc().strategy;
+
+  it('replaces the untouched start with a single stage of the layout', () => {
+    const r = strategyWithLayout(defaultDoc().strategy, fresh, layout, from, 500);
+    expect(r.appended).toBe(false);
+    const stages = (r.strategy as { stages: Record<string, unknown>[] }).stages;
+    expect(stages).toHaveLength(1);
+    expect(stages[0]!['x-chips']).toMatchObject({ chip: 500, from });
+    expect((stages[0]!.layout as unknown[]).length).toBe(layout.spots.length);
+  });
+
+  it('appends a new stage when the strategy was already edited', () => {
+    const base = { ...(fresh as object), name: 'Mine' };
+    const r = strategyWithLayout(base, fresh, layout, from, 500);
+    expect(r.appended).toBe(true);
+    const stages = (r.strategy as { stages: { id: string }[] }).stages;
+    expect(stages.map((x) => x.id)).toEqual(['flat', 'layout-2']);
   });
 });
