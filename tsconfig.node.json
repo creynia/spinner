@@ -8,5 +8,13 @@
     "jsx": "react-jsx",
     "jsxImportSource": "preact"
   },
-  "include": ["*.config.ts", "build", "scripts/**/*.ts", "tests/e2e", "tests/perf"]
+  "include": ["*.config.ts", "build", "scripts/**/*.ts", "tests/e2e", "tests/perf", "src/core"],
+  "exclude": [
+    "src/core/**/*.test.ts",
+    "src/core/**/*.test.tsx",
+    "src/core/**/__fixtures__",
+    "src/core/**/*.fixture.ts",
+    "src/core/ui",
+    "src/core/testing"
+  ]
 }
