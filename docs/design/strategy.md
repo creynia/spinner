@@ -594,3 +594,353 @@ Computed with the reference model in the spike's scratch script; W = win, L = lo
 | sequence [1,2,4,8] win=reset loss=advance cap=stop | L L L L | 0:1 1:2 2:4 3:8 (cap → stop `cap-p`) | – |
 
 Check of the second oscar's row: after W(+1, done), L L L leave `cycle = −3`; W at u=1 → `cycle = −2`, need = ceil(3/1) = 3, u' = min(2, 3) = 2; W at u=2 → `cycle = 0`, need = 1, u' = max(1, min(3, 1)) = 1; W at u=1 → `cycle = 1 ≥ 1` → done.
+
+---
+
+## 8. Facts, events and history
+
+### 8.1 The fact schema contract (`src/core/contracts/facts.ts`)
+
+```ts
+// src/core/contracts/facts.ts — FROZEN; implemented by every plugin, consumed by core/strategy and core/ui
+export type FactValue = number | string | boolean;
+export type FactRef = string | { name: string; args: (string | number)[] };
+
+export type FactType =
+  | { type: 'number'; unit: 'money' | 'count' | 'scalar'; integer?: boolean; min?: number; max?: number }
+  | { type: 'enum'; values: readonly (string | number)[]; labels?: readonly string[] }
+  | { type: 'boolean' };
+
+export interface FactParam {
+  name: string;
+  type: 'number' | 'enum' | 'bet';
+  values?: readonly (string | number)[];         // enum params
+  min?: number; max?: number;                    // number params
+}
+
+export interface FactDecl {
+  name: string;                                  // camelCase, unique across session + game facts
+  label: string;                                 // builder text: 'last colour'
+  doc: string;
+  scope: 'round' | 'state';                      // round: describes the round just resolved (null at window 0)
+  nullable: boolean;
+  params?: FactParam[];                          // parameterised fact: spinsSince(17)
+  value: FactType;
+}
+export interface EventDecl { name: string; label: string; doc: string; params?: FactParam[] }
+export interface ActionDecl { name: string; label: string; doc: string; params?: FactParam[] }
+
+export interface FactSchema {
+  facts: readonly FactDecl[];
+  events: readonly EventDecl[];
+  actions?: readonly ActionDecl[];               // game decisions for the `act` effect (none for roulette)
+}
+```
+
+Canonical text key of a ref (used in traces and diagnostics): `name` or `name(arg1,arg2)`, e.g. `spinsSince(17)`.
+
+The plugin compiles each referenced fact once into an accessor `(state, last) => FactValue | null` (`CompileContext.compileFact`); accessors must not allocate. Enum values are compared by identity against compiled constants (or as integer codes; implementation detail).
+
+### 8.2 Session and strategy facts (core, every game)
+
+| Name | Type | Scope | Meaning |
+|---|---|---|---|
+| `start` | money | state | starting bankroll |
+| `bankroll` | money | state | cash not on the table |
+| `equity` | money | state | bankroll + table at face value |
+| `net` | money | state | `equity − start` |
+| `peak` | money | state | max equity so far, including start |
+| `drawdown` | money | state | `peak − equity` |
+| `exposure` | money | state | total on the table now |
+| `wagered` | money | state | cumulative wagered |
+| `round` | count | state | §3.8 |
+| `roundsInStage` | count | state | §3.8 |
+| `roundsWagered` | count | state | rounds with something at risk |
+| `lastNet` | money | round | net of the round just resolved (0 at window 0, not null) |
+| `lastResult` | enum `win/loss/push/none` | round | §3.2 (`none` at window 0) |
+| `winStreak`, `lossStreak` | count | state | §3.2 |
+| `stage` | enum (stage ids) | state | current stage |
+
+Strategy values are expressions rather than facts: `{ var }`, `{ prog }`, `{ progStep }`, `{ progCaps }`, `{ stageEntries }`, `{ amountOn }`, `{ lastAmount }`, `{ lastProfit }`, and the `onTable` condition. **Change from §5.2:** `var(x)`, `prog(p).step`, `stageEntries(id)` etc. are written as these objects, not as dotted fact names.
+
+### 8.3 Core events
+
+| Event | Params | Raised |
+|---|---|---|
+| `bet-won`, `bet-lost`, `bet-push` | `bet` | phase 1, from `last.resolutions` by profit sign |
+| `prog-cap` | `prog` | phases 2 and 3, §7.5 |
+| `prog-done` | `prog` | labouchere line emptied, oscar's cycle complete |
+
+Plugins must not declare events with these names (core test). Plugin events (roulette `zero`; craps `point-established`, `point-made`, `seven-out`, `natural`, `craps`, `bet-travelled(bet, number)`) are declared in `FactSchema.events` and arrive in `last.events` as `{ type: name, ...params }`.
+
+### 8.4 History trackers
+
+A **history predicate** is either `{ fact, equals }` over a **round-scoped** fact (`E_HISTORY_FACT` for a state fact) or `{ event, bet?, args? }`. Each distinct predicate (by canonical JSON) gets one tracker, updated once per completed round in phase 1:
+
+| Value | Definition |
+|---|---|
+| `streakLen(h)` | number of most recent consecutive rounds in which `h` held (0 if the last round did not, or at window 0) |
+| `countInLast(h, n)` | rounds among the last `min(n, observed)` in which `h` held |
+| `roundsSince(h)` | rounds since `h` last held (0 if it held in the last round); if it never held, the number of rounds observed so far |
+
+`equals` with an array means "the fact is one of these" (`{ fact: 'lastColor', equals: ['black', 'green'] }` is "not red"). A null fact value counts as not holding. Implementation: a saturating counter for `streakLen` and `roundsSince`, a bit ring of `n` bits plus a running count for `countInLast` (Uint8Array, allocated at compile time).
+
+These generic trackers make plugin-specific history facts optional: roulette's `spinsSince(17)` is `{ roundsSince: { fact: 'lastNumber', equals: 17 } }`, `countInLast(10, red)` is `{ countInLast: { fact: 'lastColor', equals: 'red', n: 10 } }`, and `streak(color)` is `streakLen`. A plugin may still declare such facts (they then work in `cmp` like any parameterised fact); the golden strategies use the generic forms.
+
+---
+
+## 9. Validation
+
+`validateStrategy(def, ctx)` returns every diagnostic, in document order (a depth-first walk of the JSON in key order of the TypeScript types above), never just the first. Paths are RFC 6901 JSON pointers into the **strategy** document (`/stages/1/rules/0/then/2/goto`); when validated inside an experiment definition the caller prefixes `/strategy`. The `message` is generated from `code` and `params` so the UI can translate it; the builder attaches each diagnostic to the row whose path is a prefix of it.
+
+Two levels: `ctx = null` runs structural checks (S) only, for imports and share links before the plugin is loaded; with `ctx` all checks run, including those that need the catalog, fact schema and resolved rules (R, the game rules from the experiment's `game.rules`).
+
+### 9.1 Errors
+
+| Code | Lvl | Example path | When |
+|---|---|---|---|
+| `E_SCHEMA_VERSION` | S | `/schema` | `schema` is not 1 (after migration) |
+| `E_TYPE` | S | `/unit` | wrong JSON type |
+| `E_REQUIRED` | S | `/stages/0/rules/2/when` | missing required key |
+| `E_UNKNOWN_KEY` | S | `/stages/0/foo` | key not in the schema and not `x-*` |
+| `E_ONE_OF` | S | `/stages/0/rules/1/when` | an object that matches no union member, or matches several (`{ cmp, all }` together) |
+| `E_ID_FORMAT` | S | `/stages/2/id` | Slug / VarName format |
+| `E_DUPLICATE_ID` | S | `/stages/3/id` | duplicate stage id or rule id |
+| `E_NOT_INTEGER` | S | `/unit` | `unit`, literal amounts in amount positions, `maxSteps`, `cooldown`, `n` not integers |
+| `E_RANGE` | S | `/progressions/m/maxSteps` | out of range (§2.1, §7.4) |
+| `E_LIMIT` | S | `/stages` | a §2.1 limit |
+| `E_EFFECT_CAP` | S | `/stages/0/rules/0/then` | a list with more than 16 effects |
+| `E_UNKNOWN_STAGE` | S | `/stages/0/rules/0/then/0/goto` | `goto`, `extends`, `stageEntries`, `stage` fact value |
+| `E_UNKNOWN_VAR` | S | `/stages/0/rules/0/then/0/set` | var not declared in `vars` |
+| `E_UNKNOWN_PROG` | S | `/stages/0/layout/0/amount/prog` | progression not declared |
+| `E_EXTENDS_CYCLE` | S | `/stages/2/extends` | cycle in `extends` |
+| `E_EXTENDS_DEPTH` | S | `/stages/2/extends` | chain deeper than 4 |
+| `E_GOTO_IN_HOOK` | S | `/stages/1/onEnter/0` | `goto` in `onEnter`/`onExit` |
+| `E_GOTO_SELF_ALWAYS` | S | `/stages/1/rules/0` | `goto` to its own stage under `{ always: true }` (or no other condition), without `once` or `cooldown` |
+| `E_UNREACHABLE_EFFECT` | S | `/stages/0/rules/0/then/2` | effects after `goto`/`stop` in the same list |
+| `E_RESERVED_REASON` | S | `/stages/0/rules/1/then/0/stop` | stop reason starting `cap-` / `done-` |
+| `E_EXPR_CYCLE` | S | `/progressions/a/base` | a base/step/maxAmount reads `{ prog }` of itself, or progressions read each other in a cycle |
+| `E_DIV_ZERO_LITERAL` | S | `.../div/1` | literal 0 divisor or `floorTo` modulus ≤ 0 |
+| `E_HISTORY_BOUND` | S | `.../countInLast` | `countInLast`/`since` without `atLeast`/`atMost` |
+| `E_PROG_SPEC` | S | `/progressions/l/line/2` | non-positive or non-integer labouchere number; `base` on `sequence`; `onEmpty` on a non-labouchere |
+| `E_PROG_OP_UNSUPPORTED` | S | `/stages/0/rules/0/then/0/do` | `advance`/`back` on labouchere / oscars-grind |
+| `E_PROG_OVERFLOW` | S | `/progressions/m` | constant-base top amount > 2^31 − 1 cents |
+| `E_DEFERRED` | S | `.../chance`, `/kind` | `chance`, `kind: 'code'` in v1 |
+| `E_GAME_MISMATCH` | R | `/game` | `game` ≠ plugin id |
+| `E_UNKNOWN_BET` | R | `/stages/0/layout/0/bet` | `parseBet` returns null (layout, effects, `track`, `amountOn`, `onTable`, `parent`, event `bet` filters, `tableMin`) |
+| `E_BET_UNAVAILABLE` | R | `/stages/0/layout/1/bet` | the bet is not in the catalog for the resolved rules (a call bet on a double-zero wheel) |
+| `E_UNKNOWN_FACT` | R | `/stages/0/rules/0/when/fact/0` | fact not in session facts or the plugin schema |
+| `E_FACT_ARGS` | R | `.../fact/0/args/0` | wrong arity or argument type/range for a parameterised fact |
+| `E_FACT_TYPE` | R | `.../cmp/0` | non-numeric fact used as an expression; op not allowed for the fact type (§5.3) |
+| `E_FACT_VALUE` | R | `.../fact/2` | value not a member of the enum / wrong type |
+| `E_HISTORY_FACT` | R | `.../streak/fact` | history predicate over a state-scoped fact |
+| `E_UNKNOWN_EVENT` | R | `.../when/event` | event not declared and not core |
+| `E_EVENT_FILTER` | R | `.../when/bet` | filter not supported by the event |
+| `E_UNKNOWN_ACT` | R | `.../then/0/act` | action not declared by the plugin |
+| `E_PRESS_NON_PERSISTENT` | R | `.../then/0/press` | press on a bet with `persistent: false` |
+| `E_REMOVE_CONTRACT` | R | `.../then/0/remove` | remove of a bet with `contract: true` |
+| `E_UNKNOWN_LIMIT_CLASS` | R | `.../tableMin` | not a bet and not a limits class |
+| `E_BELOW_MIN` | R | `/stages/0/layout/0/amount` | a constant amount on an **outside-class** bet below that class's minimum at the resolved rules (always rejected) |
+
+### 9.2 Warnings
+
+| Code | When |
+|---|---|
+| `W_UNREACHABLE_STAGE` | a stage (other than stages[0]) is not the target of any `goto` (it may still be a pure `extends` parent: then `W_UNUSED_STAGE` is not raised) |
+| `W_EFFECT_CAP_POSSIBLE` | §3.4 worst case > 16 |
+| `W_UNUSED_VAR`, `W_UNUSED_PROG` | declared, never read |
+| `W_TRACK_MISMATCH` | a progression tracks a bet that no amount reading it sizes (e.g. tracks `red`, sizes `black`) |
+| `W_PROG_ABOVE_TABLE_MAX` | top level above the sized bet's table max |
+| `W_BELOW_MIN_POSSIBLE` | a constant inside amount below the per-chip minimum, or a stage whose constant inside amounts sum below the inside total minimum |
+| `W_KEEP_NON_PERSISTENT` | `keepOr` on a non-persistent bet (it never keeps anything) |
+| `W_NO_LAYOUT` | no stage has a layout entry and no rule has a `bet` effect (the strategy never bets) |
+| `W_NO_EXIT` | the strategy has no `stop` and the session config has no `stopWin`/`stopLoss` (experiment-level; PLAYBOOK §5.8; `maxRounds` always bounds the session) |
+| `W_UNIT_MIX` | §4.2 |
+| `W_EMPTY_GROUP` | `{ all: [] }` / `{ any: [] }` |
+| `W_CONST_CONDITION` | a condition that is constant (`cmp` of two literals), outside `always` |
+| `W_NEEDS_PARENT` | a bet with `needsParent` in a layout whose entries never include any of its parents |
+
+`defineExperiment` refuses to run with any error; warnings are shown and do not block.
+
+### 9.3 Migration
+
+`schema` is bumped only for breaking changes. `migrateStrategy(x: unknown): StrategyDefinition` upgrades every older schema (none yet) and is applied before validation; fixtures for every past schema stay in `tests/fixtures/strategy/` (PLAYBOOK §6).
+
+---
+
+## 10. Compile step
+
+`compileStrategy(def, ctx)` runs **once per worker per run** (and once on the main thread for dry runs). Nothing in it is on the per-round path. It produces a `StrategyRuntime` whose `step` does no allocation in the steady state (the trace path, which is off for bulk sessions, may allocate).
+
+1. **Validate** (throws `StrategyCompileError` with the diagnostics on any error) and **normalize** (§13.4).
+2. **Index tables.** Stage ids → `0..S−1`; vars (sorted names) → slots in a `Float64Array`; progressions (sorted names) → slots; rules → global indices `0..R−1` by declaring stage and position; bets → interned strings and catalog entries (persistent/contract flags) resolved once.
+3. **Flatten `extends`** into, per stage, an `Int32Array` of rule indices and an array of layout-entry records (child first).
+4. **Facts.** Every distinct `FactRef` → one accessor from `ctx.compileFact` (game) or a built-in reader (session/strategy); enum literals → interned constants; history predicates → tracker slots with preallocated rings.
+5. **Expressions and conditions → closures.** Each AST node becomes a closure over a single shared, preallocated evaluation context (`ctx.mem`, `ctx.obs`); literals are folded; `units` is pre-multiplied (`{ units: 2 }` → `2 × unit` constant). Closures return numbers (`NaN` = null) or booleans; the "which progressions did this amount read" mask is accumulated in a context field (Int32 bitmask, ≤ 16 progressions), reset per amount evaluation.
+6. **Effects → op records** `{ op: OpCode, a, b, exprA, exprB }` executed by a switch.
+7. **Events.** Every distinct event filter gets a slot; phase 1 scans `last.events` and `last.resolutions` once and sets a `Uint8Array` of slot hits (plus slots for `prog-cap`/`prog-done` per progression).
+8. **Memory layout** (one `StrategyMemory` per worker, `reset` per session):
+
+| Field | Type |
+|---|---|
+| stage, roundsInStage, stageEntrySerial, winStreak, lossStreak, lastResult | numbers |
+| stageEntries | Int32Array(S) |
+| vars | Float64Array(V) |
+| prog level / u, caps, latched base, step, maxAmount, cycle, armed bits | Float64Array(P × 8) |
+| labouchere lines | Int32Array(P × 257) (length + numbers, only for labouchere slots) |
+| rule onceFired (entry serial), nextEligible | Int32Array(R) × 2 |
+| history: streak, since, ring bits, ring count, observed | Int32Array / Uint8Array |
+| event hits | Uint8Array(E) |
+| desired buffer | preallocated `LayoutEntry` objects (64) reused; `out.desired` is a length-limited view |
+| patch buffer | Int32/Float64 arrays (op, bet index, amount) of 16 |
+
+9. **Static analysis for warnings** (§9.2) and the **referenced-fact list** used by the trace (§12).
+
+Performance budget: `step` for a three-stage strategy with ten rules is on the order of a microsecond; 10,000 × 500 windows ≈ 5 M steps fits the PLAYBOOK §7.2 budget with room for the plugin. A micro-benchmark in `tests/perf` pins it.
+
+---
+
+## 11. Runtime API and memory
+
+### 11.1 Calling sequence (harness)
+
+```ts
+const rt = compileStrategy(def, ctx);            // once per worker
+const mem = rt.createMemory();
+const out = makeStepOutput();                    // reused
+for (const i of sessionIndices) {
+  rt.reset(mem); /* plugin.createState(...) */
+  for (let w = 0; w < maxRounds; w++) {
+    fillObservation(obs, w, state, lastOutcome);  // mutate in place
+    rt.step(mem, obs, out, tracing ? sink : undefined);
+    if (out.stop || out.error) break;
+    const rec = plugin.reconcile(state, out.desired /*, out.acts */);
+    // bust check, apply actions, playRound, session stops (§3.7)
+  }
+}
+```
+
+### 11.2 Memory across sessions and resumes
+
+Memory never outlives a session and is never serialised: the harness resumes at batch granularity (PLAYBOOK §7.2), so a resumed batch replays its sessions from the start. Determinism follows from: the definition, the session seed (only the plugin RNG is random), and these semantics.
+
+### 11.3 Pure wrapper for tests
+
+`stepPure(rt, mem, obs)` deep-copies `mem` (and `out.desired`) and returns `{ mem, out, trace }`. Semantic tests use it; a property test asserts `stepPure` and in-place `step` agree over random observations.
+
+---
+
+## 12. Trace format
+
+Types in `src/core/contracts/strategy-trace.ts`. A trace is a list of `TraceWindow` records, stored as JSON in sample sessions and pinned as **JSON Lines** (one canonical-JSON record per line, keys sorted) in golden tests. The interpreter fills the strategy part; the harness adds `reconcile`, `outcome` and money.
+
+```ts
+export interface TraceWindow {
+  w: number;                                        // window = round index
+  stage: string;                                    // stage at the start of the window
+  stageAfter?: string;                              // present when a goto happened
+  obs: Record<string, number | string | boolean | null>;  // referenced facts only (§10.9), canonical keys
+  prog: Record<string, {                            // every progression, sorted by name
+    fed: ProgResult | 'unarmed';                    // phase 2 input ('unarmed': resolution ignored, §7.2)
+    state: Record<string, number | number[]>;       // §7.6, after phases 2–3
+    amount: number;                                 // cents, after phases 2–3
+    events?: ('cap' | 'done')[];
+  }>;
+  fired: string[];                                  // rule ids in firing order; '@enter:<stage>', '@exit:<stage>' for hooks
+  effects: {
+    rule: string;
+    op: string;                                     // 'bet' | 'remove' | 'clear' | 'press' | 'set' | ...
+    detail: Record<string, number | string>;        // e.g. { bet: 'red', amount: 5000 } or { var: 'x', from: 0, to: 1 }
+    note?: 'no-op' | 'not-on-table' | 'null-skipped' | 'ignored-skip';
+  }[];
+  desired: { bet: string; amount: number; parent?: string; source: 'layout' | 'patch' | 'keep' }[];
+  dropped?: { bet: string; reason: 'null' | 'zero' | 'negative' }[];
+  acts?: { act: string; args?: Record<string, string | number> }[];
+  skip?: true;
+  stop?: string;
+  error?: { code: string; message: string };
+  // filled by the harness:
+  reconcile?: { actions: number; deferred: { bet: string; reason: string }[]; rejected: { bet: string; reason: string }[] };
+  outcome?: { summary: Record<string, number | string | boolean>; net: number; resolutions: { bet: string; result: string; profit: number }[] };
+  equity: number;                                   // after the round (or at the stop)
+  bust?: true;
+}
+```
+
+Rule ids: `rule.id` when set, else `<declaringStageId>#<index>` (e.g. `mart#1`). `obs` keys: session/game fact canonical keys (`net`, `lastColor`, `spinsSince(17)`), plus `var.<x>`, `streak(<predicate-hash8>)` etc. for history values with the predicate shown in the builder. Only facts referenced somewhere in the strategy are recorded (so traces stay small: a typical record is 300–600 bytes).
+
+The Watch screen renders: stage chip, fired rules highlighted in the builder's sentence form (§13), effect list, desired vs reconciled layout (rejections in red, PLAYBOOK §14), outcome glyph, equity, progression state.
+
+**Golden traces:** `tests/golden/strategy/<id>.seed<seed>.jsonl`, first 200 windows (or to session end), produced by running the golden strategy through the real plugin with `run.seed = 20261028`, session index 0, bankroll $5,000 (craps fixtures: a stub craps plugin until the craps app). Updating a golden requires `UPDATE_GOLDEN=1` and the diff is reviewed.
+
+---
+
+## 13. Builder UI model
+
+The builder edits a **view model** that maps losslessly to normalized JSON. The JSON tab and the builder always show the same document; edits in either re-validate (debounced 150 ms) and diagnostics attach by path.
+
+### 13.1 Structure
+
+```ts
+interface BuilderModel {
+  meta: { id; name; unit; notes; tags };
+  vars: { name: string; initial: number }[];                 // sorted on write
+  progressions: { name: string; spec: ProgressionSpec }[];   // edited with a per-kind form
+  stages: StageCard[];
+}
+interface StageCard { id; label?; extends?; layout: LayoutRow[]; onEnter: EffectChip[]; onExit: EffectChip[]; rules: RuleRow[] }
+interface LayoutRow { bet: BetId; amount: AmountModel; when: ConditionChips; parent?; working?; label? }
+interface RuleRow { id?; label?; enabled: boolean; when: ConditionChips; then: EffectChip[]; once: false | true | 'stage'; cooldown?: number }
+interface ConditionChips { mode: 'all' | 'any'; chips: ConditionChip[] }    // [] = always
+type ConditionChip =
+  | { kind: 'leaf'; cond: Condition }               // cmp, fact, event, onTable, streak, countInLast, since, everyN
+  | { kind: 'not'; chip: ConditionChip }
+  | { kind: 'group'; group: ConditionChips }        // one nested level, opposite mode
+  | { kind: 'raw'; cond: Condition };               // anything deeper: shown as a JSON chip
+type AmountModel =
+  | { kind: 'units'; n } | { kind: 'cents'; cents } | { kind: 'prog'; name } | { kind: 'pct'; p }
+  | { kind: 'tableMin'; of } | { kind: 'keep'; inner: AmountModel } | { kind: 'formula'; expr: Expr };
+type EffectChip = { effect: Effect };              // one chip per effect, edited by an op-specific form
+```
+
+### 13.2 A rule row reads as a sentence
+
+`When` [chip] `and`/`or` [chip] ... `then` [chip], [chip] ... with `once`/`cooldown` as a trailing pill. Chips render from templates driven by the fact schema labels and unit kinds (money as dollars, counts as integers):
+
+| JSON | Chip text |
+|---|---|
+| `{ "cmp": ["net", ">=", 10000] }` | net ≥ $100 |
+| `{ "fact": ["lastColor", "==", "red"] }` | last colour is red |
+| `{ "fact": ["lastDozen", "in", [1, 2]] }` | last dozen is 1st or 2nd |
+| `{ "streak": { "fact": "lastColor", "equals": "red", "atLeast": 3 } }` | red 3+ times in a row |
+| `{ "countInLast": { "fact": "lastColor", "equals": "black", "n": 10, "atLeast": 7 } }` | black ≥ 7 of the last 10 |
+| `{ "since": { "fact": "lastNumber", "equals": 17, "atLeast": 74 } }` | 17 not seen for 74+ spins |
+| `{ "event": "bet-won", "bet": "place-6" }` | place 6 won |
+| `{ "event": "prog-cap", "prog": "m" }` | progression m hit its cap |
+| `{ "everyN": 50 }` | every 50 rounds |
+| `{ "goto": "flat" }` | go to stage *flat* |
+| `{ "prog": "m", "do": "reset" }` | reset m |
+| `{ "bet": "red", "amount": { "units": 2 } }` | bet 2 units ($50) on red |
+| `{ "skipRound": true }` | sit out this round |
+| `{ "stop": "stop-loss" }` | stop (stop-loss) |
+
+The game's word for a round comes from the plugin (`spin`, `roll`, `hand`).
+
+### 13.3 Editors
+
+Condition chips are created from a picker generated from the fact schema: choose a fact (grouped: session, strategy, game; parameterised facts ask for their args), then an operator valid for its type, then a value editor (enum dropdown, number, money). Event chips list declared events with their filters. Bet fields open the plugin's `ui.BetPicker` (tappable roulette layout) and fall back to a searchable catalog list. Amount editors offer tabs *Units*, *Amount*, *Progression*, *% bankroll*, *Table min*, *Keep* and *Formula* (an expression tree editor; anything the other tabs cannot show opens here).
+
+### 13.4 Mapping and round trip
+
+`fromJson(def) → BuilderModel` and `toJson(model) → StrategyDefinition`:
+
+- `when`: `{ always: true }` ⇔ `[]`; `{ all: [...] }` ⇔ mode `all` with one chip per child; `{ any: [...] }` ⇔ mode `any`; any other single condition ⇔ one chip, mode `all`. A child `{ any }` inside `all` (or `{ all }` inside `any`) of leaves ⇔ `group`; `{ not: leaf }` ⇔ `not`; anything else ⇔ `raw`.
+- `toJson` writes: `[]` → `{ always: true }`; one chip → the bare condition; otherwise `{ all | any: [...] }`.
+- Amounts: `{ units: n }`, integer literal, `{ prog }`, `{ pctOfBankroll }`, `{ tableMin }`, `{ keepOr }` ⇔ their tabs; anything else ⇔ *Formula*.
+- Defaults are omitted on write (`enabled: true`, `once: false`, `rules: []`, `working: 'auto'`, `feed: 'sized'`), and `x-*` keys are preserved untouched.
+
+`normalizeStrategy(def)` is exactly `toJson(fromJson(def))`. Laws, property-tested (§17): `normalize(normalize(d)) = normalize(d)`; `fromJson(toJson(m)) = m` for every model the builder can produce; and `normalize(d)` is semantically equivalent to `d` (same golden traces). Normalization only flattens `all`-of-`all`, unwraps one-element `all`/`any`, replaces `{ all: [] }` with `{ always: true }` and drops defaults; it never reorders anything.
+
+### 13.5 Templates
+
+"New strategy from a system" offers the classic presets (§15) as starting points; the builder treats them as ordinary JSON once inserted.
