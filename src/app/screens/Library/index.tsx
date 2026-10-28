@@ -63,7 +63,7 @@ export function Library({ query }: ScreenProps) {
         if (!live) return;
         setStrategies(s);
         const dryDefs = new Set(
-          d.filter((x) => x.definition.name.startsWith('Dry run: ')).map((x) => x.id),
+          d.filter((x) => x.definition.tags?.includes('dry-run') === true).map((x) => x.id),
         );
         setDefinitions(d.filter((x) => !dryDefs.has(x.id)));
         setRuns(r.filter((x) => !isDryRunId(x.runId)));

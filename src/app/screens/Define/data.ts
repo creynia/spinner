@@ -183,6 +183,8 @@ export function installQuickCheck(): void {
  * previous dry run is deleted when a new one starts, and the Library hides them by run id. Nothing
  * is ever matched by definition id (runs started without keys share an empty one).
  */
+/** Carried by the dry run's definition record so lists (Home, Library) can hide it. */
+export const DRY_RUN_TAG = 'dry-run';
 const DRY_KEY = 'spinner:dry-runs';
 let dryIds: string[] | null = null;
 
@@ -249,6 +251,7 @@ export async function startDryRun(d: NormalizedDefinition): Promise<string> {
   const dry: NormalizedDefinition = {
     ...d,
     name: `Dry run: ${d.name}`,
+    tags: [...new Set([...(d.tags ?? []), DRY_RUN_TAG])].sort(),
     run: { ...d.run, sessions: 1, sampleSessions: 1 },
   };
   const runId = await startRun(dry);
