@@ -1,3 +1,4 @@
+import type * as Runs from '../../services/runs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryBackend } from '@core';
 import type { NormalizedDefinition } from '@core/contracts/experiment';
@@ -8,7 +9,9 @@ let counter = 0;
 const putRun = vi.fn<(id: string) => Promise<void>>();
 vi.mock('../../services/runs', async () => {
   const { createStore } = await import('../../state/store');
+  const actual = await vi.importActual<typeof Runs>('../../services/runs');
   return {
+    ...actual,
     activeRun: createStore(null),
     // Like main's un-keyed startRun: every run gets the empty definition id.
     startRun: async () => {

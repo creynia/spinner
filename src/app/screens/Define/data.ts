@@ -9,35 +9,24 @@ import type {
 import type { StrategyDefinition } from '@core/contracts/strategy';
 import {
   createMemoryBackend,
-  createRepo,
   createRunController,
   createRunSink,
   definitionId,
   encodeShareLink,
   exportDefinitionFile,
   runMetrics,
-  type Backend,
   type Repo,
 } from '@core';
 import { canonicalJson } from '@core/experiment';
-import { getBackend, getRepo } from '../../services/db';
 import { game } from '../../services/game';
 import { getPool } from '../../services/pool';
-import { activeRun, startRun } from '../../services/runs';
+import { activeRun, DRY_RUN_TAG, getCoreRepo, startRun } from '../../services/runs';
 import { setQuickCheckRunner } from '../../services/quickCheck';
 import { verdictFromMetrics, type VerdictInput } from '../../services/verdict';
 import { createStore } from '../../state/store';
 
-let fallback: Backend | null = null;
-
-/** The library repo: the app's backend when it has one, else a process-lifetime memory backend. */
-export async function libraryRepo(): Promise<Repo> {
-  await getRepo();
-  const b = getBackend();
-  if (b) return createRepo(b);
-  fallback ??= createMemoryBackend();
-  return createRepo(fallback);
-}
+/** The library repo: the same one the run service writes to (services/runs). */
+export const libraryRepo = (): Promise<Repo> => getCoreRepo();
 
 /** Bumped after every library write so lists reload. */
 export const libraryVersion = createStore(0);
@@ -183,8 +172,6 @@ export function installQuickCheck(): void {
  * previous dry run is deleted when a new one starts, and the Library hides them by run id. Nothing
  * is ever matched by definition id (runs started without keys share an empty one).
  */
-/** Carried by the dry run's definition record so lists (Home, Library) can hide it. */
-export const DRY_RUN_TAG = 'dry-run';
 const DRY_KEY = 'spinner:dry-runs';
 let dryIds: string[] | null = null;
 
