@@ -16,6 +16,7 @@ import {
   MIN_VALUES,
   buildVariants,
   createSweep,
+  leafLabel,
   leafPaths,
   parseValues,
   runSweep,
@@ -129,7 +130,10 @@ function NewSweep({ query }: { query: URLSearchParams }) {
           onChange={setPath}
           options={[
             { value: '', label: 'Choose a setting' },
-            ...leaves.map((l) => ({ value: l.path, label: `${l.path} (now ${l.value})` })),
+            ...leaves.map((l) => ({
+              value: l.path,
+              label: base ? leafLabel(base.definition, l) : l.path,
+            })),
           ]}
         />
       </Field>
