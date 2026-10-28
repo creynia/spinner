@@ -50,6 +50,6 @@ All "before v1" items are closed by #17 and #18:
 - A read-only Analyze view for gallery runs, without importing them first (#15).
 - Compare and Sweep take `tableMax` from the first run's definition. Runs with different limits get one value (#17 audit).
 - Import's `classify()` matches error message text, because core-store exposes no error codes. Add codes to core-store errors (#15).
-- The shell's db adapter (`src/app/services/db.ts`) is not switched to core-store's `createRepo` (#7).
+- The shell's db adapter (`src/app/services/db.ts`) is not switched to core-store's `createRepo`, because core's Repo has no `deleteAll` or definitions export. Add those to core-store first (#7, #18).
 - The `vite build` warning "configLoader: 'native' … unsupported" comes from `build/vite-plugin-gallery.ts` importing extensionless `src/core` modules. Fix it before Vite makes native the default: add extensions, bundle the analyzer, or set `configLoader: 'runner'` (#18 review).
 - e2e: `sw-update.spec.ts` skips the phone-360 and phone-landscape projects; `resume.spec.ts` relies on 100k sessions to outlast the reload (#18).
