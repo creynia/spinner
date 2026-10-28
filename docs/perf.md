@@ -5,5 +5,4 @@ Reference run: Settings → _Benchmark this device_. It runs 10,000 sessions × 
 | Date       | Device                           | Browser               | Workers (P) | ms        | Rounds/s | Source                    |
 | ---------- | -------------------------------- | --------------------- | ----------- | --------- | -------- | ------------------------- |
 | 2026-10-28 | Build VM (shared, 4 vCPU class)  | Headless Chromium     | 3           | 6,800–9,100 | 550k–730k | `npm run test:perf` (#19) |
-| 2026-10-28 | GitHub Actions `ubuntu-latest`   | Headless Chromium     | 3           | under 60,000 (CI budget) | not recorded | CI perf job (#19)     |
 | _pending_  | Mid-range Android (Pixel 6a class) | Chrome              |             |           |          | Run by the owner on Pages |

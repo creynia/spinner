@@ -27,7 +27,7 @@ All "before v1" items are closed by #17 and #18:
 
 ## Perf
 
-- ~~Browser benchmark screen and real budget test~~ (#19). The 10,000 × 500 reference run took 7.7 s on 3 Workers in headless Chromium on the build VM, against the 20 s budget. It is not yet measured on a mid-range Android; see `docs/design/open-questions.md`.
+- ~~Browser benchmark screen and real budget test~~ (#19). The 10,000 × 500 reference run took 6.8–9.1 s on 3 Workers in headless Chromium on the build VM (see `docs/perf.md`), against the 20 s budget. It is not yet measured on a mid-range Android; see `docs/design/open-questions.md`.
 - There is no npm script for the node perf tests (`PERF=1 npx vitest run -c tests/perf/vitest.config.ts`); add `npm run perf:node`.
 - `tests/perf/budget.spec.ts` asserts at least 2 workers. On a runner with 2 cores or fewer, `poolSize()` gives 1 and the test fails. GitHub's hosted runners have 4 vCPU (#19 review).
 - Core harness: `controller.settled()` resolves on the *next* transition, so awaiting it on a finished run hangs. App callers guard for this (Sweep, Benchmark). Clarify the docstring, or add a `whenSettled()` that resolves at once for a terminal run (#19 review).
