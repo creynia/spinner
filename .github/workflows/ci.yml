@@ -1,0 +1,84 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITEST_MAX_WORKERS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: npm }
+      - run: npm ci
+      - run: npm run check
+
+  gallery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc }
+      - run: npm run gallery:check
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - name: Assert the sim worker is a separate chunk
+        run: ls dist/assets/sim.worker-*.js
+      - name: Bundle size report
+        run: du -ab dist | sort -n | tail -25 >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist, retention-days: 7 }
+
+  e2e:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PW_WORKERS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: npm }
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: playwright-report, path: playwright-report }
+
+  perf:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PERF: '1'
+      PERF_BUDGET_MS: '60000' # generous CI bound; locally 20000 (decisions #5)
+      PW_WORKERS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: npm }
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --project=perf
