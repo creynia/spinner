@@ -107,6 +107,19 @@ describe('schema v2', () => {
     r.db?.close();
   });
 
+  it('reopening an already-v2 database keeps its data and stays idb', async () => {
+    const factory = new IDBFactory();
+    const a = await openStore('again', { factory });
+    await a.backend.tx(['layouts'], 'readwrite', (t) => t.put('layouts', rec('k', '2026-01-01')));
+    a.db?.close();
+    const b = await openStore('again', { factory });
+    expect(b.persistent).toBe(true);
+    expect(b.backend.kind).toBe('idb');
+    expect(b.db?.version).toBe(2);
+    expect((await b.backend.get<LayoutRecord>('layouts', 'k'))?.id).toBe('k');
+    b.db?.close();
+  });
+
   it('the memory backend has all 11 stores', async () => {
     const b = createMemoryBackend();
     for (const s of STORE_NAMES) expect(await b.getAll(s)).toEqual([]);

@@ -58,6 +58,18 @@ export function dismissStorageBanner(): void {
   storageStatus.update((s) => ({ ...s, dismissed: true }));
 }
 
+/** Records whose id is not yet in `seen`; the first of a repeated id wins. Mutates `seen`. */
+function freshById<T extends { id: string }>(recs: readonly T[], seen: Set<string>): T[] {
+  return recs.filter((x) => {
+    if (seen.has(x.id)) return false;
+    seen.add(x.id);
+    return true;
+  });
+}
+
+const hasStringId = (x: unknown): boolean =>
+  !!x && typeof x === 'object' && typeof (x as { id?: unknown }).id === 'string';
+
 export class ImportError extends Error {}
 
 /** Validates the shape of an "export all" file; throws `ImportError` with a readable reason. */
@@ -78,8 +90,8 @@ export function parseAllData(text: string): AllData {
     v: 1,
     exportedAt: typeof o.exportedAt === 'string' ? o.exportedAt : '',
     settings: o.settings && typeof o.settings === 'object' ? o.settings : {},
-    definitions: Array.isArray(o.definitions) ? o.definitions : [],
-    layouts: Array.isArray(o.layouts) ? o.layouts : [],
+    definitions: Array.isArray(o.definitions) ? o.definitions.filter(hasStringId) : [],
+    layouts: Array.isArray(o.layouts) ? o.layouts.filter(hasStringId) : [],
   };
 }
 
@@ -116,10 +128,10 @@ export function createMemoryRepo(seed?: {
       }),
     importDefinitions: (d) => {
       const have = new Set(definitions.map((x) => x.id));
-      const fresh = d.definitions.filter((x) => !have.has(x.id));
+      const fresh = freshById(d.definitions, have);
       definitions = [...definitions, ...fresh];
       const haveL = new Set(layouts.map((x) => x.id));
-      const freshL = (d.layouts ?? []).filter((x) => !haveL.has(x.id));
+      const freshL = freshById(d.layouts ?? [], haveL);
       layouts = [...layouts, ...freshL];
       return Promise.resolve({ definitions: fresh.length, layouts: freshL.length });
     },
@@ -170,9 +182,9 @@ export function createBackendRepo(backend: Backend): Repo {
       const have = new Set(
         (await backend.getAll<DefinitionRecord>('definitions')).map((x) => x.id),
       );
-      const fresh = d.definitions.filter((x) => !have.has(x.id));
+      const fresh = freshById(d.definitions, have);
       const haveL = new Set((await backend.getAll<LayoutRecord>('layouts')).map((x) => x.id));
-      const freshL = (d.layouts ?? []).filter((x) => !haveL.has(x.id));
+      const freshL = freshById(d.layouts ?? [], haveL);
       await backend.tx(['definitions', 'layouts'], 'readwrite', (t) => {
         fresh.forEach((x) => t.put('definitions', x));
         freshL.forEach((x) => t.put('layouts', x));

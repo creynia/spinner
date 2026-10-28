@@ -177,6 +177,39 @@ describe('export / import (definitions only)', () => {
       layouts: 0,
     });
   });
+  it('dedupes repeated ids inside one file (memory and backend)', async () => {
+    const d = def('x', 'X', '2026-01-01');
+    const file = parseAllData(
+      JSON.stringify({
+        format: 'spinner-definitions',
+        v: 1,
+        definitions: [d, d],
+        layouts: [lay('a'), lay('a'), lay('b')],
+      }),
+    );
+    for (const repo of [createMemoryRepo(), createBackendRepo(strictBackend())]) {
+      expect(await repo.importDefinitions(file)).toEqual({ definitions: 1, layouts: 2 });
+      const out = await repo.exportDefinitions();
+      expect(out.definitions).toHaveLength(1);
+      expect(out.layouts).toHaveLength(2);
+    }
+  });
+  it('skips entries that are not objects with a string id', async () => {
+    const parsed = parseAllData(
+      JSON.stringify({
+        format: 'spinner-definitions',
+        v: 1,
+        definitions: [null, 5, 'x', {}, { id: 3 }, def('ok', 'Ok', '2026-01-01')],
+        layouts: [null, [], { id: null }, lay('good')],
+      }),
+    );
+    expect(parsed.definitions.map((x) => x.id)).toEqual(['ok']);
+    expect(parsed.layouts?.map((x) => x.id)).toEqual(['good']);
+    expect(await createBackendRepo(strictBackend()).importDefinitions(parsed)).toEqual({
+      definitions: 1,
+      layouts: 1,
+    });
+  });
   it('ignores a non-array layouts field', () => {
     const t = '{"format":"spinner-definitions","v":1,"layouts":{"a":1}}';
     expect(parseAllData(t).layouts).toEqual([]);

@@ -29,7 +29,7 @@ const SLUG_MAX = 40;
 export function layoutHash(l: ChipLayout): Promise<string> {
   const spots = l.spots
     .map((s) => ({ bet: s.bet, chips: s.chips }))
-    .sort((a, b) => (a.bet < b.bet ? -1 : a.bet > b.bet ? 1 : 0));
+    .sort((a, b) => (a.bet < b.bet ? -1 : a.bet > b.bet ? 1 : a.chips - b.chips));
   return sha256Hex(canonicalJson({ game: l.game, variant: l.variant, spots }));
 }
 
