@@ -10,7 +10,6 @@ import {
   type TableCheckSpot,
   type GameUi,
 } from '@core/ui';
-import * as chips from '@core/strategy';
 import * as store from '@core/store';
 import { rouletteUi } from '@game/roulette/ui';
 import type { RouletteRules } from '@game/roulette';
@@ -72,33 +71,6 @@ describe('review additions (types)', () => {
       1,
       'function',
     ]);
-  });
-});
-
-describe('WP-L1 stubs (core/strategy/chips.ts)', () => {
-  const calls: [string, () => unknown][] = [
-    ['chipAmount', () => chips.chipAmount(1, 500)],
-    ['compileChips', () => chips.compileChips({ v: 1, spots: [], chip: 500 })],
-    ['readStageChips', () => chips.readStageChips({})],
-    ['splitStageLayout', () => chips.splitStageLayout({ id: 'a' })],
-    ['withStageChips', () => chips.withStageChips({ id: 'a' }, null)],
-    ['liftRows', () => chips.liftRows([])],
-    ['liftRows', () => chips.liftRows([], 500)],
-    ['adjustSpot', () => chips.adjustSpot([], 'red', 1)],
-    ['sameSpots', () => chips.sameSpots([], [])],
-    ['validateChipLayout', () => chips.validateChipLayout({}, null)],
-    [
-      'validateStageChips',
-      () => chips.validateStageChips({ schema: 1, id: 'a', name: 'a', stages: [] } as never),
-    ],
-    ['progressionTop', () => chips.progressionTop({ kind: 'flat', base: 1 } as never, 2500)],
-    ['progressionBase', () => chips.progressionBase({ kind: 'flat', base: 1 } as never, 2500)],
-    ['resolveChipValue', () => chips.resolveChipValue(500, { unit: 2500 })],
-    ['isChipPath', () => chips.isChipPath('/strategy/stages/0/x-chips/chip')],
-    ['recompileStageChips', () => chips.recompileStageChips({ stages: [] } as never, 0)],
-  ];
-  it.each(calls)('%s throws not implemented (WP-L1)', (name, call) => {
-    expect(call).toThrow(`not implemented (WP-L1): ${name}`);
   });
 });
 

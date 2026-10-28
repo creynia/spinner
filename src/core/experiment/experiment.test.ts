@@ -26,6 +26,7 @@ import {
   sha256Hex,
   sha256Pure,
   simKey,
+  applySweepValue,
   sweepPathAllowed,
   toHex,
 } from './index';
@@ -47,6 +48,7 @@ function norm(d: ExperimentDefinition): NormalizedDefinition {
 const FLAT_RED_CANONICAL =
   '{"game":{"id":"roulette","rules":{"overrides":{},"preset":"european"}},"name":"Flat red","run":{"checkpointSchedule":"auto","sampleSessions":24,"seed":42,"sessions":10000},"schema":1,"session":{"bankroll":100000,"maxRounds":500,"roundsPerHour":40},"strategy":{"game":"roulette","id":"flat-red","name":"Flat red","schema":1,"stages":[{"id":"main","layout":[{"amount":{"units":1},"bet":"red"}]}],"unit":2500}}';
 const FLAT_RED_ID = '843d24d54068203f750224020025a3218ca509dffab614b76b0381f71df1f361';
+const PINNED_FLAT_RED_SIMKEY = '1d7c24cf7f4556ba37b8bab68edab7a0e688c7a87519861e92ad09cfa857a9f5';
 
 describe('canonical JSON', () => {
   it('sorts keys, drops whitespace and undefined members', () => {
@@ -467,5 +469,102 @@ describe('setPointer and sweepPathAllowed', () => {
     ]) {
       expect(sweepPathAllowed(p)).toBe(false);
     }
+  });
+});
+
+describe('chip sweeps and simKey provenance (layouts.md §8)', () => {
+  const chipped = (over: Record<string, unknown> = {}): NormalizedDefinition => {
+    const d = norm(fixture('flat-red.json'));
+    const stage = {
+      ...d.strategy.stages[0],
+      'x-chips': { v: 1, spots: [{ bet: 'red', chips: 3 }], chip: 500, ...over },
+      layout: [
+        { bet: 'red', amount: 1500 },
+        { bet: 'black', amount: 100 },
+      ],
+    };
+    return {
+      ...d,
+      strategy: { ...d.strategy, stages: [stage] },
+    } as unknown as NormalizedDefinition;
+  };
+  const C = '/strategy/stages/0/x-chips/chip';
+  const from = { id: 'a', hash: 'h', name: 'A' };
+
+  it('allows only the chip value among x- paths', () => {
+    const d = chipped();
+    expect(sweepPathAllowed(C)).toBe(true);
+    expect(sweepPathAllowed(C, d)).toBe(true);
+    for (const p of [
+      '/strategy/stages/0/x-chips/spots/0/chips',
+      '/strategy/stages/0/x-chips/from/hash',
+      '/strategy/stages/0/x-chips/v',
+      '/strategy/stages/0/x-other',
+      '/strategy/x-foo',
+    ]) {
+      expect(sweepPathAllowed(p), p).toBe(false);
+      expect(sweepPathAllowed(p, d), p).toBe(false);
+    }
+  });
+  it('denies compiled chip rows only with the definition, and only for i < spots.length', () => {
+    const d = chipped();
+    expect(sweepPathAllowed('/strategy/stages/0/layout/0/amount', d)).toBe(false);
+    expect(sweepPathAllowed('/strategy/stages/0/layout/0/amount')).toBe(true);
+    expect(sweepPathAllowed('/strategy/stages/0/layout/1/amount', d)).toBe(true);
+  });
+  it('denies a non-numeric chip value with the definition', () => {
+    const d = chipped({ chip: { units: 1 } });
+    expect(sweepPathAllowed(C, d)).toBe(false);
+  });
+  it('applySweepValue recompiles the prefix rows and keeps manual rows', () => {
+    const v = applySweepValue(chipped(), C, 2500) as NormalizedDefinition;
+    expect(v.strategy.stages[0]?.layout).toEqual([
+      { bet: 'red', amount: 7500 },
+      { bet: 'black', amount: 100 },
+    ]);
+    expect(applySweepValue(chipped(), '/session/bankroll', 5)).toMatchObject({
+      session: { bankroll: 5 },
+    });
+  });
+  it('applySweepValue refuses bad chip values before recompiling', () => {
+    for (const bad of [0, -5, 2.5, '500', null, 2 ** 31]) {
+      expect(() => applySweepValue(chipped(), C, bad as number)).toThrow(/whole cents|too large/);
+    }
+  });
+  it('simKey ignores x-chips.from; definitionId does not', async () => {
+    const a = chipped({ from });
+    const b = chipped({ from: { ...from, name: 'Renamed', hash: 'z' } });
+    const c = chipped();
+    expect(await simKey(a, '1', '2')).toBe(await simKey(b, '1', '2'));
+    expect(await simKey(a, '1', '2')).toBe(await simKey(c, '1', '2'));
+    expect(await definitionId(a)).not.toBe(await definitionId(b));
+    expect(await definitionId(a)).not.toBe(await definitionId(c));
+    const other = chipped({ chip: 100 });
+    expect(await simKey(other, '1', '2')).not.toBe(await simKey(c, '1', '2'));
+  });
+  it('leaves simKey of definitions without x-chips unchanged', async () => {
+    const flat = norm(fixture('flat-red.json'));
+    const variants = [
+      flat,
+      { ...flat, run: { ...flat.run, seed: 43 } },
+      { ...flat, session: { ...flat.session, bankroll: 5_000 } },
+    ] as NormalizedDefinition[];
+    for (const d of variants) {
+      const { name: _n, ...rest } = d;
+      const strategy = { ...d.strategy } as Record<string, unknown>;
+      delete strategy.name;
+      const want = createHash('sha256')
+        .update(
+          canonicalJson({
+            definition: { ...rest, strategy },
+            gameVersion: '1',
+            coreVersion: '2',
+          } as unknown as Json),
+        )
+        .digest('hex');
+      expect(await simKey(d, '1', '2')).toBe(want);
+    }
+    const d = flat;
+    expect(await simKey(d, '1', '2')).toBe(PINNED_FLAT_RED_SIMKEY);
   });
 });
