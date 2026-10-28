@@ -7,7 +7,7 @@ import { cancelRun, pauseRun, resumeStored } from '../../services/runs';
 import type { ScreenProps } from '../types';
 import { NotFoundCard } from '../Analyze/data';
 import { installResultsHook } from './e2eHook';
-import { useRun } from './useRun';
+import { LIVE_FAN_SESSIONS, useRun } from './useRun';
 
 installResultsHook();
 
@@ -154,7 +154,12 @@ export function Run({ params }: ScreenProps) {
         message={message}
         actions={actions}
       />
-      <LivePanel fan={live.fan} histogram={live.histogram} sessions={live.sessions} />
+      <LivePanel
+        fan={live.fan}
+        histogram={live.histogram}
+        sessions={live.sessions}
+        fanSessions={LIVE_FAN_SESSIONS}
+      />
       <section class="card" aria-labelledby="storage-h">
         <h2 id="storage-h">Storage</h2>
         <p data-storage>

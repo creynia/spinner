@@ -27,7 +27,7 @@ interface RunBundleHeader {
   };
 }
 interface GalleryAnalyzer {
-  headline: (bundle: RunBundleHeader, file: string) => unknown;
+  headline: (bundle: RunBundleHeader, file: string, raw: Uint8Array) => unknown;
 }
 interface GalleryOptions {
   dir?: string;
@@ -49,12 +49,12 @@ interface Entry {
   [k: string]: unknown;
 }
 const modPath = '../../build/vite-plugin-gallery.ts';
-const { buildGallery, canonicalJson, pendingAnalyzer } = (await import(
+const { buildGallery, canonicalJson, realAnalyzer } = (await import(
   /* @vite-ignore */ modPath
 )) as {
-  buildGallery: (o?: GalleryOptions) => Built;
+  buildGallery: (o?: GalleryOptions) => Promise<Built>;
   canonicalJson: (v: unknown) => string;
-  pendingAnalyzer: GalleryAnalyzer;
+  realAnalyzer: GalleryAnalyzer;
 };
 
 const headline = {
@@ -106,22 +106,22 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 const put = (name: string, data: Buffer) => writeFileSync(join(dir, name), data);
 
 describe('buildGallery', () => {
-  it('gives an empty index for an empty or missing folder', () => {
-    const empty = buildGallery({ dir, analyzer });
+  it('gives an empty index for an empty or missing folder', async () => {
+    const empty = await buildGallery({ dir, analyzer });
     expect(empty.index.entries).toEqual([]);
     expect(empty.index.totalBytes).toBe(0);
     expect(empty.index.format).toBe('casino-lab-gallery');
-    expect(buildGallery({ dir: join(dir, 'nope'), analyzer }).index.entries).toEqual([]);
+    expect((await buildGallery({ dir: join(dir, 'nope'), analyzer })).index.entries).toEqual([]);
   });
 
-  it('indexes a plain and a gzipped bundle with hashed file names', () => {
+  it('indexes a plain and a gzipped bundle with hashed file names', async () => {
     const raw = bundle();
     const gz = gzipSync(
       bundle({ definitionId: 'def2', meta: { runId: 'r2', sessions: 5, resultsDigest: 'd' } }),
     );
     put('a-flat.spinner.json', raw);
     put('b-other.spinner.json.gz', gz);
-    const { index, files } = buildGallery({
+    const { index, files } = await buildGallery({
       dir,
       analyzer,
       app: { id: 'spinner', version: '9.9.9' },
@@ -151,57 +151,64 @@ describe('buildGallery', () => {
     expect(index.totalBytes).toBe(raw.length + gz.length);
   });
 
-  it('is deterministic and honours order.json', () => {
+  it('is deterministic and honours order.json', async () => {
     put('a.spinner.json', bundle());
     put('b.spinner.json', bundle({ definitionId: 'd2' }));
-    const first = buildGallery({ dir, analyzer });
+    const first = await buildGallery({ dir, analyzer });
     expect(first.index.entries.map((e) => e.slug)).toEqual(['a', 'b']);
-    expect(canonicalJson(buildGallery({ dir, analyzer }).index)).toBe(canonicalJson(first.index));
+    expect(canonicalJson((await buildGallery({ dir, analyzer })).index)).toBe(
+      canonicalJson(first.index),
+    );
     put('order.json', Buffer.from('["b.spinner.json"]'));
-    expect(buildGallery({ dir, analyzer }).index.entries.map((e) => e.slug)).toEqual(['b', 'a']);
+    expect((await buildGallery({ dir, analyzer })).index.entries.map((e) => e.slug)).toEqual([
+      'b',
+      'a',
+    ]);
   });
 
-  it('fails a bundle over the per-bundle limit', () => {
+  it('fails a bundle over the per-bundle limit', async () => {
     put('big.spinner.json', bundle({}, 2000));
-    expect(() => buildGallery({ dir, analyzer, maxBundleBytes: 1000 })).toThrow(
+    await expect(buildGallery({ dir, analyzer, maxBundleBytes: 1000 })).rejects.toThrow(
       /big\.spinner\.json.*bundle limit/,
     );
   });
 
-  it('fails when the folder is over the total limit', () => {
+  it('fails when the folder is over the total limit', async () => {
     put('a.spinner.json', bundle());
     put('b.spinner.json', bundle({ definitionId: 'd2' }));
     const one = bundle().length;
-    expect(() => buildGallery({ dir, analyzer, maxTotalBytes: one + 10 })).toThrow(/folder limit/);
+    await expect(buildGallery({ dir, analyzer, maxTotalBytes: one + 10 })).rejects.toThrow(
+      /folder limit/,
+    );
   });
 
-  it('fails a bad digest (the analyzer throws), naming the file', () => {
+  it('fails a bad digest (the analyzer throws), naming the file', async () => {
     put('x.spinner.json', bundle({ meta: { runId: 'r', sessions: 1, resultsDigest: 'bad' } }));
-    expect(() => buildGallery({ dir, analyzer })).toThrow('gallery/x.spinner.json: file damaged');
+    await expect(buildGallery({ dir, analyzer })).rejects.toThrow(
+      'gallery/x.spinner.json: file damaged',
+    );
   });
 
-  it('fails the wrong game and non-bundle content', () => {
+  it('fails the wrong game and non-bundle content', async () => {
     put('c.spinner.json', bundle({ game: { id: 'craps', version: '1' } }));
-    expect(() => buildGallery({ dir, analyzer })).toThrow(/craps, expected roulette/);
+    await expect(buildGallery({ dir, analyzer })).rejects.toThrow(/craps, expected roulette/);
     rmSync(join(dir, 'c.spinner.json'));
     put('d.spinner.json', Buffer.from('{"format":"other"}'));
-    expect(() => buildGallery({ dir, analyzer })).toThrow(/not a spinner run file/);
+    await expect(buildGallery({ dir, analyzer })).rejects.toThrow(/not a spinner run file/);
     put('d.spinner.json', Buffer.from('nope'));
-    expect(() => buildGallery({ dir, analyzer })).toThrow(/not valid JSON/);
+    await expect(buildGallery({ dir, analyzer })).rejects.toThrow(/not valid JSON/);
   });
 
-  it('rejects an order.json naming a missing bundle', () => {
+  it('rejects an order.json naming a missing bundle', async () => {
     put('a.spinner.json', bundle());
     put('order.json', Buffer.from('["zzz.spinner.json"]'));
-    expect(() => buildGallery({ dir, analyzer })).toThrow(/no such bundle/);
+    await expect(buildGallery({ dir, analyzer })).rejects.toThrow(/no such bundle/);
   });
 
-  it('the default analyzer refuses until core-store lands, but an empty gallery still builds', () => {
-    expect(buildGallery({ dir }).index.entries).toEqual([]);
+  it('an empty gallery builds with the real analyzer, and a fake bundle is refused by it', async () => {
+    expect((await buildGallery({ dir })).index.entries).toEqual([]);
     put('a.spinner.json', bundle());
-    expect(() => buildGallery({ dir })).toThrow(/core-store/);
-    expect(() =>
-      pendingAnalyzer.headline(JSON.parse(bundle().toString()) as RunBundleHeader, 'f'),
-    ).toThrow();
+    await expect(buildGallery({ dir })).rejects.toThrow(/gallery\/a\.spinner\.json/);
+    expect(typeof realAnalyzer.headline).toBe('function');
   });
 });

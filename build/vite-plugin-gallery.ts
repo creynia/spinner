@@ -6,6 +6,10 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import type { Plugin } from 'vite';
+// Relative imports: the config's own imports do not see Vite's alias, and build/ is outside the
+// boundary rule (architecture.md §9).
+import { runMetrics } from '../src/core/analysis/index.ts';
+import { decodeRunBundle } from '../src/core/store/index.ts';
 
 export interface GalleryHeadline {
   meanNet: number;
@@ -40,19 +44,35 @@ export interface RunBundleHeader {
 }
 
 /**
- * Decodes the summary columns and computes the headline metrics. It must throw on a digest mismatch
- * for an untrimmed bundle. The real implementation calls core-store's bundle decoder and
- * core-analysis; until core-store merges the default throws for any non-empty gallery.
+ * Decodes the bundle (core-store) and computes the headline metrics (core-analysis). It must throw
+ * on a digest mismatch for an untrimmed bundle.
  */
 export interface GalleryAnalyzer {
-  headline(bundle: RunBundleHeader, file: string): GalleryHeadline;
+  headline(
+    bundle: RunBundleHeader,
+    file: string,
+    raw: Uint8Array,
+  ): GalleryHeadline | Promise<GalleryHeadline>;
 }
 
-export const pendingAnalyzer: GalleryAnalyzer = {
-  headline() {
-    throw new Error(
-      `headline decoding needs core-store's bundle decoder (not merged yet); pass an analyzer`,
-    );
+/** Even-money table maximum of the high-limit table (decisions #3), cents; roulette's outside max. */
+const TABLE_MAX = 500_000;
+
+export const realAnalyzer: GalleryAnalyzer = {
+  async headline(bundle, _file, raw) {
+    const res = await decodeRunBundle(raw, bundle.game.id);
+    if ('error' in res) throw new Error(res.error);
+    const m = runMetrics(res.data, { tableMax: TABLE_MAX });
+    const se = m.net.mean.se ?? 0;
+    return {
+      meanNet: m.net.mean.value,
+      seMean: se,
+      pAhead: m.probabilities.ahead.p,
+      pAheadCI: [m.probabilities.ahead.ci.lo, m.probabilities.ahead.ci.hi],
+      pBust: m.probabilities.bust.p,
+      pBustCI: [m.probabilities.bust.ci.lo, m.probabilities.bust.ci.hi],
+      expectedLossPerHour: m.edge.costOfPlayPerHour,
+    };
   },
 };
 
@@ -151,11 +171,11 @@ function parseHeader(raw: Buffer, file: string): RunBundleHeader {
 }
 
 /** Pure: read `dir`, validate, and build the index and the files to publish. Throws on any violation. */
-export function buildGallery(opts: GalleryOptions = {}): GalleryBuild {
+export async function buildGallery(opts: GalleryOptions = {}): Promise<GalleryBuild> {
   const dir = opts.dir ?? 'gallery';
   const maxBundle = opts.maxBundleBytes ?? 2 * MB;
   const maxTotal = opts.maxTotalBytes ?? 20 * MB;
-  const analyzer = opts.analyzer ?? pendingAnalyzer;
+  const analyzer = opts.analyzer ?? realAnalyzer;
   const app = opts.app ?? { id: 'spinner', version: '0.0.0' };
 
   const names = existsSync(dir)
@@ -185,7 +205,7 @@ export function buildGallery(opts: GalleryOptions = {}): GalleryBuild {
     const b = parseHeader(raw, n);
     let headline: GalleryHeadline;
     try {
-      headline = analyzer.headline(b, n);
+      headline = await analyzer.headline(b, n, raw);
     } catch (e) {
       throw new Error(`gallery/${n}: ${(e as Error).message}`, { cause: e });
     }
@@ -233,9 +253,9 @@ export function galleryPlugin(opts: GalleryOptions = {}): Plugin {
     configResolved(config) {
       root = config.root;
     },
-    buildStart() {
+    async buildStart() {
       try {
-        built = buildGallery(options());
+        built = await buildGallery(options());
       } catch (e) {
         this.error((e as Error).message);
       }
@@ -252,11 +272,11 @@ export function galleryPlugin(opts: GalleryOptions = {}): Plugin {
       }
     },
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
+      server.middlewares.use(async (req, res, next) => {
         const m = /\/gallery\/([^/?]+)(?:\?.*)?$/.exec(req.url ?? '');
         if (!m) return next();
         try {
-          const g = buildGallery(options());
+          const g = await buildGallery(options());
           if (m[1] === 'index.json') {
             res.setHeader('content-type', 'application/json');
             res.end(canonicalJson(g.index));
