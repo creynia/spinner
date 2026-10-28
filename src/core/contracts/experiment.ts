@@ -12,7 +12,16 @@
  *   encodeShareLink(d): Promise<{ hash: string } | { tooLong: true; chars: number }>
  *   decodeShareLink(hashParams: URLSearchParams): Promise<{ definition: ExperimentDefinition; checksumOk: boolean | null }>
  *   setPointer(d, path: string, value: Json): ExperimentDefinition
- *   sweepPathAllowed(path: string): boolean
+ *   sweepPathAllowed(path: string, def?: ExperimentDefinition): boolean
+ *     Without `def`, only the path rules apply: every `x-` path is denied except a stage's chip value,
+ *     `/strategy/stages/<s>/x-chips/chip`. With `def`, the chip-stage rules apply too: the compiled
+ *     chip rows (`/strategy/stages/<s>/layout/<i>/amount…`, `i < x-chips.spots.length`) are denied and
+ *     the chip value must be a numeric denomination (layouts.md §8.1; implemented by WP-L8).
+ *   applySweepValue(d, path: string, value: Json): ExperimentDefinition
+ *     `setPointer`, then, when `isChipPath(path)`, `recompileStageChips` of that stage so the generated
+ *     rows follow the new chip value (layouts.md §8.1; lives in `core/experiment/pointer.ts`, WP-L8).
+ *     For a chip path the value must be whole positive cents; otherwise it is a variant error
+ *     ("chip value must be whole cents").
  */
 import type { Cents, GamePlugin, Json, RulesRef } from './game';
 import type { Diagnostic, StrategyDefinition } from './strategy';

@@ -11,6 +11,7 @@ export * from './contracts/run';
 export * from './contracts/protocol';
 export * from './contracts/analysis';
 export * from './contracts/version';
+export * from './contracts/layout';
 export * from './money';
 export * from './rng';
 export * from './strategy';

@@ -51,3 +51,12 @@ export {
 } from './gallery';
 export { createRunSink, loadRun, writeCompacted, type StoreRunSink } from './sink';
 export { createRepo, type ImportResult, type Repo } from './repo';
+// Chip layouts (layouts.md §5.2); stubs until WP-L2.
+export {
+  allocLayoutId,
+  decodeLayoutFile,
+  encodeLayoutFile,
+  LayoutFileError,
+  layoutHash,
+  type LayoutFileErrorCode,
+} from './layouts';
