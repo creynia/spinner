@@ -22,7 +22,6 @@ beforeAll(async () => {
     coinDefinition({ strategy: MARTINGALE_COIN, sessions: 400, maxRounds: 40, seed: 3 }),
   );
   const flat = coinDefinition({ strategy: FLAT_COIN, sessions: 400, maxRounds: 40, seed: 3 });
-  big = big;
   otherSeed = await runCoinToEnd({ ...flat, run: { ...flat.run, seed: 99 } }, { runId: 'other' });
 }, 60_000);
 afterEach(cleanup);
@@ -100,7 +99,7 @@ describe('AnalysisView', () => {
       ...big,
       chunkStats: {
         ...big.chunkStats,
-        rejectedByReason: big.chunkStats.rejectedByReason.map((_, i) =>
+        rejectedByReason: big.chunkStats.rejectedByReason.map((_, i): Record<string, number> =>
           i === 0 ? { 'over-max': 7 } : {},
         ),
       },

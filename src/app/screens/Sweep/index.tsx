@@ -19,6 +19,7 @@ import {
   leafPaths,
   parseValues,
   runSweep,
+  showValue,
   sweepQueue,
 } from './sweep';
 
@@ -87,7 +88,7 @@ function NewSweep({ query }: { query: URLSearchParams }) {
       }
       const built = buildVariants(base.definition, path, parsed.values);
       if (!built.ok) {
-        setErrors(built.errors.map((e) => `${String(e.value)}: ${e.message}`));
+        setErrors(built.errors.map((e) => `${showValue(e.value)}: ${e.message}`));
         return;
       }
       const group = await createSweep(base, path, parsed.values, built.variants);
@@ -232,11 +233,11 @@ function ShowSweep({ groupId }: { groupId: string }) {
             const m = id ? metas[id] : undefined;
             const pct = m ? Math.floor((m.completedSessions / (m.sessions || 1)) * 100) : 0;
             return (
-              <li key={String(v)}>
+              <li key={showValue(v)}>
                 {id ? (
                   <a class="row-link" href={`#/run/${encodeURIComponent(id)}`}>
                     <span class="row-title">
-                      {group.sweep!.path.split('/').pop()} = {String(v)}
+                      {group.sweep!.path.split('/').pop()} = {showValue(v)}
                     </span>
                     <span class="row-sub">
                       {m ? (m.status === 'done' ? 'Done' : `${m.status}, ${pct}%`) : 'Waiting'}
@@ -245,7 +246,7 @@ function ShowSweep({ groupId }: { groupId: string }) {
                 ) : (
                   <span class="row-link">
                     <span class="row-title">
-                      {group.sweep!.path.split('/').pop()} = {String(v)}
+                      {group.sweep!.path.split('/').pop()} = {showValue(v)}
                     </span>
                     <span class="row-sub">
                       {running && queue?.current === i ? 'Starting' : 'Waiting'}

@@ -30,14 +30,14 @@ beforeAll(() => {
       session: { bankroll: 500_000, maxRounds: 60 },
       run: { sessions: 400, seed: 11 },
     },
-    { plugin: roulette as never, resolveStrategyRef: () => undefined },
+    { plugin: roulette, resolveStrategyRef: () => undefined },
   );
   if (!res.ok) throw new Error(JSON.stringify(res.errors));
   definition = res.definition;
   setPoolForTests(
     createPool({
       size: 2,
-      spawn: () => createInThreadTransport(roulette as never, { hop: 'timeout' }),
+      spawn: () => createInThreadTransport(roulette, { hop: 'timeout' }),
     }),
   );
 });

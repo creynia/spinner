@@ -70,9 +70,14 @@ export interface Variant {
   definition: NormalizedDefinition;
 }
 
+/** A swept value as text (values are numbers or strings; anything else is JSON). */
+export function showValue(v: Json): string {
+  return typeof v === 'string' ? v : JSON.stringify(v);
+}
+
 export function variantLabel(path: string, value: Json): string {
   const last = path.split('/').pop() ?? path;
-  return `${last}=${String(value)}`;
+  return `${last}=${showValue(value)}`;
 }
 
 export type BuildResult =

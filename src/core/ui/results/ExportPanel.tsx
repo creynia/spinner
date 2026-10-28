@@ -155,7 +155,7 @@ export function ExportPanel({ data, baseUrl }: ExportPanelProps) {
             readOnly
             value={link}
             aria-label="Share link"
-            onFocus={(e) => (e.currentTarget as HTMLInputElement).select()}
+            onFocus={(e) => e.currentTarget.select()}
           />
         ) : null}
       </Card>
