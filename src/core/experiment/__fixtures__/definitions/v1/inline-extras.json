@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "name": "Inline with extras",
+  "tags": ["z", "y"],
+  "game": { "id": "roulette", "rules": "american" },
+  "strategy": {
+    "schema": 1,
+    "id": "flat-black",
+    "name": "Flat black",
+    "game": "roulette",
+    "unit": 2500,
+    "x-note": "ui metadata survives",
+    "stages": [{ "id": "main", "layout": [{ "bet": "black", "amount": { "units": 2 } }] }]
+  },
+  "session": { "bankroll": 200000, "maxRounds": 1000, "stopLoss": 100000 },
+  "run": {
+    "sessions": 5000,
+    "seed": 4294967295,
+    "checkpointSchedule": "auto",
+    "sampleSessions": 24
+  }
+}
