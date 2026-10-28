@@ -6,7 +6,7 @@ export interface LockManagerLike {
   request(
     name: string,
     options: { ifAvailable: true },
-    callback: (lock: unknown) => Promise<unknown> | unknown,
+    callback: (lock: unknown) => unknown,
   ): Promise<unknown>;
 }
 

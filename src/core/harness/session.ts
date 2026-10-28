@@ -415,7 +415,7 @@ export class BatchRunner {
         (out as StepOutput & { anomalies?: number }).anomalies = 0;
         if (tracer) tracer.cur = null;
         runtime.step(mem, obs, out, tracer ? sink : undefined);
-        const so = out as StepOutput; // fresh reference: `step` mutated what we narrowed above
+        const so = out; // fresh reference: `step` mutated what we narrowed above
         anomalies += (so as StepOutput & { anomalies?: number }).anomalies ?? 0;
 
         const prevStage = stage;

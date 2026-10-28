@@ -43,32 +43,34 @@ export function createMemorySink(
     flushes: 0,
     compacted: 0,
     failAfterFlushes: undefined,
-    async flush(part: RunPart, meta: RunMeta): Promise<void> {
+    flush(part: RunPart, meta: RunMeta): Promise<void> {
       if (sink.failAfterFlushes !== undefined && sink.flushes >= sink.failAfterFlushes) {
         const e = new Error('quota exceeded');
         e.name = 'QuotaExceededError';
-        throw e;
+        return Promise.reject(e);
       }
       sink.flushes++;
       const m = structuredClone(meta);
       const st = ensure(m, runs.get(m.runId));
       runs.set(m.runId, st);
       if (part.chunkCount > 0 && st.acc) st.acc.mergePart(structuredClone(part));
+      return Promise.resolve();
     },
-    async compact(data: RunData, meta: RunMeta): Promise<void> {
+    compact(data: RunData, meta: RunMeta): Promise<void> {
       sink.compacted++;
       const m = structuredClone(meta);
       const st = ensure(m, runs.get(m.runId));
       runs.set(m.runId, st);
       st.acc?.loadFrom(structuredClone(data));
+      return Promise.resolve();
     },
-    async load(runId: string): Promise<RunData | null> {
+    load(runId: string): Promise<RunData | null> {
       const st = runs.get(runId);
-      if (!st) return null;
-      if (!st.acc) {
-        throw new Error('memory sink: run has no data yet');
-      }
-      return st.acc.toRunData(structuredClone(st.meta), definition, { copy: true });
+      if (!st) return Promise.resolve(null);
+      if (!st.acc) return Promise.reject(new Error('memory sink: run has no data yet'));
+      return Promise.resolve(
+        st.acc.toRunData(structuredClone(st.meta), definition, { copy: true }),
+      );
     },
     metaOf: (runId) => runs.get(runId)?.meta,
     clone(): MemorySink {

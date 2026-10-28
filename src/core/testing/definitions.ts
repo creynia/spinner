@@ -26,7 +26,7 @@ export const MARTINGALE_COIN: StrategyDefinition = {
 
 /**
  * The perf-reference shape (harness doc §14.1) on `coin`: warm (flat, 20 rounds) -> mart
- * (Martingale; up 500 -> flat, down 1500 -> warm) -> flat (2 units, 50 rounds) -> warm. Exercises
+ * (Martingale; up 500 -> flat, down 1500 -> warm, down 2500 -> stop 'walk-away') -> flat (2 units, 50 rounds) -> warm. Exercises
  * stages, transitions, once-per-window `goto` and a strategy `stop`.
  */
 export const STAGED_COIN: StrategyDefinition = {
@@ -46,9 +46,9 @@ export const STAGED_COIN: StrategyDefinition = {
       id: 'mart',
       layout: [{ bet: 'heads', amount: { prog: 'm' } }],
       rules: [
+        { when: { cmp: ['net', '<=', -2500] }, then: [{ stop: 'walk-away' }] },
         { when: { cmp: ['net', '>=', 500] }, then: [{ goto: 'flat' }] },
         { when: { cmp: ['net', '<=', -1500] }, then: [{ goto: 'warm' }] },
-        { when: { cmp: ['net', '<=', -4000] }, then: [{ stop: 'walk-away' }] },
       ],
     },
     {

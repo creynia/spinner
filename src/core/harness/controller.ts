@@ -21,6 +21,7 @@ import {
 } from '../contracts/run';
 import { CORE_VERSION } from '../contracts/version';
 import { RunAccumulator, bitGet, bitSet, bitmapBytes } from './accumulator';
+import { limitForTail, updateBatchSize } from './batching';
 import { acquireRunLock, defaultLocks, type LockManagerLike, type RunLock } from './lock';
 import type { PoolLease, SimPool } from './pool';
 import { checkpointSchedule, chunkSizeFor, sampleIndices } from './schedule';
@@ -29,7 +30,6 @@ type AnyPlugin = GamePlugin<unknown, unknown, unknown, unknown>;
 
 /** Per-run budget of serialized sample traces (harness-data-analysis.md §5.6). */
 export const RUN_TRACE_MAX_BYTES = 8 * 1024 * 1024;
-const MAX_BATCH_CHUNKS = 64;
 const MAX_IN_FLIGHT = 2;
 const MAX_VISIBILITY = 50;
 
@@ -420,9 +420,9 @@ export function createRunController(opts: RunControllerOptions): HarnessRunContr
     pending.push(part);
     batchesSinceFlush++;
 
-    const r = msg.chunkCount / Math.max(msg.elapsedMs, 1);
-    w.rate = w.rate === undefined ? r : 0.5 * w.rate + 0.5 * r;
-    w.k = Math.min(MAX_BATCH_CHUNKS, Math.max(1, Math.round(target * w.rate)));
+    const next = updateBatchSize(w.rate, msg.chunkCount, msg.elapsedMs, target);
+    w.rate = next.rate;
+    w.k = next.k;
 
     const t = now();
     winSessions += msg.count;
@@ -468,8 +468,7 @@ export function createRunController(opts: RunControllerOptions): HarnessRunContr
     while (cursor < chunks && chunkState[cursor] !== 0) cursor++;
     if (cursor >= chunks) return false;
     const remaining = missingChunks();
-    const tail = Math.max(1, Math.floor(remaining / (2 * workers.length)));
-    const k = opts.forceBatchChunks ?? Math.min(w.k, tail);
+    const k = opts.forceBatchChunks ?? limitForTail(w.k, remaining, workers.length);
     const first = cursor;
     let n = 0;
     while (n < k && first + n < chunks && chunkState[first + n] === 0) n++;
@@ -656,7 +655,12 @@ export function createRunController(opts: RunControllerOptions): HarnessRunContr
     sps = 0;
     meta!.timing.startedAt ??= iso();
     if (mode === 'resume') {
-      meta!.resumes.push({ at: iso(), completedSessions: acc ? acc.completedSessions() : 0 });
+      meta!.resumes.push({
+        at: iso(),
+        completedSessions: acc
+          ? acc.completedSessions()
+          : sessionsInBitmap(durable, chunks, chunkSize, sessions).completed,
+      });
     }
 
     chunkState = new Uint8Array(chunks);
@@ -710,7 +714,7 @@ export function createRunController(opts: RunControllerOptions): HarnessRunContr
       return status;
     },
     get meta() {
-      return meta;
+      return meta ? snapshotMeta() : null;
     },
     get error() {
       return lastError;

@@ -23,7 +23,6 @@ import type {
   Observation,
   StepOutput,
   StrategyDefinition,
-  StrategyMemory,
   StrategyRuntime,
   TraceSink,
 } from '../contracts/strategy';
@@ -260,7 +259,7 @@ export function compileTestStrategy(def: StrategyDefinition, ctx: CompileContext
       amount:
         typeof l.amount === 'object' && 'keepOr' in l.amount
           ? expr(l.amount.keepOr)
-          : expr(l.amount as Expr),
+          : expr(l.amount),
       when: l.when ? cond(l.when) : () => true,
     })),
     rules: (s.rules ?? [])
@@ -306,7 +305,7 @@ export function compileTestStrategy(def: StrategyDefinition, ctx: CompileContext
     def,
     stageIds,
     stopReasons: reasonList,
-    createMemory: () => freshMem() as StrategyMemory,
+    createMemory: () => freshMem(),
     reset(memory) {
       const m = memory as unknown as Mem;
       m.stage = 0;

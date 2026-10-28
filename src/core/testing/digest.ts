@@ -32,7 +32,7 @@ class Hasher {
 }
 
 function sortedJson(v: unknown): string {
-  return JSON.stringify(v, (_k, x) =>
+  return JSON.stringify(v, (_k, x: unknown): unknown =>
     x && typeof x === 'object' && !Array.isArray(x)
       ? Object.fromEntries(
           Object.entries(x as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)),

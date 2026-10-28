@@ -57,3 +57,4 @@ export {
   type RunLock,
 } from './lock';
 export { SimulateError, simulate, simulateOn, type SimulatedResult } from './simulate';
+export { MAX_BATCH_CHUNKS, limitForTail, updateBatchSize } from './batching';

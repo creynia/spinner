@@ -107,10 +107,7 @@ export class RunAccumulator {
     this.specs.forEach((spec, i) => {
       const dst = column(this.table, spec.name);
       const src = viewColumn(spec.dtype, part.columns[i]!);
-      (dst as TypedArray & { set(a: ArrayLike<number>, o: number): void }).set(
-        src,
-        part.firstSession * spec.width,
-      );
+      dst.set(src, part.firstSession * spec.width);
     });
     this.equity.set(new Int32Array(part.checkpoints), part.firstSession * this.K);
     for (const cs of part.chunks) this.chunkStats[cs.chunk] = cs;
@@ -128,9 +125,7 @@ export class RunAccumulator {
       this.schedule,
     );
     for (const spec of this.specs) {
-      (
-        column(c.table, spec.name) as TypedArray & { set(a: ArrayLike<number>, o: number): void }
-      ).set(column(this.table, spec.name), 0);
+      column(c.table, spec.name).set(column(this.table, spec.name), 0);
     }
     c.equity.set(this.equity);
     c.done.set(this.done);
@@ -178,9 +173,7 @@ export class RunAccumulator {
     const have = Math.min(n, this.sessions);
     for (const spec of this.specs) {
       const src = column(data.summary, spec.name);
-      const dst = column(this.table, spec.name) as TypedArray & {
-        set(a: ArrayLike<number>, o: number): void;
-      };
+      const dst = column(this.table, spec.name);
       dst.set(src.subarray(0, have * spec.width), 0);
     }
     this.equity.set(data.checkpoints.equity.subarray(0, have * this.K), 0);
