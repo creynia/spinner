@@ -3,7 +3,9 @@
 import type { ExperimentDefinition, Json, NormalizedDefinition } from '@core/contracts/experiment';
 import type { RulesRef } from '@core/contracts/game';
 import type { CompileContext, Diagnostic, StrategyDefinition } from '@core/contracts/strategy';
-import { normalizeDefinition, noExitWarning, validateStrategy } from '@core';
+import { canonicalJson, normalizeDefinition, noExitWarning, validateStrategy } from '@core';
+import type { ChipLayout, StageChips } from '@core/contracts/layout';
+import { normalizeStrategy, withStageChips } from '@core/strategy';
 import { STRATEGY_PRESETS, type RouletteRules } from '@game/roulette';
 import { game } from '../../services/game';
 
@@ -283,4 +285,63 @@ export function withUnit(strategy: unknown, unit: number): unknown {
 
 export function strategyUnit(strategy: unknown): number {
   return isObj(strategy) && typeof strategy.unit === 'number' ? strategy.unit : 2500;
+}
+
+/**
+ * A strategy that plays `layout` (`#/define?layout=<id>`, layouts.md §4.7).
+ *
+ * - Untouched start (the default Flat red, `base` still equal to `fresh`): the layout becomes the
+ *   strategy's only stage, `play`, so a new experiment is one tap from running.
+ * - Anything else: a new last stage `layout-<n>` holding a copy of the layout is appended. It has
+ *   no transition into it yet (the user adds one), and the builder's reachability warning says so.
+ *
+ * Either way the stage carries a copy of the spots at `chip` cents, with `from` pointing at the
+ * library entry.
+ */
+export function strategyWithLayout(
+  base: unknown,
+  fresh: unknown,
+  layout: ChipLayout,
+  from: NonNullable<StageChips['from']>,
+  chip: number,
+): { strategy: unknown; appended: boolean } {
+  const chips: StageChips = {
+    v: 1,
+    chip,
+    spots: layout.spots.map((x) => ({ ...x })),
+    from,
+  };
+  const pristine = !isObj(base) || JSON.stringify(base) === JSON.stringify(fresh);
+  if (pristine) {
+    const src = isObj(base) ? base : {};
+    const stage = withStageChips({ id: 'play' }, chips) as unknown as Obj;
+    return {
+      strategy: {
+        ...src,
+        name: layout.name,
+        id: `${layout.id}-strategy`.slice(0, 40),
+        stages: [stage],
+      },
+      appended: false,
+    };
+  }
+  const src = base;
+  const stages = Array.isArray(src.stages) ? [...(src.stages as Obj[])] : [];
+  const ids = new Set(stages.map((x) => String(x.id)));
+  let n = stages.length + 1;
+  while (ids.has(`layout-${n}`)) n++;
+  const stage = withStageChips({ id: `layout-${n}` }, chips) as unknown as Obj;
+  return { strategy: { ...src, stages: [...stages, stage] }, appended: true };
+}
+
+/** Whether two strategy documents normalize to the same thing (key order and defaults aside). */
+export function isSameStrategy(a: unknown, b: unknown): boolean {
+  try {
+    return (
+      canonicalJson(normalizeStrategy(a as StrategyDefinition) as unknown as Json) ===
+      canonicalJson(normalizeStrategy(b as StrategyDefinition) as unknown as Json)
+    );
+  } catch {
+    return false;
+  }
 }

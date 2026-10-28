@@ -10,7 +10,7 @@ import { ChipRack } from './ChipRack';
 import { SpotList } from './SpotList';
 import { adjustSpot } from '../../strategy';
 import { betLabel, makeRows, money, plural, sameSpotsInOrder, totalChips } from './adjust';
-import { checkAtTable } from './check';
+import { checkAtTable, minimumHint } from './check';
 import { useChipHistory } from './history';
 import type { ChipTool, LayoutEditorProps } from './types';
 import './layout.css';
@@ -107,6 +107,15 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
   const check = useMemo(
     () => (value === null ? null : checkAtTable(plugin, rules, makeRows(spots, value), bankroll)),
     [plugin, rules, spots, value, bankroll],
+  );
+  // When the only problems are table minimums the layout is just still being built: say what to
+  // add instead of a red failure.
+  const hint = useMemo(
+    () =>
+      check && value !== null
+        ? minimumHint(plugin, rules, makeRows(spots, value), check, bankroll, label)
+        : null,
+    [plugin, rules, spots, value, bankroll, check, label],
   );
   const flagged = useMemo(() => {
     const m = new Map<BetId, string>();
@@ -379,10 +388,14 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
     spots.length === 0
       ? 'Empty: tap the table to add chips'
       : `${plural(chips, 'chip')} · ${plural(spots.length, 'spot')}` +
-        (notPlaced > 0 ? ` · ${spots.length - notPlaced} of ${spots.length} spots placed` : '') +
-        (check && value !== null
-          ? ` · at ${money(value)}: ${money(check.total)} ${problems.length ? '!' : '✓'}`
-          : '');
+        (hint !== null
+          ? ` · at ${money(value!)}: ${hint}`
+          : (notPlaced > 0
+              ? ` · ${spots.length - notPlaced} of ${spots.length} spots placed`
+              : '') +
+            (check && value !== null
+              ? ` · at ${money(value)}: ${money(check.total)} ${problems.length ? '!' : '✓'}`
+              : ''));
 
   return (
     <div class={`layout-editor${wide ? ' is-wide' : ''}`} ref={rootRef}>
@@ -423,7 +436,7 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
         </Tabs>
       )}
 
-      {problems.length ? (
+      {problems.length && hint === null ? (
         <div class="le-problems" role="status">
           <span aria-hidden="true">! </span>
           {plural(problems.length, 'spot')} would not be placed as drawn. First:{' '}
