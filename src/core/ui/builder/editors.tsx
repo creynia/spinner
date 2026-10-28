@@ -7,7 +7,7 @@ import type { Condition, Effect, ProgressionSpec } from '../../contracts/strateg
 import { PROGRESSION_KINDS } from '../../strategy';
 import { Button, Segmented, Sheet, Toggle, useId } from '../kit';
 import { describeAmount, describeCondition, describeEffect } from './describe';
-import { str, allFacts, betLabel, factByName, type BuilderEnv, type FactInfo } from './env';
+import { str, allFacts, betLabel, factByName, money, type BuilderEnv, type FactInfo } from './env';
 import { JsonField, NumField, SelectField, TextField } from './fields';
 import { amountFrom, amountTo, type AmountModel } from './model';
 
@@ -1005,6 +1005,8 @@ export function ProgressionEditor(p: {
   onSave: (name: string, spec: ProgressionSpec) => void;
   onClose: () => void;
   onDelete?: () => void;
+  /** A progression made for a chip value (layouts.md §3.3): changing the kind keeps its literal `base`. */
+  keepBase?: boolean;
 }) {
   const [name, setName] = useState(p.name);
   const [spec, setSpec] = useState<Obj>(p.spec as unknown as Obj);
@@ -1050,7 +1052,9 @@ export function ProgressionEditor(p: {
     const u = unitsOf(spec[k]);
     return u === 'other' ? (
       <p class="hint" key={k}>
-        {label} is a formula; edit it in the JSON below.
+        {typeof spec[k] === 'number'
+          ? `${k === 'base' ? 'The base amount' : 'The cap'} is ${money(spec[k])}; edit it in the JSON below.`
+          : `${label} is a formula; edit it in the JSON below.`}
       </p>
     ) : (
       <NumField
@@ -1088,7 +1092,12 @@ export function ProgressionEditor(p: {
         label="Kind"
         value={str(spec.kind)}
         options={PROGRESSION_KINDS.map((k) => ({ value: k, label: k }))}
-        onChange={(k) => formSet(defaultSpec(k, track))}
+        onChange={(k) =>
+          formSet({
+            ...defaultSpec(k, track),
+            ...(p.keepBase && spec.base !== undefined ? { base: spec.base } : {}),
+          })
+        }
       />
       <div class="field">
         <span class="field-label">Tracks</span>

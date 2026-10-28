@@ -2,9 +2,14 @@
 export { Builder, type BuilderProps } from './Builder';
 export { StrategyEditor, builderBlockers, type StrategyEditorProps } from './StrategyEditor';
 export type { BuilderEnv } from './env';
+export { ChipsPanel, inheritedOf, type ChipsPanelProps } from './ChipsPanel';
+export { LayoutPickSheet, type LayoutPickSheetProps } from './LayoutPickSheet';
+export { checkStageChips, type StageTableCheck } from './chipsCheck';
 
 /** DOM id of the builder element that shows the diagnostic at this JSON pointer (for "jump to"). */
 export function pathToElementId(path: string): string {
+  const chips = /^\/stages\/(\d+)\/x-chips(\/|$)/.exec(path);
+  if (chips) return `b-chips-${chips[1]}`;
   const rule = /^\/stages\/(\d+)\/rules\/(\d+)/.exec(path);
   if (rule) return `b-rule-${rule[1]}-${rule[2]}`;
   const lay = /^\/stages\/(\d+)\/layout\/(\d+)/.exec(path);

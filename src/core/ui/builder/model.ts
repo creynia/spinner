@@ -1,6 +1,7 @@
 // The builder view model (strategy.md §13.1, §13.4): `fromJson(def)` and `toJson(model)`.
 // Laws: toJson(fromJson(d)) deep-equals normalizeStrategy(d); fromJson(toJson(m)) equals m.
 // Everything the builder has no form for is kept verbatim (raw chips, formula amounts, `extra`).
+import type { LayoutSpot, StageChips } from '../../contracts/layout';
 import type {
   Condition,
   Effect,
@@ -12,7 +13,7 @@ import type {
   StrategyDefinition,
 } from '../../contracts/strategy';
 import { str } from './env';
-import { normalizeStrategy } from '../../strategy';
+import { compileChips, liftRows, normalizeStrategy, splitStageLayout } from '../../strategy';
 
 type Obj = Record<string, unknown>;
 const isObj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -208,7 +209,15 @@ export interface StageCard {
   id: string;
   label?: string;
   extends?: string;
+  /**
+   * The manual rows ("Other bets"): the rows after the generated prefix, or every row when
+   * `chipsStale` (layouts.md §7.1). With `chips` set and fresh, the prefix is not held here.
+   */
   layout: LayoutRow[];
+  /** The stage's `x-chips` block (a frozen copy of the spots plus the chip value); null when none. */
+  chips: StageChips | null;
+  /** The generated prefix no longer matches `chips`; every row is then in `layout`, verbatim. */
+  chipsStale: boolean;
   onEnter: EffectChip[];
   onExit: EffectChip[];
   rules: RuleRow[];
@@ -298,8 +307,13 @@ function normEffect(e: Effect): Effect {
   return o as unknown as Effect;
 }
 
-/** Defensive: a document that passed the structural validator. Never throws on shaped input. */
-export function fromJson(source: StrategyDefinition): BuilderModel {
+/**
+ * Defensive: a document that passed the structural validator. Never throws on shaped input.
+ * `opts.chips: false` is the chips-unaware builder (no `env.chips`): `x-chips` stays in `extra` and
+ * `layout` holds every row, exactly as before chips existed.
+ */
+export function fromJson(source: StrategyDefinition, opts: { chips?: boolean } = {}): BuilderModel {
+  const aware = opts.chips !== false;
   const d = normalizeStrategy(source) as unknown as Obj;
   const { picked, extra } = split(d, ROOT_OWN);
   const m: BuilderModel = {
@@ -315,9 +329,16 @@ export function fromJson(source: StrategyDefinition): BuilderModel {
       .map((s): StageCard => {
         const sp = split(s, STAGE_OWN);
         const p = sp.picked;
+        // A readable block leaves `extra` for the model; a malformed one stays there verbatim.
+        const lay = aware ? splitStageLayout(s as unknown as Stage) : null;
+        const chips = lay?.chips ?? null;
+        if (chips) delete sp.extra['x-chips'];
+        const rows = chips && lay ? lay.manual : arr(p.layout);
         const card: StageCard = {
           id: str(p.id ?? ''),
-          layout: arr(p.layout).filter(isObj).map(layoutFrom),
+          layout: rows.filter(isObj).map(layoutFrom),
+          chips,
+          chipsStale: !!lay?.stale,
           onEnter: arr(p.onEnter).map((e) => ({ effect: normEffect(e as Effect) })),
           onExit: arr(p.onExit).map((e) => ({ effect: normEffect(e as Effect) })),
           rules: arr(p.rules).filter(isObj).map(ruleFrom),
@@ -373,7 +394,12 @@ export function toJson(m: BuilderModel): StrategyDefinition {
     const st: Obj = { ...clone(s.extra), id: s.id };
     if (s.label !== undefined) st.label = s.label;
     if (s.extends !== undefined) st.extends = s.extends;
-    if (s.layout.length > 0 || s.has.layout) st.layout = s.layout.map(layoutTo);
+    // A stale block is written back as it came, with every row verbatim (§7.1): regenerating the
+    // prefix (`withStageChips`) would turn the old rows into manual ones and change the document.
+    if (s.chips) st['x-chips'] = clone(s.chips);
+    const rows = s.layout.map(layoutTo);
+    const layout = s.chips && !s.chipsStale ? [...compileChips(s.chips), ...rows] : rows;
+    if (layout.length > 0 || s.has.layout) st.layout = layout;
     if (s.onEnter.length > 0 || s.has.onEnter)
       st.onEnter = s.onEnter.map((c) => normEffect(c.effect));
     if (s.onExit.length > 0 || s.has.onExit) st.onExit = s.onExit.map((c) => normEffect(c.effect));
@@ -404,6 +430,8 @@ export function emptyStage(taken: readonly string[]): StageCard {
   return {
     id: freshSlug('stage', taken),
     layout: [],
+    chips: null,
+    chipsStale: false,
     onEnter: [],
     onExit: [],
     rules: [],
@@ -429,4 +457,71 @@ export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
   const [x] = out.splice(from, 1);
   out.splice(to, 0, x!);
   return out;
+}
+
+// ------------------------------------------------------------------ chips helpers (layouts.md §7)
+
+/** Number of generated rows at the front of the stage's layout (0 when stale or without chips). */
+export function generatedCount(card: StageCard): number {
+  return card.chips && !card.chipsStale ? card.chips.spots.length : 0;
+}
+
+/** The chip-shaped rows of a stage without chips as a block, with `layout` unchanged (§5.1); null if none. */
+export function liftableChips(card: StageCard): StageChips | null {
+  if (card.chips) return null;
+  return liftRows(card.layout.map(layoutTo));
+}
+
+/** Whether every row of a stage without chips is chip-shaped (the rows lift completely). */
+export function liftsAll(card: StageCard): boolean {
+  const lifted = liftableChips(card);
+  return !!lifted && lifted.spots.length === card.layout.length;
+}
+
+/** Lifts the chip-shaped rows into `x-chips`; the generated prefix equals the rows it replaces, so the JSON `layout` is unchanged. */
+export function liftCard(card: StageCard): StageChips | null {
+  const lifted = liftableChips(card);
+  if (!lifted) return null;
+  card.layout = card.layout.slice(lifted.spots.length);
+  card.chips = lifted;
+  card.chipsStale = false;
+  card.has.layout = true;
+  return lifted;
+}
+
+/** Sets a fresh block (the prefix is regenerated on `toJson`); manual rows are kept. */
+export function setCardChips(card: StageCard, chips: StageChips): void {
+  card.chips = chips;
+  card.chipsStale = false;
+  card.has.layout = true;
+}
+
+/** Rebuilds a stale stage from its block: the old rows the block shadows are dropped, the rest stay manual. */
+export function rebuildStale(card: StageCard): void {
+  const c = card.chips;
+  if (!c) return;
+  const bets = new Set(c.spots.map((s) => s.bet));
+  card.layout = card.layout.filter((r) => !bets.has(r.bet));
+  card.chipsStale = false;
+  card.has.layout = true;
+}
+
+/**
+ * Forgets the block. A stale stage keeps every row (they are what runs). A fresh one keeps its
+ * generated rows as plain bets with `keepRows`, else drops them (the chips were their source).
+ */
+export function forgetChips(card: StageCard, keepRows: boolean): void {
+  const c = card.chips;
+  if (!c) return;
+  if (!card.chipsStale && keepRows) {
+    const gen = compileChips(c).map((r) => layoutFrom(r as unknown as Obj));
+    card.layout = [...gen, ...card.layout];
+  }
+  card.chips = null;
+  card.chipsStale = false;
+}
+
+/** Replaces the spots of a fresh block, keeping `chip`, `from` and any `x-` keys. */
+export function withSpots(chips: StageChips, spots: readonly LayoutSpot[]): StageChips {
+  return { ...chips, spots: spots.map((s) => ({ ...s })) };
 }

@@ -1,44 +1,6 @@
-// Spot arithmetic the shell needs (layouts.md §4.3). Local to the editor so it does not wait on
-// WP-L1's `adjustSpot`; the semantics are the same (one tap adds or removes `|delta|` chips).
+// Small helpers the shell needs (layouts.md §4.3). Spot arithmetic is `adjustSpot` from core/strategy.
 import type { BetCatalogEntry, BetId, Cents } from '../../contracts/game';
-import { MAX_CHIPS_PER_SPOT, MAX_LAYOUT_SPOTS, type LayoutSpot } from '../../contracts/layout';
-
-export type Refusal = 'max-spots' | 'max-chips' | 'none-to-remove';
-
-export interface Adjusted {
-  spots: LayoutSpot[];
-  refused?: Refusal;
-}
-
-/** Adds (`delta > 0`) or removes (`delta < 0`) chips on `bet`; a spot at 0 disappears. */
-export function adjustSpots(
-  spots: readonly LayoutSpot[],
-  bet: BetId,
-  delta: number,
-  lim: { maxSpots?: number; maxChips?: number } = {},
-): Adjusted {
-  const maxSpots = lim.maxSpots ?? MAX_LAYOUT_SPOTS;
-  const maxChips = lim.maxChips ?? MAX_CHIPS_PER_SPOT;
-  const i = spots.findIndex((s) => s.bet === bet);
-  const keep = spots.map((s) => ({ ...s }));
-  if (!Number.isInteger(delta) || delta === 0) return { spots: keep };
-  if (delta > 0) {
-    if (i < 0) {
-      if (spots.length >= maxSpots) return { spots: keep, refused: 'max-spots' };
-      if (delta > maxChips) return { spots: keep, refused: 'max-chips' };
-      return { spots: [...keep, { bet, chips: delta }] };
-    }
-    const n = spots[i]!.chips + delta;
-    if (n > maxChips) return { spots: keep, refused: 'max-chips' };
-    keep[i] = { ...keep[i]!, chips: n };
-    return { spots: keep };
-  }
-  if (i < 0) return { spots: keep, refused: 'none-to-remove' };
-  const n = spots[i]!.chips + delta;
-  if (n <= 0) keep.splice(i, 1);
-  else keep[i] = { ...keep[i]!, chips: n };
-  return { spots: keep };
-}
+import type { LayoutSpot } from '../../contracts/layout';
 
 /** Order-sensitive deep equality (a reorder is a change). */
 export function sameSpotsInOrder(a: readonly LayoutSpot[], b: readonly LayoutSpot[]): boolean {

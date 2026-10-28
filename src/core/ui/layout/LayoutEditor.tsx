@@ -8,15 +8,8 @@ import { MAX_CHIPS_PER_SPOT, MAX_LAYOUT_SPOTS, type LayoutSpot } from '../../con
 import { Button, Field, Select, Sheet, Tabs, TextInput, useId } from '../kit';
 import { ChipRack } from './ChipRack';
 import { SpotList } from './SpotList';
-import {
-  adjustSpots,
-  betLabel,
-  makeRows,
-  money,
-  plural,
-  sameSpotsInOrder,
-  totalChips,
-} from './adjust';
+import { adjustSpot } from '../../strategy';
+import { betLabel, makeRows, money, plural, sameSpotsInOrder, totalChips } from './adjust';
 import { checkAtTable } from './check';
 import { useChipHistory } from './history';
 import type { ChipTool, LayoutEditorProps } from './types';
@@ -125,7 +118,7 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
   const adjust = useCallback(
     (bet: BetId, delta: number) => {
       const name_ = label(bet);
-      const r = adjustSpots(spotsRef.current, bet, delta, { maxSpots });
+      const r = adjustSpot(spotsRef.current, bet, delta, { maxSpots });
       if (r.refused === 'max-spots') {
         say(`A layout holds at most ${plural(maxSpots, 'spot')}`);
         return;
