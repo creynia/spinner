@@ -4,8 +4,7 @@
  */
 import type { ComponentType } from 'preact';
 import type { BetCatalogEntry, BetId, Cents, GamePlugin } from '../../contracts/game';
-import type { ChipLayout, LayoutSpot } from '../../contracts/layout';
-import type { Slug } from '../../contracts/strategy';
+import type { ChipLayout, LayoutRecord, LayoutSpot } from '../../contracts/layout';
 import type { BetPickerProps, ChipsUi, GameUi } from '../game-ui';
 
 /** The editor's tool (layouts.md §4.3). */
@@ -28,7 +27,9 @@ export interface TableCheckSpot {
   /** Cents the table would place (0 when rejected). */
   placed: Cents;
   status: 'ok' | 'adjusted' | 'rejected';
-  /** The plugin's reason (`reconcile` rejected/adjusted), English. */
+  /** The plugin's reconcile code, verbatim (`rejected`/`adjusted` reason, e.g. 'below-min', 'clamped'); absent when ok. */
+  code?: string;
+  /** English message for `code`. */
   reason?: string;
 }
 
@@ -101,7 +102,8 @@ export interface SpotListProps<R = unknown> {
 }
 
 export interface LayoutThumbProps<R = unknown> {
-  ui: Pick<GameUi<R>, 'TableView'>;
+  /** With `chips` and a null `chipValue`, counts are drawn by `chips.ChipBoard` (`readOnly`); else `TableView` at resolved cents. */
+  ui: Pick<GameUi<R>, 'TableView'> & { chips?: ChipsUi<R> };
   rules: R;
   spots: readonly LayoutSpot[];
   /** A chip value to draw money at, or null to draw chip counts. */
@@ -124,12 +126,14 @@ export interface LayoutEditorProps<R = unknown> {
   ui: Pick<GameUi<R>, 'BetPicker' | 'TableView'> & { chips: ChipsUi<R> };
   /** Spots to start from (empty for a new layout). */
   initialSpots: readonly LayoutSpot[];
-  /** Header fields. Absent `onRename`/`variants`: the name and variant are fixed (stage host). */
+  /** Header fields. Absent `variants`: the variant cannot be changed (stage host). */
   name: string;
   variant: string;
   notes?: string;
   /** Selectable rules presets (id and label); absent: the variant cannot be changed. */
   variants?: readonly { id: string; label: string }[];
+  /** The user picked another variant; the host re-supplies `rules` (and `variant`) for it. */
+  onVariantChange?(id: string): void;
   /** Initial preview chip value; null shows counts. The user can change it with the chip rack. */
   chipValue: Cents | null;
   /** Session bankroll for the table check. */
@@ -152,11 +156,12 @@ export interface LayoutChoice {
 
 /** The builder's optional chips environment: `BuilderEnv.chips` (§7.2). When absent, rows only. */
 export interface BuilderChipsEnv<R = unknown> {
-  ui: ChipsUi<R>;
+  ui: Pick<GameUi<R>, 'BetPicker' | 'TableView'> & { chips: ChipsUi<R> };
   plugin: GamePlugin<unknown, unknown, R, unknown>;
   layouts: {
     list(): Promise<LayoutChoice[]>;
-    save(l: ChipLayout): Promise<Slug>;
+    /** Saves and returns the record (id and hash for `StageChips.from`). An existing id is overwritten. */
+    save(l: ChipLayout): Promise<LayoutRecord>;
   };
   /** Session bankroll for the table check. */
   bankroll: Cents;

@@ -20,6 +20,8 @@
  *   applySweepValue(d, path: string, value: Json): ExperimentDefinition
  *     `setPointer`, then, when `isChipPath(path)`, `recompileStageChips` of that stage so the generated
  *     rows follow the new chip value (layouts.md §8.1; lives in `core/experiment/pointer.ts`, WP-L8).
+ *     For a chip path the value must be whole positive cents; otherwise it is a variant error
+ *     ("chip value must be whole cents").
  */
 import type { Cents, GamePlugin, Json, RulesRef } from './game';
 import type { Diagnostic, StrategyDefinition } from './strategy';

@@ -61,9 +61,10 @@ export function withStageChips(_stage: Stage, _chips: StageChips | null): Stage 
  * Lifts chip-shaped rows into a block with no change to `layout` (§5.1, §7.3): rows with no `when`,
  * `parent`, `working` or `label`, whose amounts are all `{ units: n }`, all one progression
  * (`{ prog: p }` or `{ times: [n, { prog: p }] }`), or positive integer literals when the stage's
- * `x-chips.chip` is a number. `null` when nothing qualifies.
+ * `x-chips.chip` is a number; `chip` is that value (the literal form is lifted only when `chip` is a
+ * number, and the result keeps it). `null` when nothing qualifies.
  */
-export function liftRows(_rows: readonly LayoutSpec[]): StageChips | null {
+export function liftRows(_rows: readonly LayoutSpec[], _chip?: Cents): StageChips | null {
   return todo('liftRows');
 }
 

@@ -10,7 +10,11 @@ import {
   checkAtTable,
   defaultDenom,
   useChipHistory,
+  type BuilderChipsEnv,
+  type ChipBoardProps,
   type ChipsUi,
+  type LayoutThumbProps,
+  type TableCheckSpot,
   type GameUi,
 } from '@core/ui';
 import * as chips from '@core/strategy';
@@ -34,6 +38,50 @@ describe('GameUi.chips is additive and optional', () => {
   });
 });
 
+describe('review additions (types)', () => {
+  it('type-checks the added optional members', () => {
+    const board: ChipBoardProps = {
+      rules: {},
+      spots: [],
+      tool: 'add',
+      chipValue: null,
+      onAdjust: () => {},
+      readOnly: true,
+      onStatus: () => {},
+    };
+    const spot: TableCheckSpot = {
+      bet: 'red',
+      asked: 500,
+      placed: 0,
+      status: 'rejected',
+      code: 'below-min',
+      reason: 'Below the minimum',
+    };
+    const thumb: Pick<LayoutThumbProps, 'ui'> = {
+      ui: {
+        TableView: () => null,
+        chips: { ChipBoard: () => null, step: () => 1, denominations: [] },
+      },
+    };
+    const save: BuilderChipsEnv['layouts']['save'] = (l) =>
+      Promise.resolve({
+        v: 1,
+        id: l.id,
+        layout: l,
+        hash: '',
+        createdAt: '',
+        updatedAt: '',
+        origin: 'user',
+      });
+    expect([board.readOnly, spot.code, thumb.ui.chips?.step('red'), typeof save]).toEqual([
+      true,
+      'below-min',
+      1,
+      'function',
+    ]);
+  });
+});
+
 describe('WP-L1 stubs (core/strategy/chips.ts)', () => {
   const calls: [string, () => unknown][] = [
     ['chipAmount', () => chips.chipAmount(1, 500)],
@@ -42,6 +90,7 @@ describe('WP-L1 stubs (core/strategy/chips.ts)', () => {
     ['splitStageLayout', () => chips.splitStageLayout({ id: 'a' })],
     ['withStageChips', () => chips.withStageChips({ id: 'a' }, null)],
     ['liftRows', () => chips.liftRows([])],
+    ['liftRows', () => chips.liftRows([], 500)],
     ['adjustSpot', () => chips.adjustSpot([], 'red', 1)],
     ['sameSpots', () => chips.sameSpots([], [])],
     ['validateChipLayout', () => chips.validateChipLayout({}, null)],

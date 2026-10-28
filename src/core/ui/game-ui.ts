@@ -46,6 +46,10 @@ export interface ChipBoardProps<R = unknown> {
   last?: BetId | null;
   /** Per-spot problems from the table check (ringed chips). */
   flagged?: ReadonlyMap<BetId, string>;
+  /** Draw spots with count badges only: no taps, no sheet (thumbnails). */
+  readOnly?: boolean;
+  /** Status text for the shell's live status line (lock mode, the resolved bet: "Split mode", "Split 1|4"). */
+  onStatus?(message: string): void;
 }
 
 /** The game's contribution to the generic layout editor (layouts.md §6.2). */
