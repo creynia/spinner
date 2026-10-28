@@ -12,11 +12,21 @@ import {
   decompressBytes,
 } from '@core';
 import { roulette } from '@game/roulette';
+import {
+  importLayoutText,
+  MAX_LAYOUT_FILE_BYTES,
+  type LayoutImportItem,
+} from '../../services/layouts';
 
 export const GAME_ID = 'roulette';
 
 export type ImportProblemKind =
-  'foreign-game' | 'newer-version' | 'damaged' | 'not-spinner' | 'library' | 'invalid';
+  | 'foreign-game'
+  | 'newer-version'
+  | 'damaged'
+  | 'not-spinner'
+  | 'library'
+  | 'invalid';
 
 export interface ImportProblem {
   kind: ImportProblemKind;
@@ -38,6 +48,7 @@ export type ImportOutcome =
       data: RunData;
     }
   | { ok: true; kind: 'definition'; definitionId: string; name: string }
+  | { ok: true; kind: 'layouts'; items: LayoutImportItem[] }
   | { ok: false; problem: ImportProblem };
 
 // core-store's decoder returns message strings only (no error codes), so classification matches
@@ -79,6 +90,7 @@ export async function importBytes(
   origin: 'import' | 'gallery' = 'import',
 ): Promise<ImportOutcome> {
   const head = await peekFormat(bytes);
+  if (head && head.format === 'casino-lab-layout') return importLayouts(bytes, repo);
   if (head && head.format === undefined && head.schema !== undefined)
     return importDefinition(bytes, repo);
   const r = await decodeRunBundle(bytes, GAME_ID);
@@ -93,6 +105,29 @@ export async function importBytes(
     name: r.data.definition.name,
     data: r.data,
   };
+}
+
+async function importLayouts(bytes: Uint8Array, repo: Repo): Promise<ImportOutcome> {
+  if (bytes.length > MAX_LAYOUT_FILE_BYTES)
+    return {
+      ok: false,
+      problem: {
+        kind: 'invalid',
+        title: 'This layout file is too large',
+        detail: `layout files are limited to ${MAX_LAYOUT_FILE_BYTES / 1024 / 1024} MB; this one is ${(bytes.length / 1024 / 1024).toFixed(1)} MB`,
+      },
+    };
+  try {
+    const raw = isGzip(bytes) ? await decompressBytes(bytes, 'gzip', MAX_LAYOUT_FILE_BYTES) : bytes;
+    const r = await importLayoutText(new TextDecoder().decode(raw), repo);
+    if (r.ok) return { ok: true, kind: 'layouts', items: r.items };
+    return { ok: false, problem: { kind: r.kind, title: r.title, detail: r.detail } };
+  } catch {
+    return {
+      ok: false,
+      problem: { kind: 'damaged', title: 'This file is damaged', detail: 'cannot read this file' },
+    };
+  }
 }
 
 async function importDefinition(bytes: Uint8Array, repo: Repo): Promise<ImportOutcome> {

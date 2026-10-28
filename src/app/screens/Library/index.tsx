@@ -1,6 +1,6 @@
 // Library (architecture.md §6.3): Strategies | Definitions | Runs, with search and tag filters,
 // open, duplicate and delete (with confirm). Built-in presets are listed with the strategies.
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { DefinitionRecord, StrategyRecord } from '@core/contracts/experiment';
 import type { RunMeta } from '@core/contracts/run';
 
@@ -19,12 +19,15 @@ import {
   saveDefinition,
   saveStrategy,
 } from '../Define/data';
+import { Layouts, editHref } from './Layouts';
+import { LayoutPage } from './LayoutPage';
 import './library.css';
 
-type TabId = 'strategies' | 'definitions' | 'runs';
+type TabId = 'strategies' | 'definitions' | 'layouts' | 'runs';
 const TABS = [
   { id: 'strategies', label: 'Strategies' },
   { id: 'definitions', label: 'Definitions' },
+  { id: 'layouts', label: 'Layouts' },
   { id: 'runs', label: 'Runs' },
 ] as const;
 
@@ -39,9 +42,56 @@ interface Pending {
   name: string;
 }
 
+/**
+ * The editor page opens at `?tab=layouts&edit=<id|new>`. Android Back (a hashchange that drops
+ * `edit`) must not discard edits silently: the page is kept, the address is restored and the
+ * editor's own Back is pressed, so its unsaved-changes guard decides.
+ */
+function useEditPage(tab: TabId, query: URLSearchParams) {
+  const param = tab === 'layouts' ? query.get('edit') : null;
+  const [editing, setEditing] = useState<string | null>(param);
+  const exiting = useRef(false);
+  const pushed = useRef(false);
+  useEffect(() => {
+    if (param) {
+      exiting.current = false;
+      pushed.current = true;
+      setEditing(param);
+    } else if (editing !== null && !exiting.current) {
+      history.pushState(null, '', `#${editHref(editing)}`);
+      pushed.current = true;
+      setTimeout(
+        () =>
+          document
+            .querySelector<HTMLButtonElement>('.layout-editor .le-head button[aria-label="Back"]')
+            ?.click(),
+        0,
+      );
+    }
+  }, [param]);
+  const open = (id: string) => {
+    pushed.current = true;
+    navigate(editHref(id));
+  };
+  const close = () => {
+    exiting.current = true;
+    setEditing(null);
+    if (location.hash.includes('edit=')) {
+      if (pushed.current) history.back();
+      else location.replace('#/library?tab=layouts');
+    }
+  };
+  /** The id is now known: show it in the address without a new history entry. */
+  const saved = (id: string) => history.replaceState(null, '', `#${editHref(id)}`);
+  return { editing, open, close, saved };
+}
+
 export function Library({ query }: ScreenProps) {
   const tabParam = query.get('tab');
-  const tab: TabId = tabParam === 'definitions' || tabParam === 'runs' ? tabParam : 'strategies';
+  const tab: TabId =
+    tabParam === 'definitions' || tabParam === 'layouts' || tabParam === 'runs'
+      ? tabParam
+      : 'strategies';
   const [text, setText] = useState('');
   const [tag, setTag] = useState<string | null>(null);
   const [strategies, setStrategies] = useState<StrategyRecord[] | null>(null);
@@ -49,6 +99,7 @@ export function Library({ query }: ScreenProps) {
   const [runs, setRuns] = useState<RunMeta[] | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const version = useStore(libraryVersion, (v) => v);
+  const edit = useEditPage(tab, query);
 
   useEffect(() => {
     let live = true;
@@ -149,6 +200,15 @@ export function Library({ query }: ScreenProps) {
   const setTab = (id: string) => navigate(`/library?tab=${id}`);
   const loading = strategies === null;
 
+  if (edit.editing !== null) {
+    return (
+      <>
+        <h1 class="visually-hidden">Edit layout</h1>
+        <LayoutPage id={edit.editing} onClose={edit.close} onSaved={edit.saved} />
+      </>
+    );
+  }
+
   return (
     <>
       <h1>Library</h1>
@@ -162,7 +222,7 @@ export function Library({ query }: ScreenProps) {
             placeholder="Name, id or tag"
           />
         </Field>
-        {allTags.length > 0 && tab !== 'runs' ? (
+        {allTags.length > 0 && (tab === 'strategies' || tab === 'definitions') ? (
           <ul class="chips" aria-label="Filter by tag">
             {allTags.map((t) => (
               <li key={t}>
@@ -245,6 +305,8 @@ export function Library({ query }: ScreenProps) {
               {shownPresets.length === 0 ? <p class="muted">No preset matches.</p> : null}
             </Card>
           </>
+        ) : tab === 'layouts' ? (
+          <Layouts matches={matches} onOpen={edit.open} />
         ) : tab === 'definitions' ? (
           <Card title="Definitions">
             {shownDefs.length === 0 ? (

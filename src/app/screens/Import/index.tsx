@@ -4,6 +4,7 @@ import type { Repo } from '@core';
 import { Button, Card } from '@core/ui';
 import { href, navigate } from '../../router';
 import { definitionLinkTarget, importBytes, type ImportOutcome } from './importFile';
+import { MAX_LAYOUT_FILE_BYTES } from '../../services/layouts';
 import { getStoreRepo } from './repo';
 import './import.css';
 
@@ -30,6 +31,10 @@ export function ImportView({ getRepo = getStoreRepo }: ImportViewProps) {
       for (const f of list) {
         let outcome: ImportOutcome;
         try {
+          if (/\.layout\.json$/i.test(f.name) && f.size > MAX_LAYOUT_FILE_BYTES)
+            throw new Error(
+              `layout files are limited to ${MAX_LAYOUT_FILE_BYTES / 1024 / 1024} MB; this one is ${(f.size / 1024 / 1024).toFixed(1)} MB`,
+            );
           outcome = await importBytes(new Uint8Array(await f.arrayBuffer()), repo);
         } catch (e) {
           outcome = {
@@ -54,8 +59,8 @@ export function ImportView({ getRepo = getStoreRepo }: ImportViewProps) {
     <>
       <h1>Import</h1>
       <p class="lead">
-        Open a run file (.spinner.json or .spinner.json.gz), a definition.json, or a definition
-        link.
+        Open a run file (.spinner.json or .spinner.json.gz), a definition.json, a chip layout file
+        (.layout.json), or a definition link.
       </p>
       <Card title="From a file">
         <div
@@ -139,6 +144,43 @@ export function ImportView({ getRepo = getStoreRepo }: ImportViewProps) {
                       </Button>
                       <Button href={href(`/define?from=${outcome.runId}`)}>Copy to Define</Button>
                     </div>
+                  </div>
+                ) : outcome.kind === 'layouts' ? (
+                  <div data-result="layouts">
+                    <ul class="rows">
+                      {outcome.items.map((it, j) => (
+                        <li key={j} data-item={it.status}>
+                          {it.status === 'imported' ? (
+                            <p>
+                              Imported <strong>{it.name}</strong>
+                              {it.renamedFrom
+                                ? ` (imported as ${it.id}; ${it.renamedFrom} was taken)`
+                                : ''}
+                              .
+                            </p>
+                          ) : it.status === 'exists' ? (
+                            <p>
+                              Already in your library: <strong>{it.name}</strong>.
+                            </p>
+                          ) : (
+                            <div role="alert">
+                              <p class="error">
+                                <span aria-hidden="true">⚠ </span>
+                                <strong>{it.name} was not imported.</strong>
+                              </p>
+                              <ul>
+                                {it.items.map((t, k) => (
+                                  <li key={k}>{t}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    <Button variant="primary" href={href('/library?tab=layouts')}>
+                      Open layouts
+                    </Button>
                   </div>
                 ) : (
                   <div data-result="definition">
