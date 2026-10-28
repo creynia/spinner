@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import type { Plugin } from 'vite';
 // Relative imports: the config's own imports do not see Vite's alias, and build/ is outside the
@@ -249,6 +249,19 @@ export function galleryPlugin(opts: GalleryOptions = {}): Plugin {
     };
   };
   let built: GalleryBuild | undefined;
+  // The dev middleware would otherwise decode every bundle on every request: cache per folder state.
+  let cache: { key: string; built: GalleryBuild } | undefined;
+  const cached = async (): Promise<GalleryBuild> => {
+    const dir = options().dir as string;
+    const key = existsSync(dir)
+      ? readdirSync(dir)
+          .sort()
+          .map((n) => `${n}:${statSync(join(dir, n)).mtimeMs}:${statSync(join(dir, n)).size}`)
+          .join('|')
+      : '';
+    if (cache?.key !== key) cache = { key, built: await buildGallery(options()) };
+    return cache.built;
+  };
   const middleware = async (
     req: IncomingMessage,
     res: ServerResponse,
@@ -257,7 +270,7 @@ export function galleryPlugin(opts: GalleryOptions = {}): Plugin {
     const m = /\/gallery\/([^/?]+)(?:\?.*)?$/.exec(req.url ?? '');
     if (!m) return next();
     try {
-      const g = await buildGallery(options());
+      const g = await cached();
       if (m[1] === 'index.json') {
         res.setHeader('content-type', 'application/json');
         res.end(canonicalJson(g.index));
@@ -307,8 +320,16 @@ export function galleryPlugin(opts: GalleryOptions = {}): Plugin {
       const dist = resolve(root, server.config.build.outDir, 'gallery');
       server.middlewares.use((req, res, next) => {
         const m = /\/gallery\/([^/?]+\.spinner\.json(?:\.gz)?)(?:\?.*)?$/.exec(req.url ?? '');
-        const file = m ? join(dist, decodeURIComponent(m[1]!)) : '';
-        if (!m || !file.startsWith(dist) || !existsSync(file)) return next();
+        if (!m) return next();
+        let name: string;
+        try {
+          name = decodeURIComponent(m[1]!);
+        } catch {
+          res.statusCode = 400;
+          return void res.end('bad request');
+        }
+        const file = join(dist, name);
+        if (!file.startsWith(dist + sep) || !existsSync(file)) return next();
         res.setHeader(
           'content-type',
           file.endsWith('.gz') ? 'application/gzip' : 'application/json',

@@ -1,11 +1,11 @@
 // Screenshots for the README and review, from REAL runs (no mock data). Not part of the normal
-// suite: `SHOTS=<dir> PORT=<p> npx playwright test shots --project=phone --project=desktop`.
+// suite: `SHOTS_DIR=<dir> PORT=<p> npx playwright test shots --project=phone --project=desktop`.
 // Light at 390x844 and 1280x800, plus dark at 390.
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from './helpers';
 
-const DIR = process.env.SHOTS;
-test.skip(!DIR, 'screenshots only (set SHOTS=<dir>)');
+const DIR = process.env.SHOTS_DIR;
+test.skip(!DIR, 'screenshots only (set SHOTS_DIR=<dir>)');
 
 interface Start {
   name: string;

@@ -9,7 +9,7 @@ import { expect, test, type Page } from './helpers';
 const OPTS = {
   name: 'Resume check',
   strategy: 'martingale',
-  sessions: 30_000,
+  sessions: 100_000,
   maxRounds: 200,
   seed: 77,
 } as const;
