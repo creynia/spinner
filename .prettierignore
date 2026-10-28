@@ -8,3 +8,4 @@ public/icons
 gallery/*.json
 gallery/*.gz
 docs
+PLAYBOOK.md

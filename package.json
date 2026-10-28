@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=22.12" },
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "predev": "node scripts/gen-icons.mjs",
     "dev": "vite",
@@ -22,7 +24,9 @@
     "gallery:check": "node scripts/check-gallery.mjs",
     "check": "npm run lint && npm run typecheck && npm run format:check && npm run gallery:check && npm test"
   },
-  "dependencies": { "preact": "10.29.8" },
+  "dependencies": {
+    "preact": "10.29.8"
+  },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
     "@eslint/js": "10.0.1",
@@ -41,5 +45,7 @@
     "vite": "8.3.4",
     "vitest": "5.0.5"
   },
-  "overrides": { "playwright-core": "1.63.0" }
+  "overrides": {
+    "playwright-core": "1.63.0"
+  }
 }

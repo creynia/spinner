@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GameEvent, Layout, RoundOutcome } from '../contracts/game';
+import type { Layout, RoundOutcome } from '../contracts/game';
 import { frac, mul, toNumber } from '../money';
 import { sessionRng } from '../rng';
 import { COIN_BET, COIN_P_HEADS, coin, type CoinState } from './index';
@@ -39,7 +39,7 @@ describe('coin plugin', () => {
       const out = round(s, [{ bet: COIN_BET, amount: 100 + (i % 7) * 100 }]);
       expect(coin.equity(s) - before).toBe(out.net);
       if (out.summary.heads) heads++;
-      expect(out.events as readonly GameEvent[]).toEqual([{ type: 'flip' }]);
+      expect(out.events).toEqual([{ type: 'flip' }]);
     }
     // 2,000 flips at p = 18/37: 973 expected, SD 22; 6 SD is generous.
     expect(Math.abs(heads - (2000 * 18) / 37)).toBeLessThan(140);

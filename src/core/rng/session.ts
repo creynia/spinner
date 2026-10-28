@@ -49,7 +49,7 @@ export function seedXoshiro(hi: number, lo: number, into: Xoshiro128ss): Xoshiro
   splitmixAt(hi, lo, 2, tmp);
   s[2] = tmp[1]!;
   s[3] = tmp[0]!;
-  if ((s[0]! | s[1]! | s[2]! | s[3]!) === 0) s[0] = 1;
+  if ((s[0] | s[1] | s[2] | s[3]) === 0) s[0] = 1;
   return into;
 }
 

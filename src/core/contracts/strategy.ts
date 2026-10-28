@@ -5,7 +5,7 @@
  * Renames: the draft's `ValidationIssue` is `Diagnostic` (S4). Section numbers below refer to
  * docs/design/strategy.md.
  */
-import type { BetCatalogEntry, BetId, Cents, Layout, RoundOutcome } from './game';
+import type { BetCatalogEntry, BetId, Cents, FactAccessor, Layout, RoundOutcome } from './game';
 import type { FactRef, FactValue, FactSchema } from './facts'; // FactRef = string ('lastColor', 'spinsSince:red')
 import type { TraceWindow } from './strategy-trace';
 
@@ -92,8 +92,8 @@ export type Expr =
   | { lastAmount: BetId } // staked on the bet in the round just resolved
   | { lastProfit: BetId } // profit of the bet in the round just resolved
   | { pctOfBankroll: number } // percent (5 = 5%) of bankroll (cash)
-  | { tableMin: BetId | string } // a bet id or a limits class ('outside', 'inside')
-  | { tableMax: BetId | string }
+  | { tableMin: string } // a bet id or a limits class ('outside', 'inside')
+  | { tableMax: string }
   | { streakLen: HistoryPredicate }
   | { countInLast: HistoryPredicate & { n: number } }
   | { roundsSince: HistoryPredicate }
@@ -157,7 +157,7 @@ export type Effect =
 // ---------------------------------------------------------------- progressions (§7)
 
 export type CapPolicy = 'reset' | 'stay' | 'stop';
-export type Track = 'round' | 'manual' | BetId | { bets: BetId[] }; // 1..16 bets
+export type Track = 'round' | 'manual' | (BetId & Record<never, never>) | { bets: BetId[] }; // 1..16 bets
 export type SeqStep = 'advance' | 'back' | 'reset' | 'stay';
 
 interface ProgCommon {
@@ -240,12 +240,9 @@ export interface CompileContext<R = unknown, V = unknown> {
   facts: FactSchema;
   rules: R; // resolved game rules (limits, availability)
   limits(betOrClass: string, rules: R, view?: V): { min: Cents; max: Cents } | null;
-  compileFact(ref: FactRef, rules: R): (view: V, last: RoundOutcome | null) => FactValue | null;
+  compileFact(ref: FactRef, rules: R): FactAccessor<V>;
   /** Optional (§8.4): reuse the plugin's indexed counters for a generic history predicate. */
-  compileHistory?(
-    predicate: HistoryPredicate,
-    rules: R,
-  ): ((view: V, last: RoundOutcome | null) => FactValue | null) | null;
+  compileHistory?(predicate: HistoryPredicate, rules: R): FactAccessor<V> | null;
 }
 
 export interface TraceSink {

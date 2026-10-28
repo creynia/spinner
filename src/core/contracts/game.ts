@@ -149,6 +149,16 @@ export interface RoundOutcome {
   summary: Record<string, number | string | boolean | null>;
 }
 
+/**
+ * A compiled fact accessor (strategy.md §8.1): allocation-free, reads the plugin's view. Declared
+ * with the method-bivariance trick so that a concrete plugin (`V` = its own view type) is
+ * assignable to `GamePlugin<unknown, unknown, unknown, unknown>` (used by `NormalizeContext` and
+ * the worker handler); a plain function type would make `V` contravariant and reject it.
+ */
+export type FactAccessor<V = unknown> = {
+  bivarianceHack(view: V, last: RoundOutcome | null): FactValue | null;
+}['bivarianceHack'];
+
 /** A game decision handed to `reconcile` for the `act` effect (strategy.md §6.11, §18.6). */
 export interface GameAct {
   act: string;
@@ -231,12 +241,9 @@ export interface GamePlugin<S, A, R, V = unknown, E extends GameEvent = GameEven
    * Compiles one fact ref into an allocation-free accessor (G3; strategy.md §8.1). The plugin
    * registers whatever counters the ref needs, so parameterised facts cost nothing unless used.
    */
-  compileFact(ref: FactRef, rules: R): (view: V, last: RoundOutcome | null) => FactValue | null;
+  compileFact(ref: FactRef, rules: R): FactAccessor<V>;
   /** Optional: reuse the plugin's indexed counters for a generic history predicate (strategy.md §8.4). */
-  compileHistory?(
-    predicate: HistoryPredicate,
-    rules: R,
-  ): ((view: V, last: RoundOutcome | null) => FactValue | null) | null;
+  compileHistory?(predicate: HistoryPredicate, rules: R): FactAccessor<V> | null;
   /** Optional, for tests (G12): queue a script of outcomes consumed before the RNG. */
   force?(state: S, script: readonly (string | number)[]): S;
   serialize(state: S): unknown;
