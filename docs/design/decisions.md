@@ -12,7 +12,7 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 | 4 | Pace | Default **40 spins/hour** (live wheel). Pace preset `electronic` at **100 spins/hour**. Definitions may override. |
 | 5 | Default run | **10,000 sessions × 500 spins.** Perf budget device: **mid-range Android** (Pixel 6a class): < 90 s; 4-core laptop < 20 s; CI uses a generous bound. |
 | 6 | Merge | The orchestrator **may merge** PRs into `main` once reviewed by a pool reviewer (not the author) and CI is green on the latest head. |
-| 7 | Repo | Public, **MIT**. Default branch `main` (switched by the user); all work happens on `claude/spinner-*` branches and lands through PRs into `main`. |
+| 7 | Repo | Public, **MIT**. Default branch `main` and Pages source "GitHub Actions" (both set by the user); all work happens on `claude/spinner-*` branches and lands through PRs into `main`. |
 | 8 | Gallery | **Yes.** Curated result bundles committed under `gallery/`, listed by a build-time `gallery/index.json`, openable read-only at `#/gallery`. ≤ 2 MB per bundle, ≤ 20 MB folder, enforced in CI. |
 | 9 | Single-file build | **No** in v1 (chip). |
 | 10 | Presets day one | Full classic set: flat, Martingale, Grand Martingale, Fibonacci, d'Alembert, Labouchere, Paroli, 1-3-2-6, Oscar's Grind, James Bond, dozens progression (two dozens, Martingale-style), and the §3.6 example `red-mart-then-flat`. |
