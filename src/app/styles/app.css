@@ -1,3 +1,4 @@
+@import '../../core/ui/kit/kit.css';
 /* App shell layout (architecture.md §6.1): TopBar + bottom TabBar under 768px, NavRail from 768px. */
 *,
 *::before,
@@ -38,13 +39,126 @@ a {
   background: var(--felt);
   color: #ffffff;
 }
-.topbar a {
+.topbar a,
+.topbar-back {
   color: inherit;
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
   font-weight: 700;
   text-decoration: none;
+}
+.topbar-back {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 8px 0 0;
+}
+.topbar-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar-brand {
+  flex: 0 0 auto;
+}
+.running-chip {
+  margin-left: auto;
+  padding: 0 12px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--danger);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.lead {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.rows,
+.chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.row-link {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--tap);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+.rows li:last-child .row-link {
+  border-bottom: 0;
+}
+.row-title {
+  font-weight: 600;
+}
+.row-sub {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0 0 8px;
+}
+.facts dt {
+  color: var(--muted);
+}
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.home-grid {
+  display: block;
+}
+@media (min-width: 900px) {
+  .home-grid {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 16px;
+    align-items: start;
+  }
 }
 .content {
   width: 100%;
@@ -73,6 +187,14 @@ a {
   color: var(--muted);
 }
 
+.nav-link svg {
+  flex: 0 0 auto;
+}
+@media (max-width: 767px) {
+  .topbar-brand.off-root {
+    display: none;
+  }
+}
 .nav-link {
   display: flex;
   flex-direction: column;

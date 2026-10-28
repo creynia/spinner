@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "fibonacci-red",
+  "name": "Fibonacci: red",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "Next Fibonacci number after a loss, two steps back after a win; 12 steps (1 to 144 units).",
+  "progressions": {
+    "f": {
+      "kind": "fibonacci",
+      "base": {
+        "units": 1
+      },
+      "maxSteps": 12,
+      "onCap": "reset",
+      "track": "red"
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "prog": "f"
+          }
+        }
+      ],
+      "rules": []
+    }
+  ]
+}
