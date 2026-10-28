@@ -12,7 +12,7 @@ Owned by the orchestrator. Each entry: what, where it came from, and when to pic
 
 ## Nits from reviews
 
-- ~~PR #2: `dollars(0.29)` throws~~ (fixed in #11).
+- ~~PR #2: `dollars(0.29)` throws~~ (fixed in #8, via core-strategy's early validate commit).
 - PR #2: confirm the e2e smoke covers `#/more`. Owner: integration.
 
 ## Deferred to integration (must be done before v1 is called done)

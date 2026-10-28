@@ -78,4 +78,4 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 - **`ValidationContext = CompileContext & { gameId?: string }`**: callers set `gameId` so `E_GAME_MISMATCH` can fire; `W_NO_EXIT` comes from `noExitWarning(def, sessionHasStops)` (PR #11).
 - **Run control has one owner**: `src/app/services/runs.ts` moved from app-shell to ui-results, which adds keyed starts, the controller registry, resume after reload and `setRunActive` wiring. Define and Home go through it.
 - **App-shell export/import is definitions-only**; full per-run bundle export lives on the Analyze → Export tab (ui-results).
-- **Core fixtures live next to their module** (`src/core/*/__fixtures__`), never in `tests/fixtures`, because `src/core` may not import outside itself.
+- **Core fixtures live next to their module** (`src/core/*/__fixtures__`), never in `tests/fixtures`, because `src/core` may not import outside itself. Game-specific fixtures (such as the roulette strategy goldens above) may live in `tests/fixtures/` or `src/game/roulette/__fixtures__`, since only `src/core` has that restriction.
