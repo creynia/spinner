@@ -99,7 +99,7 @@ export function Settings({ query }: ScreenProps) {
       updateSettings(sanitizeSettings({ ...settingsStore.get(), ...data.settings }));
       void refreshLibrary();
       refreshUsage();
-      showToast(`Imported ${n.definitions} definitions.`);
+      showToast(`Imported ${n.definitions} definitions and ${n.layouts} layouts.`);
     } catch (e) {
       const msg = e instanceof ImportError ? e.message : `Import failed: ${(e as Error).message}`;
       showToast(msg, { tone: 'error' });
