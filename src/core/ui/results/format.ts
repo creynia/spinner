@@ -104,3 +104,10 @@ export const TOO_FEW = `too few sessions for an interval (under ${MIN_N_FOR_CI})
 export function fmtHours(h: number): string {
   return Number.isFinite(h) ? `${h.toFixed(h < 10 ? 2 : 1)} h` : 'n/a';
 }
+
+/** "rounds" is shown as "round limit"; strategy stops as "strategy: <reason>". */
+export function fmtEnded(label: string): string {
+  if (label === 'rounds') return 'round limit';
+  if (label.startsWith('strategy:')) return `strategy: ${label.slice(9)}`;
+  return label;
+}

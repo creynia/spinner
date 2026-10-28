@@ -1,0 +1,221 @@
+/* Results components (Run, Analyze, Compare, Sweep). Tokens only; no hard-coded colours. */
+.analysis,
+.compare {
+  min-width: 0;
+}
+.two-col {
+  display: block;
+}
+@media (min-width: 900px) {
+  .two-col {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 16px;
+    align-items: start;
+  }
+}
+.metric-cards {
+  display: block;
+}
+@media (min-width: 900px) {
+  .metric-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+  }
+}
+.warn-card {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--danger);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.method-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.verdict {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.keynums,
+.plain-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.keynums th,
+.keynums td,
+.plain-table th,
+.plain-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  font-weight: 400;
+}
+.keynums tbody th,
+.plain-table tbody th {
+  font-weight: 600;
+}
+.kn-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+.kn-value,
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+}
+.kn-ci {
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: right;
+}
+.ci-line {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.table-scroll,
+.sessions-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.sessions-scroll {
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.sessions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.sessions-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+}
+.sort-btn {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-align: inherit;
+  cursor: pointer;
+}
+.sessions-table td,
+.sessions-table tbody th {
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 400;
+}
+.session-row.clickable {
+  cursor: pointer;
+}
+.session-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: var(--tap);
+  min-height: var(--tap);
+}
+.pos {
+  color: var(--text);
+}
+.wide-only {
+  display: none;
+}
+@media (min-width: 600px) {
+  .wide-only {
+    display: table-cell;
+  }
+}
+.bar {
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s linear;
+}
+.progress-status {
+  margin: 0 0 8px;
+}
+.export-grid {
+  display: block;
+}
+@media (min-width: 900px) {
+  .export-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  .export-grid .export-status {
+    grid-column: 1 / -1;
+  }
+}
+.share-link {
+  width: 100%;
+}
+details.luck summary {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+.run-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--tap);
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.run-chip button {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill {
+    transition: none;
+  }
+}
