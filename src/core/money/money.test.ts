@@ -141,6 +141,18 @@ describe('cents helpers and the rounding policy (game.md §5, §8)', () => {
     expect(() => assertCents(0.5)).toThrow(RangeError);
     expect(dollars(25)).toBe(2500);
   });
+  it('dollars() rounds to the nearest cent before asserting integrality', () => {
+    expect(0.29 * 100).not.toBe(29); // the float trap: 28.999999999999996
+    expect(dollars(0.29)).toBe(29);
+    expect(dollars(1.1)).toBe(110);
+    expect(dollars(0.07)).toBe(7);
+    expect(dollars(19.99)).toBe(1999);
+    expect(dollars(-0.29)).toBe(-29);
+    expect(dollars(0)).toBe(0);
+    expect(() => dollars(Number.NaN)).toThrow(RangeError);
+    expect(() => dollars(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    expect(() => dollars(1e17)).toThrow(RangeError);
+  });
   it('rounds down to the bet unit and never up', () => {
     expect(floorToUnit(3750, 100)).toBe(3700); // red $37.50 -> $37 (example 7)
     expect(floorToUnit(4000, 900)).toBe(3600); // voisins $40, piece $9 -> $36 (example 8)
