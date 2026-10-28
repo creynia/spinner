@@ -53,9 +53,11 @@ function NewSweep({ query }: { query: URLSearchParams }) {
 
   if (defs === null) {
     return (
-      <p class="muted" role="status">
-        Loading the library...
-      </p>
+      <section class="card">
+        <p class="muted" role="status">
+          Loading the library...
+        </p>
+      </section>
     );
   }
   if (defs.length === 0) {
@@ -199,9 +201,11 @@ function ShowSweep({ groupId }: { groupId: string }) {
 
   if (group === undefined) {
     return (
-      <p class="muted" role="status">
-        Loading the sweep...
-      </p>
+      <section class="card">
+        <p class="muted" role="status">
+          Loading the sweep...
+        </p>
+      </section>
     );
   }
   if (!group || !group.sweep) return <NotFoundCard what="Sweep" />;

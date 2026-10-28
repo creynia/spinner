@@ -36,9 +36,11 @@ export function Run({ params }: ScreenProps) {
     return (
       <>
         <h1>Run</h1>
-        <p class="muted" role="status">
-          Loading the run...
-        </p>
+        <section class="card">
+          <p class="muted" role="status">
+            Loading the run...
+          </p>
+        </section>
       </>
     );
   }

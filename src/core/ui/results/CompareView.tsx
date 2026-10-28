@@ -251,14 +251,12 @@ export function CompareView({ runs, tableMax, framing }: CompareViewProps) {
             fan={fans[0]!}
             label={runs[0]!.label}
             title="Median net by round, with the first run's middle 50%"
-            overlays={runs
-              .slice(1)
-              .map((r, i) => ({
-                id: r.id,
-                label: r.label,
-                rounds: fans[i + 1]!.rounds,
-                p50: fans[i + 1]!.p50,
-              }))}
+            overlays={runs.slice(1).map((r, i) => ({
+              id: r.id,
+              label: r.label,
+              rounds: fans[i + 1]!.rounds,
+              p50: fans[i + 1]!.p50,
+            }))}
           />
         )}
         <p class="muted">

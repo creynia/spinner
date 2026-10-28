@@ -28,9 +28,11 @@ export function Analyze({ params, query }: ScreenProps) {
     return (
       <>
         <h1>Analyze</h1>
-        <p class="muted" role="status">
-          Loading the run...
-        </p>
+        <section class="card">
+          <p class="muted" role="status">
+            Loading the run...
+          </p>
+        </section>
       </>
     );
   }
