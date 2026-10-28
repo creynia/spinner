@@ -21,7 +21,7 @@ Contents
 12. Trace format
 13. Builder UI model
 14. Prior-art coverage (crappy, baccaratton, holdumb)
-15. Golden strategies (24 roulette, 7 craps)
+15. Golden strategies (25 roulette, 7 craps)
 16. Deferred: code strategies
 17. Test plan
 18. Requests to sibling contracts
@@ -48,7 +48,7 @@ This block is meant to be copied verbatim into `src/core/contracts/strategy.ts` 
 ```ts
 // src/core/contracts/strategy.ts — FROZEN after the spikes (decisions.md)
 import type { BetId, Cents, Layout, RoundOutcome } from './game';
-import type { FactRef, FactValue, FactSchema } from './facts';
+import type { FactRef, FactValue, FactSchema } from './facts';   // FactRef = string ('lastColor', 'spinsSince:red')
 
 export const STRATEGY_SCHEMA = 1 as const;
 
@@ -112,9 +112,9 @@ export interface Rule {
 
 export type Expr =
   | number                                          // literal (cents when used as money)
-  | string                                          // a plain numeric fact: 'net', 'round', 'lastNumber'
+  | string                                          // a numeric fact: 'net', 'round', 'spinsSince:straight:17'
   | { units: number }                               // n × unit
-  | { fact: FactRef }                               // numeric fact, possibly parameterised
+  | { fact: FactRef }                               // same as the bare string (explicit form)
   | { var: VarName }
   | { prog: Slug }                                  // current amount of a progression (cents)
   | { progStep: Slug }                              // current level (kind-specific, §7)
@@ -227,6 +227,7 @@ export interface SessionFacts {
 }
 
 export interface StepOutput {
+  stage: number;                                    // index into StrategyRuntime.stageIds after this window
   desired: Layout;                                  // a view over a reused buffer: copy before keeping
   acts: readonly { act: string; args?: Record<string, string | number> }[];
   stop: string | null;                              // strategy stop reason → endedBy 'strategy:<reason>'
@@ -246,6 +247,8 @@ export interface TraceSink { window(rec: import('./strategy-trace').TraceWindow)
 
 export interface StrategyRuntime {
   readonly def: StrategyDefinition;
+  readonly stageIds: readonly string[];             // summary stopStage / per-stage rounds index this
+  readonly stopReasons: readonly string[];          // every reason this strategy can stop with, sorted (harness endedBy enum 16 + j)
   createMemory(): StrategyMemory;                   // once per worker
   reset(mem: StrategyMemory): void;                 // at the start of every session
   step(mem: StrategyMemory, obs: Observation, out: StepOutput, trace?: TraceSink): void;
@@ -392,8 +395,8 @@ An expression evaluates to a finite number or **null**. Implementations represen
 | Form | Value | Null when |
 |---|---|---|
 | `123` | the literal | never |
-| `"net"` (bare string) | the plain numeric fact of that name (session fact §8.2 or unparameterised game fact) | the fact is null (e.g. `lastNumber` at window 0) |
-| `{ fact: ref }` | numeric fact, possibly parameterised (`{ fact: { name: 'spinsSince', args: [17] } }`) | the fact is null |
+| `"net"`, `"spinsSince:red"` (bare string) | the numeric fact (session fact §8.2 or game fact, possibly parameterised) | the fact is null |
+| `{ fact: ref }` | same as the bare string | the fact is null |
 | `{ units: n }` | `n × unit` (`n` finite, may be fractional) | never |
 | `{ var: x }` | current var value | never (vars are never null) |
 | `{ prog: p }` | progression amount in cents: `multiplier(state) × latchedBase` (§7) | never |
@@ -604,7 +607,8 @@ Check of the second oscar's row: after W(+1, done), L L L leave `cycle = −3`; 
 ```ts
 // src/core/contracts/facts.ts — FROZEN; implemented by every plugin, consumed by core/strategy and core/ui
 export type FactValue = number | string | boolean;
-export type FactRef = string | { name: string; args: (string | number)[] };
+/** 'name' or 'name:arg1:arg2' (bet-id style, game.md §9): 'lastColor', 'spinsSince:red', 'count:red:10'. */
+export type FactRef = string;
 
 export type FactType =
   | { type: 'number'; unit: 'money' | 'count' | 'scalar'; integer?: boolean; min?: number; max?: number }
@@ -624,7 +628,7 @@ export interface FactDecl {
   doc: string;
   scope: 'round' | 'state';                      // round: describes the round just resolved (null at window 0)
   nullable: boolean;
-  params?: FactParam[];                          // parameterised fact: spinsSince(17)
+  params?: FactParam[];                          // parameterised fact: spinsSince:<target>
   value: FactType;
 }
 export interface EventDecl { name: string; label: string; doc: string; params?: FactParam[] }
@@ -637,7 +641,7 @@ export interface FactSchema {
 }
 ```
 
-Canonical text key of a ref (used in traces and diagnostics): `name` or `name(arg1,arg2)`, e.g. `spinsSince(17)`.
+A ref is the fact name followed by its arguments, colon-separated, in the bet-id style the game spike uses (`spinsSince:straight:17`, `count:red:10`); arguments are parsed by the declared `params` (a `bet` param consumes the rest of the ref when it is the last param, so bet ids containing colons work). The canonical ref (arguments canonicalised, e.g. bet aliases folded by `parseBet`) is the key used in traces and diagnostics.
 
 The plugin compiles each referenced fact once into an accessor `(state, last) => FactValue | null` (`CompileContext.compileFact`); accessors must not allocate. Enum values are compared by identity against compiled constants (or as integer codes; implementation detail).
 
@@ -671,7 +675,7 @@ Strategy values are expressions rather than facts: `{ var }`, `{ prog }`, `{ pro
 | `prog-cap` | `prog` | phases 2 and 3, §7.5 |
 | `prog-done` | `prog` | labouchere line emptied, oscar's cycle complete |
 
-Plugins must not declare events with these names (core test). Plugin events (roulette `zero`; craps `point-established`, `point-made`, `seven-out`, `natural`, `craps`, `bet-travelled(bet, number)`) are declared in `FactSchema.events` and arrive in `last.events` as `{ type: name, ...params }`.
+The core derives `bet-*` from `last.resolutions` (single source, so every game gets them with identical semantics); a plugin may list them in its schema for documentation (game.md §9.3 does) but must not also emit them in `last.events` (the core would double count; a core test checks the roulette plugin). `prog-*` are never plugin events. Plugin events (roulette `zero`; craps `point-established`, `point-made`, `seven-out`, `natural`, `craps`, `bet-travelled(bet, number)`) are declared in `FactSchema.events` and arrive in `last.events` as `{ type: name, ...params }`.
 
 ### 8.4 History trackers
 
@@ -685,7 +689,7 @@ A **history predicate** is either `{ fact, equals }` over a **round-scoped** fac
 
 `equals` with an array means "the fact is one of these" (`{ fact: 'lastColor', equals: ['black', 'green'] }` is "not red"). A null fact value counts as not holding. Implementation: a saturating counter for `streakLen` and `roundsSince`, a bit ring of `n` bits plus a running count for `countInLast` (Uint8Array, allocated at compile time).
 
-These generic trackers make plugin-specific history facts optional: roulette's `spinsSince(17)` is `{ roundsSince: { fact: 'lastNumber', equals: 17 } }`, `countInLast(10, red)` is `{ countInLast: { fact: 'lastColor', equals: 'red', n: 10 } }`, and `streak(color)` is `streakLen`. A plugin may still declare such facts (they then work in `cmp` like any parameterised fact); the golden strategies use the generic forms.
+These generic trackers work for any game. Roulette also declares indexed history facts (game.md §9.2: `spinsSince:<target>`, `streak:<target>`, `count:<target>:<n>`, `hits:<target>`) that are usable in `cmp` directly, and the semantics agree: `roundsSince` = `spinsSince` (round count if never), `streakLen` = `streak`, `countInLast` = `count` (the interpreter applies the `partial` gate itself). As an optimisation the compile step may ask the plugin `compileHistory?(predicate, rules) → accessor | null` and use the plugin's counters instead of its own tracker (roulette maps `{ fact: 'lastColor', equals: 'red' }` to target `red`); a test asserts both give identical values over random spin sequences. Golden strategies use the generic forms.
 
 ---
 
@@ -867,7 +871,7 @@ export interface TraceWindow {
 }
 ```
 
-Rule ids: `rule.id` when set, else `<declaringStageId>#<index>` (e.g. `mart#1`). `obs` keys: session/game fact canonical keys (`net`, `lastColor`, `spinsSince(17)`), plus `var.<x>`, `streak(<predicate-hash8>)` etc. for history values with the predicate shown in the builder. Only facts referenced somewhere in the strategy are recorded (so traces stay small: a typical record is 300–600 bytes).
+Rule ids: `rule.id` when set, else `<declaringStageId>#<index>` (e.g. `mart#1`). `obs` keys: canonical fact refs (`net`, `lastColor`, `spinsSince:straight:17`), plus `var.<x>`, `streak(<predicate-hash8>)` etc. for history values with the predicate shown in the builder. Only facts referenced somewhere in the strategy are recorded (so traces stay small: a typical record is 300–600 bytes).
 
 The Watch screen renders: stage chip, fired rules highlighted in the builder's sentence form (§13), effect list, desired vs reconciled layout (rejections in red, PLAYBOOK §14), outcome glyph, equity, progression state.
 
@@ -914,7 +918,7 @@ type EffectChip = { effect: Effect };              // one chip per effect, edite
 | `{ "fact": ["lastDozen", "in", [1, 2]] }` | last dozen is 1st or 2nd |
 | `{ "streak": { "fact": "lastColor", "equals": "red", "atLeast": 3 } }` | red 3+ times in a row |
 | `{ "countInLast": { "fact": "lastColor", "equals": "black", "n": 10, "atLeast": 7 } }` | black ≥ 7 of the last 10 |
-| `{ "since": { "fact": "lastNumber", "equals": 17, "atLeast": 74 } }` | 17 not seen for 74+ spins |
+| `{ "since": { "fact": "lastNumber", "equals": "17", "atLeast": 74 } }` | 17 not seen for 74+ spins |
 | `{ "event": "bet-won", "bet": "place-6" }` | place 6 won |
 | `{ "event": "prog-cap", "prog": "m" }` | progression m hit its cap |
 | `{ "everyN": 50 }` | every 50 rounds |
@@ -1000,7 +1004,7 @@ The only additions this needed are the `act` effect and `FactSchema.actions` (§
 
 ## 15. Golden strategies
 
-Every golden validates against the provisional roulette/craps schemas, runs, and has a pinned trace (§12). Bet ids and game facts are provisional (game.md wins); the craps ids follow crappy. Assumed roulette facts: `lastNumber` (number, round, nullable), `lastColor` (`red | black | green`), `lastDozen` (`0 | 1 | 2 | 3`, 0 for a zero pocket), `lastParity`, `lastHalf`; event `zero`. Assumed craps facts: `phase` (`come-out | point`), `point`, `comePoints` (come bets sitting on numbers), `handStart`; events `point-made`, `seven-out`.
+Every golden validates against the provisional roulette/craps schemas, runs, and has a pinned trace (§12). Roulette bet ids follow game.md §3.2 (canonical: inside ids list every covered pocket); craps ids follow crappy and are provisional. Roulette facts per game.md §9.2: `lastNumber` (pocket label string `'0'`, `'00'`, `'17'`), `lastColor` (`red | black | green`), `lastDozen` (`0 | 1 | 2 | 3`, 0 for a zero pocket), `lastParity`, `lastHalf`; event `zero`. Assumed craps facts: `phase` (`come-out | point`), `point`, `comePoints` (come bets sitting on numbers), `handStart`; events `point-made`, `seven-out`.
 
 Unit is $25 (2500) unless the strategy says otherwise, to match the $25 minimum (decisions #3). Coverage of features is tabulated in §15.3.
 
@@ -1090,7 +1094,7 @@ Unit is $25 (2500) unless the strategy says otherwise, to match the $25 minimum 
 { "schema": 1, "id": "james-bond", "name": "James Bond", "game": "roulette", "unit": 1000,
   "stages": [ { "id": "play", "layout": [
     { "bet": "high", "amount": { "units": 14 } },
-    { "bet": "sixline:13-18", "amount": { "units": 5 } },
+    { "bet": "sixline:13-14-15-16-17-18", "amount": { "units": 5 } },
     { "bet": "straight:0", "amount": { "units": 1 } } ] } ] }
 ```
 
@@ -1167,7 +1171,7 @@ Unit is $25 (2500) unless the strategy says otherwise, to match the $25 minimum 
     { "id": "wait",
       "rules": [
         { "when": { "cmp": [ { "stageEntries": "chase" }, ">=", 3 ] }, "then": [ { "stop": "three-chases" } ] },
-        { "when": { "since": { "fact": "lastNumber", "equals": 17, "atLeast": 74 } }, "then": [ { "goto": "chase" } ] } ] },
+        { "when": { "since": { "fact": "lastNumber", "equals": "17", "atLeast": 74 } }, "then": [ { "goto": "chase" } ] } ] },
     { "id": "chase",
       "layout": [ { "bet": "straight:17", "amount": { "units": 1 } } ],
       "rules": [
@@ -1224,20 +1228,21 @@ Unit is $25 (2500) unless the strategy says otherwise, to match the $25 minimum 
                                                     { "floorTo": [ { "pctOfBankroll": 2 }, 2500 ] } ] } } ] } ] } ] }
 ```
 
-**R19 red-with-zero-boost**: flat red; after two zeros in the last 20 spins, a `boost` stage that extends the base adds $5 on zero and doubles red for 10 spins; the zero bet comes off as soon as the session is ahead.
+**R19 red-with-zero-boost**: flat red; after two zeros in the last 20 spins, a `boost` stage that extends the base adds $5 on zero and doubles red for 10 spins; the zero bet comes off as soon as the session is ahead; stop after five boosts.
 
 ```json
 { "schema": 1, "id": "red-with-zero-boost", "name": "Red with a zero boost", "game": "roulette", "unit": 2500,
-  "vars": { "boosts": 0, "zeroOff": 0, "lastBoostEnd": -1 },
+  "vars": { "boosts": 0, "zeroOff": 0 },
   "stages": [
     { "id": "base",
       "layout": [ { "bet": "red", "amount": { "units": 1 } } ],
       "rules": [
+        { "id": "enough", "when": { "cmp": [ { "var": "boosts" }, ">=", 5 ] }, "then": [ { "stop": "five-boosts" } ] },
         { "id": "boost-on", "when": { "countInLast": { "event": "zero", "n": 20, "atLeast": 2, "partial": true } },
           "cooldown": 20, "then": [ { "goto": "boost" } ] } ] },
     { "id": "boost", "extends": "base",
-      "onEnter": [ { "inc": "boosts" }, { "set": "zeroOff", "to": 0 } ],
-      "onExit": [ { "set": "lastBoostEnd", "to": "round" } ],
+      "onEnter": [ { "inc": "boosts" } ],
+      "onExit": [ { "set": "zeroOff", "to": 0 } ],
       "layout": [ { "bet": "red", "amount": { "units": 2 } },
                   { "bet": "straight:0", "amount": 500, "when": { "cmp": [ { "var": "zeroOff" }, "==", 0 ] } } ],
       "rules": [
@@ -1442,3 +1447,92 @@ Semantics worth pinning: in `inside`, the inherited `pointsInRow >= 2 → goto i
 | call bet, six-line, straight, corner, dozens | R21, R10, R10/R14, R23, R11/R15 |
 | fractional units | C4 |
 | sitting out by empty layout | R13, R14, R15, R17 |
+
+The fixtures live in `src/game/roulette/presets/*.json` (the ones that are also day-one presets: R1–R12, decisions #10) and `tests/fixtures/strategy/{roulette,craps}/*.json` (the rest). A test asserts every file here validates with zero errors and zero warnings except the documented ones (R12 at default rules: `E_BELOW_MIN`, which is why its golden experiment overrides the minimum).
+
+---
+
+## 16. Deferred: code strategies
+
+Designed now so the contract does not change later; **not built in v1** (validator: `E_DEFERRED` on `kind: 'code'`; recorded in `docs/chips.md`).
+
+```ts
+export interface CodeStrategyDefinition {
+  schema: 1; kind: 'code';
+  id: Slug; name: string; game: string; notes?: string; tags?: string[];
+  unit: Cents;
+  params?: Record<string, number>;                  // sweepable constants, exposed as api.params
+  source: string;                                   // ≤ 32 KiB, an ES module body (no imports)
+}
+export type AnyStrategy = StrategyDefinition | CodeStrategyDefinition;
+```
+
+The source defines `init(api)` returning the initial memory (JSON-serialisable) and `decide(obs, mem, api)` called once per window. `api` mirrors the effects: `api.bet(id, amount)`, `api.remove(id)`, `api.act(name, args)`, `api.stop(reason)`, `api.skip()`, `api.note(text)` (trace), `api.units(n)`, `api.facts(ref)` (the same compiled accessors), `api.history` (the same trackers, declared up front in an exported `uses` object so they can be compiled). The interpreter's `step` shape is unchanged: a code runtime implements `StrategyRuntime` and produces the same `StepOutput` and `TraceWindow` (with `fired: ['code']`, notes as effects).
+
+Sandbox and determinism: compiled with `new Function` **inside the worker only** (no DOM), with `globalThis`, `Math.random`, `Date`, `performance`, `fetch`, `importScripts`, `postMessage`, `WebAssembly` and timers shadowed by `undefined` parameters, and a frozen `Math` without `random`. `mem` is deep-frozen between calls except the object `decide` returns. A watchdog on the main thread terminates a worker whose batch exceeds 10× its expected time and marks the run `error: 'strategy-timeout'`. Share links containing code open read-only with a "this link contains code that will run in your browser" confirmation before any run. The definition hash covers `source`, so edits create a new definition.
+
+---
+
+## 17. Test plan
+
+All in Vitest's node project, under `src/core/strategy/**/*.test.ts` unless noted. A **stub game plugin** (`tests/fixtures/stub-game.ts`: two bets `a` (even money) and `b` (persistent, contract optional), a scripted outcome queue, one enum round fact, one state fact, one event, one action) makes semantics tests independent of roulette.
+
+1. **Schema and validation**
+   - Every error and warning code in §9 has at least one negative fixture asserting `code`, `severity` and the exact `path`; every golden asserts no errors.
+   - Structural-only mode (`ctx = null`) reports no R-level codes.
+   - Fuzz: random JSON mutations of the goldens never throw from `validateStrategy` (only diagnostics).
+   - Limits (§2.1) at boundary and boundary + 1.
+2. **Expressions:** each form's value and null propagation (table §4.1), `div` by zero ⇒ null, `cmp` with null false for all six operators (especially `!=`), `floorTo`, unit kinds and `W_UNIT_MIX`, amount boundary flooring and drop reasons, `if` evaluates one branch (a branch reading a progression does not arm it).
+3. **Conditions:** short-circuit order; `fact` ops per type; null facts; `event` filters; `everyN` with offset and `of: 'stage'`; history trackers against a brute-force recomputation over random sequences (`streakLen`, `countInLast` with and without `partial`, `roundsSince` never-seen rule).
+4. **Window semantics** (each a scripted-outcome test asserting the trace):
+   - phase order: progression update before rules; rules see effects of earlier rules; layout `when` sees var changes from the same window;
+   - `goto` runs `onExit` then `onEnter`, ends evaluation, the new stage's layout is used in the same window, `roundsInStage` is 1 at the next window, `stageEntries` counts; goto to the current stage is a no-op without `reenter`, a re-entry with it;
+   - `stop` ends without a round, no `onExit`; stops from caps in phase 2 skip rules;
+   - `once: true` (once per session, survives goto), `once: 'stage'` (re-arms on entry), `cooldown` (exact windows skipped, survives goto, inherited rules share it);
+   - `extends`: child rules first, parent layout fallback when the child's `when` fails, hooks not inherited, depth and cycle errors;
+   - effect cap: 16 runs, 17th ⇒ `E_RT_EFFECT_CAP` and session `error`; hooks count;
+   - patches: `bet` overrides layout, `remove`, `clear` then `bet`, `press` with and without the bet on the table, cap; patches are gone next window; `keepOr` keeps a pressed amount;
+   - `skipRound`: desired = table, later patches ignored and traced, rules still run;
+   - implicit contract keep: absent contract bet re-added, explicit `remove` not re-added;
+   - `act` passes through; ignored on stop.
+5. **Progressions:** the §7.7 table row by row; every kind's push and none; caps for each policy and `maxAmount`; latching (a `pctOfBankroll` base changes only at cycle start); `feed: 'sized'` arming (stage switch stops drift, persistent bet armed until it resolves, group with one armed bet, `'round'`), `feed: 'always'`; manual feeds; `progStep`/`progCaps`; overflow guard; sorted-name processing order with two progressions capping in the same window.
+6. **Determinism:** the same golden run twice gives byte-identical traces; `vars`/`progressions` written in different key orders give identical traces; `stepPure` ≡ `step` over 10,000 random windows (property test).
+7. **Golden traces:** each §15 strategy × seed 20261028, first 200 windows, pinned JSONL (§12) through the real roulette plugin (craps through the stub until the craps app). Plus the reconcile assertion of PLAYBOOK §4: zero `rejected` across all goldens at their golden rules.
+8. **Builder round trip** (happy-dom project, `src/core/ui/builder/*.test.ts`): `normalize` idempotent; `fromJson(toJson(m)) = m` over generated models; every golden survives `normalize` with identical golden trace; sentence rendering snapshot per chip kind asserts structure (chip kinds and order), not wording (PLAYBOOK §12).
+9. **Allocation and speed** (`tests/perf`): after warm-up, 100,000 `step` calls on R19 allocate nothing measurable (heap delta under a small bound with `--expose-gc`), and `step` throughput meets the budget in §10.
+10. **Monte-Carlo sanity** (with the harness): a flat even-money golden's realized edge within 3 SE of the analytic edge; Martingale's maximum exposure never exceeds `base × 2^(L−1)`.
+
+---
+
+## 18. Requests to sibling contracts
+
+To the **game** spike / `contracts/game.ts` (all small; the strategy core depends on them):
+
+1. `facts: FactSchema` exactly as §8.1 (moved to `contracts/facts.ts`), with `scope` and `nullable` per fact and `actions` (empty for roulette). Fact names must not collide with §8.2.
+2. `compileFact(ref, rules) → (state, last) => FactValue | null`, allocation-free, replacing a per-window `observe()` object for the hot path (`observe` may stay for the UI and traces).
+3. `limits(betOrClass, rules, state?) → { min, max } | null`, state-aware (craps odds max depends on the point), and named limits classes (`outside`, `inside`, `call`, …) for `tableMin`/`tableMax`.
+4. `layoutOf(state)` entries use **table** ids that identify travelled bets (`come:6`) so `amountOn`/`onTable` can address them; `RoundOutcome.resolutions` use the same ids.
+5. A roulette call bet (`voisins`, `neighbours:17:2`, …) is one bet id whose `amount` is the **total** across its chips; reconcile splits it (or rejects if the total does not divide).
+6. `reconcile(state, desired, acts?)`: optional third argument for `act` effects (no-op for roulette and craps).
+7. `bet-won`/`bet-lost`/`bet-push` are derived by the core from resolutions (profit sign); the plugin does not emit them in `last.events` (game.md §9.3 currently lists them as plugin events: keep them in the schema for docs only). `prog-cap`/`prog-done` are core-only.
+8. Optional `compileHistory(predicate, rules)` hook (§8.4) so the generic history conditions reuse roulette's indexed counters (game.md C4).
+
+To the **harness** spike:
+
+1. Calling sequence §11.1; `Observation` objects reused; `endedBy` reasons including `strategy:cap-<p>` and `strategy:done-<p>`. The reason list for the `16 + j` encoding comes from `StrategyRuntime.stopReasons` (statically complete: every `stop` effect's reason plus `cap-<p>` / `done-<p>` for progressions that can stop); `stopStage` and per-stage rounds come from `StepOutput.stage` / `stageIds`.
+2. A summary column `strategyAnomalies` (Uint16: null amounts, null `set`, null bases) next to `rejectedActions`, so "the strategy asked for something meaningless" is visible like a rejection.
+3. Trace records extended by the harness with `reconcile`, `outcome`, `equity` (§12).
+
+To the **architecture** spike: files `src/core/contracts/{strategy,strategy-trace,facts}.ts`; the builder model (§13) lives in `src/core/ui/builder/` (pure model + Preact components) and the strategy WP owns `src/core/strategy/**` plus the golden fixtures.
+
+---
+
+## 19. Open questions
+
+Each lists options, recommended first; this document proceeds on the recommendation.
+
+1. **The §3.6 roulette example uses a $5 unit, below the $25 outside minimum (decisions #3).**
+   (a) *Recommended:* keep it verbatim as a golden whose experiment overrides the outside minimum to $5, and ship the day-one preset as R12b ($25 unit, thresholds ×5). (b) Change the playbook example to $25. (c) Make below-minimum a warning so R12 runs at default rules and every bet is rejected (useless).
+2. **Goto to the current stage.** (a) *Recommended:* no-op unless `reenter: true` (keeps the §3.6 craps example's inherited rule from blocking stop-win). (b) Always a re-entry (the playbook's example then never reaches stop-win while `pointsInRow ≥ 2`). (c) Validation error.
+3. **Progression feeding.** (a) *Recommended:* `feed: 'sized'` default: a progression learns only from bets it sized (no drift while another stage bets the tracked bet; persistent bets armed until they resolve). (b) Playbook literal: always feed from the tracked bet. (c) Feed only while the current stage references the progression.
+4. **Fact access on the hot path.** (a) *Recommended:* the plugin compiles accessors (`compileFact`), and history conditions (`streak`, `countInLast`, `since`) are generic in the core over round-scoped facts and events; roulette's `spinsSince` etc. become optional plugin facts. (b) Plugin `observe()` returns a keyed object each window (allocates) and owns all history facts. (c) Both, with plugin facts preferred.

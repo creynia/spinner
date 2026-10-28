@@ -25,6 +25,11 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 - Spikes: game, strategy, harness-data-analysis, architecture (PLAYBOOK §13.2), output under `docs/design/`.
 - Money is integer cents; `unit` defaults to 2500 ($25) to match the table minimum.
 
+## Later user decisions
+
+- **Shared core stays in this repo** as the `src/core` module (2026-10-28). Moving it to an external `casino-lab-core` repo and refactoring crappy, baccaratton and holdumb onto it is a **chip**, done only when the user asks. `src/core` is still kept extractable (no imports from outside itself, own README and barrel), per `shared-core.md`. Configs and build tooling stay where `architecture.md` puts them; moving them into `src/core/tooling/` is part of that chip.
+- **Gallery bundles stay at ≤ 2 MB each, ≤ 20 MB for the folder.** Bundles reach that size with the gallery trim in `harness-data-analysis.md` (all summary rows, 48 checkpoints, ≤ 6 samples).
+
 ## Reconciliation (filled in after the spikes)
 
 _Pending._
