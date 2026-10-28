@@ -154,13 +154,22 @@ export function BetSheet(props: {
 }) {
   const { label, wheel } = props;
   const ref = useRef<HTMLElement>(null);
+  // A long-press opens the sheet under the finger: the release's click must not hit the backdrop.
+  const openedAt = useRef(Date.now());
   const items = useMemo(() => insideBetsContaining(label, wheel), [label, wheel]);
   useEffect(() => {
     ref.current?.focus();
   }, [label]);
   return (
     <>
-      <div class="rl-backdrop" aria-hidden="true" onClick={props.onClose} />
+      <div
+        class="rl-backdrop"
+        aria-hidden="true"
+        onClick={() => {
+          if (props.steps && Date.now() - openedAt.current < 500) return;
+          props.onClose();
+        }}
+      />
       <section
         class="rl-sheet"
         role="dialog"

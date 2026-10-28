@@ -60,6 +60,7 @@ try {
       );
       await page.waitForSelector('.rl-board--place');
       const tag = `${vp.name}-${theme}`;
+      console.log('running', tag);
       const check = async (state) => {
         const axe = await new AxeBuilder({ page }).analyze();
         for (const v of axe.violations)
