@@ -1,0 +1,203 @@
+/* Chart tokens, defined locally (architecture.md §7): light, then dark by OS preference, then the
+   forced themes. Series are told apart by dash pattern and direct labels as well as by colour. */
+.sp-chart,
+.sp-spark {
+  --chart-1: #1d5fbf;
+  --chart-2: #b8470c;
+  --chart-3: #1a7f4b;
+  --chart-4: #7a3db8;
+  --chart-5: #0e7490;
+  --chart-6: #a1325f;
+  --band-outer: rgba(29, 95, 191, 0.14);
+  --band-inner: rgba(29, 95, 191, 0.3);
+  --line-median: var(--chart-1);
+  --line-expected: var(--chart-2);
+  --zero: var(--text, #1b2430);
+  --chart-grid: rgba(79, 91, 107, 0.22);
+  --chart-axis: var(--muted, #4f5b6b);
+  --chart-text: var(--text, #1b2430);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .sp-chart,
+  :root:not([data-theme='light']) .sp-spark {
+    --chart-1: #7fb0ff;
+    --chart-2: #ff9a6b;
+    --chart-3: #5fd49a;
+    --chart-4: #c39bff;
+    --chart-5: #5fd4e6;
+    --chart-6: #ff8fb5;
+    --band-outer: rgba(127, 176, 255, 0.18);
+    --band-inner: rgba(127, 176, 255, 0.34);
+    --chart-grid: rgba(163, 179, 169, 0.2);
+  }
+}
+:root[data-theme='dark'] .sp-chart,
+:root[data-theme='dark'] .sp-spark {
+  --chart-1: #7fb0ff;
+  --chart-2: #ff9a6b;
+  --chart-3: #5fd49a;
+  --chart-4: #c39bff;
+  --chart-5: #5fd4e6;
+  --chart-6: #ff8fb5;
+  --band-outer: rgba(127, 176, 255, 0.18);
+  --band-inner: rgba(127, 176, 255, 0.34);
+  --chart-grid: rgba(163, 179, 169, 0.2);
+}
+
+.sp-chart {
+  margin: 0;
+  color: var(--chart-text);
+  min-width: 0;
+}
+.sp-chart__title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin: 0 0 4px;
+}
+.sp-chart__plot {
+  position: relative;
+  width: 100%;
+}
+.sp-chart__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: pan-y;
+  overflow: visible;
+}
+.sp-chart__svg:focus-visible {
+  outline: 2px solid var(--focus, #1f5fbf);
+  outline-offset: 2px;
+}
+.sp-chart__svg text {
+  font-size: 12px;
+  fill: var(--chart-text);
+  font-family: inherit;
+}
+.sp-chart__svg .sp-axis-text {
+  fill: var(--chart-axis);
+}
+.sp-chart__svg .sp-grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+.sp-chart__svg .sp-axis {
+  stroke: var(--chart-axis);
+  stroke-width: 1;
+}
+.sp-chart__svg .sp-hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+.sp-chart__svg .sp-halo {
+  paint-order: stroke;
+  stroke: var(--surface, #fff);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.sp-chart__tip {
+  position: absolute;
+  top: 6px;
+  z-index: 1;
+  max-width: min(260px, 70%);
+  padding: 6px 8px;
+  border: 1px solid var(--border, #d5d2c8);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--chart-text);
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.sp-chart__tip[hidden] {
+  display: none;
+}
+.sp-chart__tip strong {
+  display: block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sp-chart__tip {
+    animation: sp-chart-fade 120ms ease-out;
+  }
+}
+@keyframes sp-chart-fade {
+  from {
+    opacity: 0;
+  }
+}
+.sp-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.sp-chart__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-chart__summary {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  color: var(--muted, #4f5b6b);
+}
+.sp-chart__table {
+  margin-top: 6px;
+  font-size: 0.875rem;
+}
+.sp-chart__table > summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--chart-text);
+}
+.sp-chart__tablewrap {
+  overflow-x: auto;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.sp-chart__table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.sp-chart__table th,
+.sp-chart__table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border, #d5d2c8);
+  text-align: right;
+  white-space: nowrap;
+}
+.sp-chart__table th:first-child,
+.sp-chart__table td:first-child {
+  text-align: left;
+}
+.sp-chart__table caption {
+  text-align: left;
+  color: var(--muted, #4f5b6b);
+  padding-bottom: 4px;
+}
+.sp-spark {
+  display: inline-block;
+  vertical-align: middle;
+}
+.sp-spark svg {
+  display: block;
+  overflow: visible;
+}
+.sp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
