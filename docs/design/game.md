@@ -762,6 +762,8 @@ dozens at base −$1.35/spin; progressions vary with their step and are measured
 
 ## 12. Table view and bet picker (phone first)
 
+> **Chip layouts (2026-10-28).** Tap-to-place editing is a `place` mode of this board plus a roulette `ChipBoard` (`src/game/roulette/ui/chip-board.tsx`). See `docs/design/layouts.md` §4 and §6.2 for the tap geometry (`betAt` / `betNearest`), the corner mode button (bet-type lock and Call bets), and the built-in layouts.
+
 `src/game/roulette/ui/`: `TableView`, `BetPicker`, `OutcomeGlyph`, `Racetrack`, `layouts/*.ts`.
 SVG for the felt (regions as data, like crappy's `TableLayout`), HTML for lists and controls.
 Tap rule: every tappable region ≥ 44 CSS px on its short side at the reference viewports 390×844
