@@ -183,6 +183,8 @@ class Validator {
   private readonly predicates = new Set<string>();
   private readonly stopReasons = new Set<string>();
   private readonly catalog = new Map<string, BetCatalogEntry>();
+  /** Parameterised families by head: `neighbours:<p>:<k>` (or a bare `neighbours`) -> `neighbours`. */
+  private readonly families = new Map<string, BetCatalogEntry>();
   private unit = 0;
   // analysis
   private readonly stages: StageInfo[] = [];
@@ -199,7 +201,12 @@ class Validator {
     private readonly def: unknown,
     private readonly ctx: ValidationContext | null,
   ) {
-    if (ctx) for (const e of ctx.catalog) this.catalog.set(e.id, e);
+    if (ctx)
+      for (const e of ctx.catalog) {
+        this.catalog.set(e.id, e);
+        const head = e.id.split(':')[0] as string;
+        if (e.parameters && !this.families.has(head)) this.families.set(head, e);
+      }
   }
 
   private err(code: string, path: string, params?: Record<string, string | number>): void {
@@ -288,8 +295,7 @@ class Validator {
   private entryOf(id: string): BetCatalogEntry | null {
     const direct = this.catalog.get(id);
     if (direct) return direct;
-    const base = this.catalog.get(id.split(':')[0] as string);
-    return base && base.parameters ? base : null;
+    return this.families.get(id.split(':')[0] as string) ?? null;
   }
 
   /** Reports E_UNKNOWN_BET / E_BET_UNAVAILABLE. Returns the canonical id and catalog entry. */
