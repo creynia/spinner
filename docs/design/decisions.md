@@ -12,7 +12,7 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 | 4 | Pace | Default **40 spins/hour** (live wheel). Pace preset `electronic` at **100 spins/hour**. Definitions may override. |
 | 5 | Default run | **10,000 sessions × 500 spins.** Perf budget device: **mid-range Android** (Pixel 6a class): < 90 s; 4-core laptop < 20 s; CI uses a generous bound. |
 | 6 | Merge | The orchestrator **may merge** PRs into `main` once reviewed by a pool reviewer (not the author) and CI is green on the latest head. |
-| 7 | Repo | Public, **MIT**. Branching: `main` is the integration branch; all work happens on `claude/spinner-*` branches and lands through PRs into `main`. |
+| 7 | Repo | Public, **MIT**. Default branch `main` (switched by the user); all work happens on `claude/spinner-*` branches and lands through PRs into `main`. |
 | 8 | Gallery | **Yes.** Curated result bundles committed under `gallery/`, listed by a build-time `gallery/index.json`, openable read-only at `#/gallery`. ≤ 2 MB per bundle, ≤ 20 MB folder, enforced in CI. |
 | 9 | Single-file build | **No** in v1 (chip). |
 | 10 | Presets day one | Full classic set: flat, Martingale, Grand Martingale, Fibonacci, d'Alembert, Labouchere, Paroli, 1-3-2-6, Oscar's Grind, James Bond, dozens progression (two dozens, Martingale-style), and the §3.6 example `red-mart-then-flat`. |
@@ -20,7 +20,8 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 
 ## Process decisions
 
-- Prior art in creynia/crappy is **not available** to this session; spikes design from `PLAYBOOK.md` alone.
+- Prior art: creynia/crappy, creynia/baccaratton and creynia/holdumb are cloned read-only at `/home/user/creynia/<repo>`. They share one stack (preact ^10.29.8, vite ^8.3.4, typescript ~6.0.3, vitest ^5.0.4, @playwright/test 1.56.1, eslint ^10); spinner matches it unless a design doc gives a reason.
+- A fifth spike, the **shared-pieces audit** (`docs/design/shared-core.md`), runs now rather than when the next app starts, because all three sibling apps already exist.
 - Spikes: game, strategy, harness-data-analysis, architecture (PLAYBOOK §13.2), output under `docs/design/`.
 - Money is integer cents; `unit` defaults to 2500 ($25) to match the table minimum.
 
