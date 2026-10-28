@@ -220,9 +220,9 @@ is `pieces-weight × piece`, where `piece = amount / pieces`.
 
 | Id | Pieces | Components (weight) | Net per pocket, in pieces |
 |---|---|---|---|
-| `voisins` | 9 | `trio:0-2-3` ×2, `split:4-7`, `split:12-15`, `split:18-21`, `split:19-22`, `split:32-35`, `corner:25-26-28-29` ×2 | +15 on 0 2 3 25 26 28 29; +9 on the other ten covered; −9 elsewhere |
+| `voisins` | 9 | `trio:0-2-3` ×2, `split:4-7`, `split:12-15`, `split:18-21`, `split:19-22`, `split:32-35`, `corner:25-26-28-29` ×2 | +15 on 0 2 3; +9 on the other fourteen covered; −9 elsewhere |
 | `tiers` | 6 | `split:5-8` `split:10-11` `split:13-16` `split:23-24` `split:27-30` `split:33-36` | +12 covered, −6 elsewhere |
-| `orphelins` | 5 | `straight:1`, `split:6-9`, `split:14-17`, `split:17-20`, `split:31-34` | +31 on 17, +13 on the other seven, −5 elsewhere |
+| `orphelins` | 5 | `straight:1`, `split:6-9`, `split:14-17`, `split:17-20`, `split:31-34` | +31 on 1 and 17, +13 on the other six, −5 elsewhere |
 | `jeu-zero` | 4 | `split:0-3`, `split:12-15`, `straight:26`, `split:32-35` | +32 on 26, +14 on the other six, −4 elsewhere |
 | `neighbours:<p>:<k>` | 2k+1 | `straight:` on p and k wheel neighbours each side | +(35 − 2k) covered, −(2k+1) elsewhere |
 
@@ -701,7 +701,7 @@ wheels and pins a golden trace on european for seed 1.
 ```
 
 ```json
-{ "schema": 1, "id": "1-3-2-6-red", "name": "1-3-2-6: red", "game": "roulette", "unit": 2500,
+{ "schema": 1, "id": "one-three-two-six-red", "name": "1-3-2-6: red", "game": "roulette", "unit": 2500,
   "notes": "1, 3, 2, 6 units on consecutive wins; back to 1 after a loss or after the fourth win.",
   "progressions": { "s": { "kind": "1-3-2-6", "base": { "units": 1 }, "track": "red" } },
   "stages": [ { "id": "play", "layout": [ { "bet": "red", "amount": { "prog": "s" } } ], "rules": [] } ] }

@@ -238,7 +238,7 @@ The backward pass keeps everything > a because `maxRounds + 1 > K` implies `maxR
 - `(100, 10000)` → 101 points `0..100`.
 - `(128, 10000)` → 128 points `0..126, 128`.
 - `(10000, 10000)` → 128 points; entries 30..44 are `30,31,32,34,36,38,41,43,46,49,52,55,59,62,66`; the last five are `7852, 8341, 8861, 9413, 10000`.
-- `(500, 100000)` → K = 41, D = 11, 41 points: `0..10, 13,15,17,19,22,25,28,32,37,42,48,54,62,71,81,92,105,119,136,155,176,201,229,261,297,338,385,439,500`.
+- `(500, 100000)` → K = 41, D = 11, 41 points: `0..10, 11,13,15,17,19,22,25,28,32,37,42,48,54,62,71,81,92,105,119,136,155,176,201,229,261,297,338,385,439,500`.
 
 Semantics: the checkpoint matrix is `Int32Array(sessions × K)`, **session-major** (`equity[i·K + c]`). A session that ended before round `schedule[c]` carries its final equity forward ("money in the pocket"). Survival is computed exactly from `roundsPlayed`/`endedBy` (§12.2), never from checkpoints.
 

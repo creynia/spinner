@@ -30,6 +30,43 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 - **Shared core stays in this repo** as the `src/core` module (2026-10-28). Moving it to an external `casino-lab-core` repo and refactoring crappy, baccaratton and holdumb onto it is a **chip**, done only when the user asks. `src/core` is still kept extractable (no imports from outside itself, own README and barrel), per `shared-core.md`. Configs and build tooling stay where `architecture.md` puts them; moving them into `src/core/tooling/` is part of that chip.
 - **Gallery bundles stay at ≤ 2 MB each, ≤ 20 MB for the folder.** Bundles reach that size with the gallery trim in `harness-data-analysis.md` (all summary rows, 48 checkpoints, ≤ 6 samples).
 
-## Reconciliation (filled in after the spikes)
+## Reconciliation (2026-10-28)
 
-_Pending._
+`docs/design/reconciliation.md` is the Phase 2 review: 50 contradictions (23 blocking, 27 minor) and the independent exact-fraction re-derivation (575 numbers, 570 matched; the 5 mismatches are fixed in game.md §3.3 and harness-data-analysis.md §4). **Every "Recommended resolution" in its §1 tables is adopted** and overrides the design docs, with the clarifications below. Where a design doc still says otherwise, the resolution wins; WP0 copies contracts with the resolutions applied.
+
+### Contract set (WP0 freezes these)
+
+`src/core/contracts/{game,facts,strategy,strategy-trace,experiment,run,protocol,analysis,version}.ts` plus `src/core/ui/game-ui.ts`. `contracts/*` import nothing outside `contracts/`. `src/core/version.ts` does not exist; `CORE_VERSION` lives in `contracts/version.ts` (R5).
+
+### `contracts/game.ts` (key points)
+
+- `createState({ rules, rng, bankroll })`; the harness owns seeding and hands the plugin a ready `Rng` (G1). Roulette draws exactly one `rng.below(pockets)` per round, bets or not.
+- `Rng` (`next, below, float53, snapshot`) and a structural `Fraction { num: bigint; den: bigint }` are declared in contracts; `core/rng` and `core/money` implement them (G2, G14).
+- The strategy reads the game through `visible(state)` and `compileFact(ref, rules)` (+ optional `compileHistory`); no `observe()`/`GameFacts` in the contract (G3).
+- `limits(betOrClass, rules, view?)`, `pace(rules)`, `ev.{expectedLossPerRound(view), variancePerRound(view), layoutMoments(layout, rules), betEdge(bet, rules)}` with **expected loss positive in cents** and `edge` a negative EV fraction (G4, G8, G9). `NormalizeContext.plugin` is the full `GamePlugin`.
+- No `ui` on the plugin; `GameUi` lives in `core/ui/game-ui.ts`: `TableView({rules, layout, pending?, lastOutcome, highlight})`, `BetPicker({rules, value, onPick})`, `OutcomeGlyph({outcome})` (G5).
+- `BetCatalogEntry.limitClass` (`'inside'|'outside'|'call'|string`) and `category` = family (G6). `Reconciliation.adjusted: {entry, to, reason}[]` is in v1, counted in the summary and shown in the trace (G7).
+- Optional `force?(state, script)` for tests (G12). In-round decision policies (UTH), `setPolicy`, `exposure()`, counters, `'moves'`, `commission`: **not in v1**; additive later (G10, G11). strategy.md's `act` effect stays.
+
+### Facts and events
+
+- `bet-won` / `bet-lost` / `bet-push` are derived by the core from resolutions (profit sign); the roulette plugin does not emit them (F1). Roulette events: `spin`, `zero`, `partage`, `imprisoned`, `released`, `prison-lost`.
+- Fact ref grammar: greedy parameter last, `count:<n>:<target>`, with `FactParam.type: 'target'` (bet id or declared extras `zero`, `green`) (F2). strategy.md's `{fact: …}` streak form (F3).
+
+### Strategy and presets
+
+- The day-one preset set is game.md §11 (decisions #10), with `one-three-two-six-red` (S1). strategy.md's roulette strategies are golden fixtures under `tests/fixtures/strategy/roulette/`, prefixed `golden-` where an id collides; its literal $5 `red-mart-then-flat` is a fixture only (S2). Golden convention: seed 20261028, session 0, bankroll $5,000; traces in `src/game/roulette/__fixtures__`.
+- `stopReasons` sorted (S3). Reserved stop reasons `stop-win`, `stop-loss`, `bust`, `rounds`, `error` → `E_RESERVED_REASON` (S8). Names `Diagnostic`, `TraceWindow`, `SessionTrace = TraceWindow[]` (S4). R19/R23 amounts fixed per S5.
+
+### Experiment, run, store
+
+- `game.rules` is `string | RulesRef { preset, overrides }`, normalized (E1); `normalizeDefinition` calls `normalizeStrategy` and the definitionId vector is re-pinned by core-store (E2, E3).
+- Worker protocol in `contracts/protocol.ts` (R1); the harness writes through a `RunSink` in `contracts/run.ts` and never imports the store (R2); `resultsDigest` and the bundle codec live in `core/store` (R3).
+- Summary columns: the harness doc's names plus `adjusted` (u16) and `anomalies` (u16); the playbook's `endedRound` is `roundsPlayed` (R4). Ten IndexedDB stores (R6).
+
+### Analysis, gallery, tooling
+
+- Quantiles: type 7 (linear interpolation) everywhere; the "median session" for Watch is rank `floor((N−1)/2)` and docs/metrics.md says so (A1).
+- Gallery: harness-data-analysis.md's `GalleryIndexV1` with architecture.md's file naming and checks; infra owns the plugin (P1). Bundle size is measured in core-store with 12 bet categories; trim further if needed to stay ≤ 2 MB (A2).
+- Version pins: architecture.md §1.1 (exact pins; Playwright 1.63.0 because it matches the preinstalled Chromium 1243) (P8). Perf env `PERF_BUDGET_MS`; full Monte Carlo flag `FULL=1` (P6, P7). WP ownership per architecture.md §12.2 (P3). WP0 includes real `money`, `rng` and `coin` (P4).
+- WP0 also makes Vitest and Playwright worker counts settable from env (`VITEST_MAX_WORKERS`, `PW_WORKERS`, default 2) for the resource baton.
