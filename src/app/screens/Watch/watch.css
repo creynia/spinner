@@ -1,0 +1,21 @@
+.watch-nav {
+  align-items: end;
+}
+.watch-goto {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+}
+.watch-goto label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8125rem;
+}
+.watch-goto .input {
+  width: 9em;
+  min-height: var(--tap, 44px);
+}
+.watch-sum {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}

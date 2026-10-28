@@ -1,12 +1,8 @@
-// Watch screen. Placeholder (WP0): an h1 and one card; the owning WP replaces this file.
-export function Watch() {
-  return (
-    <>
-      <h1>Watch</h1>
-      <section class="card">
-        <h2>Coming soon</h2>
-        <p class="muted">Replay one session spin by spin.</p>
-      </section>
-    </>
-  );
+// Watch (architecture.md §6.3): replay one session round by round with its trace.
+import type { ScreenProps } from '../types';
+import { WatchView } from './WatchView';
+import './watch.css';
+
+export function Watch(props: ScreenProps) {
+  return <WatchView {...props} />;
 }
