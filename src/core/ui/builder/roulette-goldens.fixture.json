@@ -1,0 +1,1266 @@
+[
+  {
+    "schema": 1,
+    "id": "flat-red",
+    "name": "Flat red",
+    "game": "roulette",
+    "unit": 2500,
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "units": 1
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "martingale-red",
+    "name": "Martingale on red",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "m": {
+        "kind": "martingale",
+        "track": "red",
+        "maxSteps": 8,
+        "onCap": "reset"
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "prog": "m"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "grand-martingale-black",
+    "name": "Grand Martingale on black",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "g": {
+        "kind": "grand-martingale",
+        "track": "black",
+        "maxSteps": 6,
+        "onCap": "stop"
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "black",
+            "amount": {
+              "prog": "g"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "fibonacci-red",
+    "name": "Fibonacci on red",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "f": {
+        "kind": "fibonacci",
+        "track": "red",
+        "maxSteps": 12,
+        "onCap": "reset"
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "prog": "f"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "dalembert-even",
+    "name": "d'Alembert on even",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "d": {
+        "kind": "dalembert",
+        "track": "even",
+        "maxSteps": 20,
+        "onCap": "stay"
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "even",
+            "amount": {
+              "prog": "d"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "labouchere-red",
+    "name": "Labouchere on red",
+    "game": "roulette",
+    "unit": 2500,
+    "vars": {
+      "lines": 0
+    },
+    "progressions": {
+      "l": {
+        "kind": "labouchere",
+        "track": "red",
+        "line": [1, 2, 3, 4],
+        "onEmpty": "reset",
+        "maxAmount": {
+          "units": 100
+        },
+        "onCap": "reset"
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "prog": "l"
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "count-line",
+            "when": {
+              "event": "prog-done",
+              "prog": "l"
+            },
+            "then": [
+              {
+                "inc": "lines"
+              }
+            ]
+          },
+          {
+            "id": "five-lines",
+            "when": {
+              "cmp": [
+                {
+                  "var": "lines"
+                },
+                ">=",
+                5
+              ]
+            },
+            "then": [
+              {
+                "stop": "five-lines"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "paroli-red",
+    "name": "Paroli on red",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "p": {
+        "kind": "paroli",
+        "track": "red",
+        "maxSteps": 3
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "prog": "p"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "one-three-two-six-black",
+    "name": "1-3-2-6 on black",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "s": {
+        "kind": "1-3-2-6",
+        "track": "black"
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "black",
+            "amount": {
+              "prog": "s"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "oscars-grind-red",
+    "name": "Oscar's Grind on red",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "o": {
+        "kind": "oscars-grind",
+        "track": "red",
+        "maxSteps": 10,
+        "onCap": "stay"
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "prog": "o"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "james-bond",
+    "name": "James Bond",
+    "game": "roulette",
+    "unit": 1000,
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "high",
+            "amount": {
+              "units": 14
+            }
+          },
+          {
+            "bet": "sixline:13-14-15-16-17-18",
+            "amount": {
+              "units": 5
+            }
+          },
+          {
+            "bet": "straight:0",
+            "amount": {
+              "units": 1
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "dozens-progression",
+    "name": "Two dozens, tripling",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "d": {
+        "kind": "martingale",
+        "multiplier": 3,
+        "maxSteps": 4,
+        "onCap": "reset",
+        "track": {
+          "bets": ["dozen:1", "dozen:2"]
+        }
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "dozen:1",
+            "amount": {
+              "prog": "d"
+            }
+          },
+          {
+            "bet": "dozen:2",
+            "amount": {
+              "prog": "d"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "red-mart-then-flat",
+    "name": "Red Martingale, then flat",
+    "game": "roulette",
+    "unit": 500,
+    "progressions": {
+      "m": {
+        "kind": "martingale",
+        "base": {
+          "units": 1
+        },
+        "maxSteps": 6,
+        "onCap": "reset",
+        "track": "red"
+      }
+    },
+    "stages": [
+      {
+        "id": "mart",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "prog": "m"
+            }
+          }
+        ],
+        "rules": [
+          {
+            "when": {
+              "cmp": ["net", ">=", 10000]
+            },
+            "then": [
+              {
+                "goto": "flat"
+              }
+            ]
+          },
+          {
+            "when": {
+              "cmp": ["net", "<=", -30000]
+            },
+            "then": [
+              {
+                "stop": "stop-loss"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "flat",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "units": 1
+            }
+          }
+        ],
+        "rules": [
+          {
+            "when": {
+              "cmp": ["roundsInStage", ">=", 50]
+            },
+            "then": [
+              {
+                "stop": "plan-complete"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "red-mart-then-flat-25",
+    "name": "Red Martingale, then flat ($25)",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "m": {
+        "kind": "martingale",
+        "maxSteps": 6,
+        "onCap": "reset",
+        "track": "red"
+      }
+    },
+    "stages": [
+      {
+        "id": "mart",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "prog": "m"
+            }
+          }
+        ],
+        "rules": [
+          {
+            "when": {
+              "cmp": ["net", ">=", 50000]
+            },
+            "then": [
+              {
+                "goto": "flat"
+              }
+            ]
+          },
+          {
+            "when": {
+              "cmp": ["net", "<=", -150000]
+            },
+            "then": [
+              {
+                "stop": "stop-loss"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "flat",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "units": 1
+            }
+          }
+        ],
+        "rules": [
+          {
+            "when": {
+              "cmp": ["roundsInStage", ">=", 50]
+            },
+            "then": [
+              {
+                "stop": "plan-complete"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "wait-for-three-reds",
+    "name": "Wait for three reds",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "m": {
+        "kind": "martingale",
+        "track": "black",
+        "maxSteps": 4,
+        "onCap": "reset"
+      }
+    },
+    "stages": [
+      {
+        "id": "watch",
+        "rules": [
+          {
+            "when": {
+              "streak": {
+                "fact": "lastColor",
+                "equals": "red",
+                "atLeast": 3
+              }
+            },
+            "then": [
+              {
+                "goto": "bet"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "bet",
+        "onEnter": [
+          {
+            "prog": "m",
+            "do": "reset"
+          }
+        ],
+        "layout": [
+          {
+            "bet": "black",
+            "amount": {
+              "prog": "m"
+            }
+          }
+        ],
+        "rules": [
+          {
+            "when": {
+              "event": "bet-won",
+              "bet": "black"
+            },
+            "then": [
+              {
+                "goto": "watch"
+              }
+            ]
+          },
+          {
+            "when": {
+              "event": "prog-cap",
+              "prog": "m"
+            },
+            "then": [
+              {
+                "goto": "watch"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "sleeping-number-17",
+    "name": "Chase a sleeping 17",
+    "game": "roulette",
+    "unit": 2500,
+    "stages": [
+      {
+        "id": "wait",
+        "rules": [
+          {
+            "when": {
+              "cmp": [
+                {
+                  "stageEntries": "chase"
+                },
+                ">=",
+                3
+              ]
+            },
+            "then": [
+              {
+                "stop": "three-chases"
+              }
+            ]
+          },
+          {
+            "when": {
+              "since": {
+                "fact": "lastNumber",
+                "equals": "17",
+                "atLeast": 74
+              }
+            },
+            "then": [
+              {
+                "goto": "chase"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "chase",
+        "layout": [
+          {
+            "bet": "straight:17",
+            "amount": {
+              "units": 1
+            }
+          }
+        ],
+        "rules": [
+          {
+            "when": {
+              "event": "bet-won",
+              "bet": "straight:17"
+            },
+            "then": [
+              {
+                "goto": "wait"
+              }
+            ]
+          },
+          {
+            "when": {
+              "cmp": ["roundsInStage", ">=", 36]
+            },
+            "then": [
+              {
+                "goto": "wait"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "hot-dozen-follower",
+    "name": "Follow the last dozen",
+    "game": "roulette",
+    "unit": 2500,
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "dozen:1",
+            "amount": {
+              "units": 1
+            },
+            "when": {
+              "fact": ["lastDozen", "==", 1]
+            }
+          },
+          {
+            "bet": "dozen:2",
+            "amount": {
+              "units": 1
+            },
+            "when": {
+              "fact": ["lastDozen", "==", 2]
+            }
+          },
+          {
+            "bet": "dozen:3",
+            "amount": {
+              "units": 1
+            },
+            "when": {
+              "fact": ["lastDozen", "==", 3]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "trailing-stop-red",
+    "name": "Red with a trailing stop",
+    "game": "roulette",
+    "unit": 2500,
+    "vars": {
+      "armed": 0,
+      "lock": 0
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "units": 1
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "arm",
+            "once": true,
+            "when": {
+              "cmp": ["net", ">=", 20000]
+            },
+            "then": [
+              {
+                "set": "armed",
+                "to": 1
+              },
+              {
+                "set": "lock",
+                "to": {
+                  "sub": ["net", 10000]
+                }
+              }
+            ]
+          },
+          {
+            "id": "raise",
+            "when": {
+              "all": [
+                {
+                  "cmp": [
+                    {
+                      "var": "armed"
+                    },
+                    "==",
+                    1
+                  ]
+                },
+                {
+                  "cmp": [
+                    {
+                      "sub": ["net", 10000]
+                    },
+                    ">",
+                    {
+                      "var": "lock"
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": [
+              {
+                "set": "lock",
+                "to": {
+                  "sub": ["net", 10000]
+                }
+              }
+            ]
+          },
+          {
+            "id": "hit",
+            "when": {
+              "all": [
+                {
+                  "cmp": [
+                    {
+                      "var": "armed"
+                    },
+                    "==",
+                    1
+                  ]
+                },
+                {
+                  "cmp": [
+                    "net",
+                    "<=",
+                    {
+                      "var": "lock"
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": [
+              {
+                "stop": "trailing-stop"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "fallacy-count-black",
+    "name": "Red after a run of blacks",
+    "game": "roulette",
+    "unit": 2500,
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "units": 1
+            },
+            "when": {
+              "countInLast": {
+                "fact": "lastColor",
+                "equals": "black",
+                "n": 10,
+                "atLeast": 7
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "percent-bankroll-red",
+    "name": "2% of bankroll on red",
+    "game": "roulette",
+    "unit": 2500,
+    "vars": {
+      "stake": 2500
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "var": "stake"
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "resize",
+            "when": {
+              "everyN": 50
+            },
+            "then": [
+              {
+                "set": "stake",
+                "to": {
+                  "max": [
+                    {
+                      "tableMin": "red"
+                    },
+                    {
+                      "floorTo": [
+                        {
+                          "pctOfBankroll": 2
+                        },
+                        2500
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "red-with-zero-boost",
+    "name": "Red with a zero boost",
+    "game": "roulette",
+    "unit": 2500,
+    "vars": {
+      "boosts": 0,
+      "zeroOff": 0
+    },
+    "stages": [
+      {
+        "id": "base",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "units": 1
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enough",
+            "when": {
+              "cmp": [
+                {
+                  "var": "boosts"
+                },
+                ">=",
+                5
+              ]
+            },
+            "then": [
+              {
+                "stop": "five-boosts"
+              }
+            ]
+          },
+          {
+            "id": "boost-on",
+            "when": {
+              "countInLast": {
+                "event": "zero",
+                "n": 20,
+                "atLeast": 2,
+                "partial": true
+              }
+            },
+            "cooldown": 20,
+            "then": [
+              {
+                "goto": "boost"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "boost",
+        "extends": "base",
+        "onEnter": [
+          {
+            "inc": "boosts"
+          }
+        ],
+        "onExit": [
+          {
+            "set": "zeroOff",
+            "to": 0
+          }
+        ],
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "units": 2
+            }
+          },
+          {
+            "bet": "straight:0",
+            "amount": 500,
+            "when": {
+              "cmp": [
+                {
+                  "var": "zeroOff"
+                },
+                "==",
+                0
+              ]
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "zero-off",
+            "once": "stage",
+            "when": {
+              "cmp": ["net", ">", 0]
+            },
+            "then": [
+              {
+                "set": "zeroOff",
+                "to": 1
+              }
+            ]
+          },
+          {
+            "id": "boost-off",
+            "when": {
+              "cmp": ["roundsInStage", ">=", 10]
+            },
+            "then": [
+              {
+                "goto": "base"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "cooldown-pause",
+    "name": "Pause after three losses",
+    "game": "roulette",
+    "unit": 2500,
+    "vars": {
+      "pause": 0
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "black",
+            "amount": {
+              "units": 1
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "start-pause",
+            "cooldown": 30,
+            "when": {
+              "cmp": ["lossStreak", ">=", 3]
+            },
+            "then": [
+              {
+                "set": "pause",
+                "to": 5
+              }
+            ]
+          },
+          {
+            "id": "sit-out",
+            "when": {
+              "cmp": [
+                {
+                  "var": "pause"
+                },
+                ">",
+                0
+              ]
+            },
+            "then": [
+              {
+                "skipRound": true
+              },
+              {
+                "inc": "pause",
+                "by": -1
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "voisins-stop-win",
+    "name": "Voisins du z\u00e9ro",
+    "game": "roulette",
+    "unit": 2700,
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "voisins",
+            "amount": {
+              "units": 1
+            }
+          }
+        ],
+        "rules": [
+          {
+            "when": {
+              "cmp": ["net", ">=", 30000]
+            },
+            "then": [
+              {
+                "stop": "target"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "sequence-high-1248",
+    "name": "1-2-4-8 on high",
+    "game": "roulette",
+    "unit": 2500,
+    "progressions": {
+      "q": {
+        "kind": "sequence",
+        "track": "high",
+        "onWin": "reset",
+        "onLoss": "advance",
+        "onCap": "stop",
+        "amounts": [
+          {
+            "units": 1
+          },
+          {
+            "units": 2
+          },
+          {
+            "units": 4
+          },
+          {
+            "units": 8
+          }
+        ]
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "high",
+            "amount": {
+              "prog": "q"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "corners-manual-dalembert",
+    "name": "Four corners, d'Alembert",
+    "game": "roulette",
+    "unit": 625,
+    "progressions": {
+      "d": {
+        "kind": "dalembert",
+        "track": "manual",
+        "maxSteps": 10,
+        "onCap": "stay"
+      }
+    },
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "corner:1-2-4-5",
+            "amount": {
+              "prog": "d"
+            }
+          },
+          {
+            "bet": "corner:8-9-11-12",
+            "amount": {
+              "prog": "d"
+            }
+          },
+          {
+            "bet": "corner:25-26-28-29",
+            "amount": {
+              "prog": "d"
+            }
+          },
+          {
+            "bet": "corner:32-33-35-36",
+            "amount": {
+              "prog": "d"
+            }
+          }
+        ],
+        "rules": [
+          {
+            "when": {
+              "cmp": ["lastNet", ">=", 625]
+            },
+            "then": [
+              {
+                "prog": "d",
+                "do": "win"
+              }
+            ]
+          },
+          {
+            "when": {
+              "cmp": ["lastNet", "<", 0]
+            },
+            "then": [
+              {
+                "prog": "d",
+                "do": "loss"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "schema": 1,
+    "id": "skip-after-zero-if",
+    "name": "Red, double after black, skip after zero",
+    "game": "roulette",
+    "unit": 2500,
+    "stages": [
+      {
+        "id": "play",
+        "layout": [
+          {
+            "bet": "red",
+            "amount": {
+              "if": [
+                {
+                  "fact": ["lastColor", "==", "black"]
+                },
+                {
+                  "units": 2
+                },
+                {
+                  "units": 1
+                }
+              ]
+            }
+          }
+        ],
+        "rules": [
+          {
+            "when": {
+              "event": "zero"
+            },
+            "then": [
+              {
+                "skipRound": true
+              }
+            ]
+          },
+          {
+            "when": {
+              "streak": {
+                "fact": "lastColor",
+                "equals": "red",
+                "atLeast": 4
+              }
+            },
+            "then": [
+              {
+                "remove": "red"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
