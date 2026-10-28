@@ -734,7 +734,7 @@ Two levels: `ctx = null` runs structural checks (S) only, for imports and share 
 | `E_UNKNOWN_BET` | R | `/stages/0/layout/0/bet` | `parseBet` returns null (layout, effects, `track`, `amountOn`, `onTable`, `parent`, event `bet` filters, `tableMin`) |
 | `E_BET_UNAVAILABLE` | R | `/stages/0/layout/1/bet` | the bet is not in the catalog for the resolved rules (a call bet on a double-zero wheel) |
 | `E_UNKNOWN_FACT` | R | `/stages/0/rules/0/when/fact/0` | fact not in session facts or the plugin schema |
-| `E_FACT_ARGS` | R | `.../fact/0/args/0` | wrong arity or argument type/range for a parameterised fact |
+| `E_FACT_ARGS` | R | `.../when/fact/0` | wrong arity or argument type/range in a parameterised ref (`count:red` without `n`, `count:red:5000`) |
 | `E_FACT_TYPE` | R | `.../cmp/0` | non-numeric fact used as an expression; op not allowed for the fact type (§5.3) |
 | `E_FACT_VALUE` | R | `.../fact/2` | value not a member of the enum / wrong type |
 | `E_HISTORY_FACT` | R | `.../streak/fact` | history predicate over a state-scoped fact |
@@ -1515,7 +1515,8 @@ To the **game** spike / `contracts/game.ts` (all small; the strategy core depend
 5. A roulette call bet (`voisins`, `neighbours:17:2`, …) is one bet id whose `amount` is the **total** across its chips; reconcile splits it (or rejects if the total does not divide).
 6. `reconcile(state, desired, acts?)`: optional third argument for `act` effects (no-op for roulette and craps).
 7. `bet-won`/`bet-lost`/`bet-push` are derived by the core from resolutions (profit sign); the plugin does not emit them in `last.events` (game.md §9.3 currently lists them as plugin events: keep them in the schema for docs only). `prog-cap`/`prog-done` are core-only.
-8. Optional `compileHistory(predicate, rules)` hook (§8.4) so the generic history conditions reuse roulette's indexed counters (game.md C4).
+8. game.md §9.2's examples write `{ streak: { of: ... } }` (the playbook's spelling); the language uses `fact` in all three history forms (`streak`, `countInLast`, `since`) for consistency. **Change from §5.2.**
+9. Optional `compileHistory(predicate, rules)` hook (§8.4) so the generic history conditions reuse roulette's indexed counters (game.md C4).
 
 To the **harness** spike:
 
