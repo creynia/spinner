@@ -192,10 +192,11 @@ The Quick check is the first 200 sessions of the same seed, so its verdict is th
 - **Convergence bands** hold `NaN` for `n < 30` (no interval is shown); Wilson bands are always set.
   "Big enough" additionally requires `N >= 30`.
 - **Probability of reaching the table maximum** needs the resolved even-money maximum, which only the
-  plugin knows: `runMetrics(data, { tableMax })`. Without it `exposure.pAtTableMax` is `null`.
+  plugin knows: `runMetrics(data, { tableMax })`. Callers must pass `{ tableMax }` to get `exposure.pAtTableMax`; without it the field is `null`.
 - **Compare notes.** `session configs differ` (bankroll, maxRounds, stops, pace), `few discordant pairs`
   (b + c < 10 on any rate), `unpaired (Welch)`, and `fewer than 30 sessions`.
-- **Survival Wilson bands** are not part of the `Survival` output; use `wilson(round(S*N), N)` on demand.
+- **Survival Wilson bands** are not part of the `Survival` output; `survivalWilson(data, rounds)` computes one on demand.
+- Mean, SD and skew sum the original values in index order; quantiles use the sorted copy.
 - **Sums** run in index order; chunk stats in chunk order. Intervals are 95% (`z = 1.959963984540054`).
 ## 16 Representative sessions
 

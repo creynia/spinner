@@ -4,13 +4,15 @@ import { completedPrefix } from './domain';
 import {
   convergence,
   convergenceGrid,
+  survivalWilson,
   fanChart,
   survival,
   suggestedForMean,
   suggestedForProbability,
 } from './fan';
+import { wilson } from './stats';
 import { endedByLabel, representativeSessions, runMetrics } from './metrics';
-import { makeRun, type FixtureSession } from './test-data';
+import { makeRun, type FixtureSession } from './test-data.fixture';
 
 const X = [-2500, -2500, 0, 2500, 7500, -10000, 5000, -5000, 2500, -2500];
 const rowsX = (): FixtureSession[] =>
@@ -300,5 +302,19 @@ describe("gambler's ruin oracle", () => {
     }
     const pHat = bust / N;
     expect(Math.abs(pHat - ruin(40, 80))).toBeLessThan(4 * Math.sqrt((pHat * (1 - pHat)) / N));
+  });
+});
+
+describe('small helpers', () => {
+  it('convergenceGrid(0) is empty', () => {
+    expect(convergenceGrid(0)).toEqual([]);
+  });
+  it('survivalWilson matches wilson on the alive share', () => {
+    const run = makeRun(
+      [{ net: 0, roundsPlayed: 1, endedBy: 1 }, { net: 0 }, { net: 0 }, { net: 0 }],
+      { maxRounds: 5 },
+    );
+    const w = survivalWilson(run, 3);
+    expect(w).toEqual(wilson(3, 4));
   });
 });

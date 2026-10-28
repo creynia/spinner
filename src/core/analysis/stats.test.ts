@@ -123,3 +123,18 @@ describe('histogramFD', () => {
     expect(histogramFD(v).counts.length).toBeLessThanOrEqual(120);
   });
 });
+
+describe('histogramFD coarse widths', () => {
+  it('refines when the snapped width is far above h0 (2 bins otherwise)', () => {
+    const v = [
+      ...Array.from({ length: 26 }, () => -8771),
+      ...Array.from({ length: 50 }, (_, i) => -5000 + Math.round((i * 8500) / 49)),
+      ...Array.from({ length: 25 }, (_, i) => 3600 + Math.round((i * 6355) / 24)),
+    ];
+    expect(v.length).toBe(101);
+    const h = histogramFD(v);
+    expect(h.counts.length).toBeGreaterThanOrEqual(5);
+    expect(h.counts.reduce((a, b) => a + b, 0)).toBe(101);
+    expect(h.zeroBin).not.toBeNull();
+  });
+});

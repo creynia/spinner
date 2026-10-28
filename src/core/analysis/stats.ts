@@ -130,7 +130,13 @@ function nicePrev(x: number, integer: boolean): number | null {
  */
 export function histogramFD(
   values: ArrayLike<number>,
-  opts: { integer?: boolean; maxBins?: number; markers?: Histogram['markers'] } = {},
+  opts: {
+    integer?: boolean;
+    maxBins?: number;
+    markers?: Histogram['markers'];
+    /** Ascending Float64Array copy of `values`, to avoid sorting again. */
+    sorted?: Float64Array;
+  } = {},
 ): Histogram {
   const n = values.length;
   const markers = opts.markers ?? {};
@@ -138,7 +144,7 @@ export function histogramFD(
   const integer = opts.integer ?? true;
   if (n === 0)
     return { lo: 0, width: 1, counts: new Uint32Array(1), zeroBin: 0, markers: { ...markers } };
-  const sorted = sortedCopy(values);
+  const sorted = opts.sorted ?? sortedCopy(values);
   const min = sorted[0]!;
   const max = sorted[n - 1]!;
   const iqr = quantile7(sorted, 0.75) - quantile7(sorted, 0.25);
@@ -176,8 +182,9 @@ export function histogramFD(
     h = roundG(base);
     L = layout(h);
   }
-  // Too coarse only because rounding up to the granularity raised the width: step back down.
-  if (L.bins < 5 && g > 0 && h > base) {
+  // Too coarse because rounding up to the granularity raised the width, or the snapped width
+  // exceeds h0 by more than 1.5x: step back down.
+  if (L.bins < 5 && g > 0 && (h > base || h > 1.5 * h0)) {
     let b = base;
     for (;;) {
       const prev = nicePrev(b, integer);

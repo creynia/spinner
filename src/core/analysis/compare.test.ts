@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENDED_BY } from '../contracts/run';
 import { compareRuns, diffMeans, isPaired, pairDiff, sweepResult } from './compare';
-import { makeRun, type FixtureSession } from './test-data';
+import { makeRun, type FixtureSession } from './test-data.fixture';
 
 const Z = 1.959963984540054;
 const A = [0, 100, 200, 300];
@@ -145,5 +145,18 @@ describe('sweepResult', () => {
     expect(sweepResult('/p', [1, 10, 100], runs).xScale).toBe('log');
     expect(sweepResult('/p', ['a', 'b', 'c'], runs).xScale).toBe('categorical');
     expect(() => sweepResult('/p', [1, 2], runs)).toThrow(RangeError);
+  });
+});
+
+describe('degenerate pairs', () => {
+  it('paired diff with n < 2 has no NaN', () => {
+    for (const [a, b] of [
+      [[], []],
+      [[5], [8]],
+    ] as number[][][]) {
+      const d = diffMeans(a!, b!, 'paired');
+      expect(Number.isNaN(d.value + d.se + d.ci.lo + d.ci.hi)).toBe(false);
+    }
+    expect(diffMeans([5], [8], 'paired').value).toBe(3);
   });
 });

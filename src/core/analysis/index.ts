@@ -27,5 +27,6 @@ export {
   convergenceGrid,
   suggestedForMean,
   suggestedForProbability,
+  survivalWilson,
 } from './fan';
 export { compareRuns, sweepResult, pairDiff, isPaired, diffMeans } from './compare';

@@ -4,6 +4,7 @@ import {
   Z95,
   type Convergence,
   type FanChart,
+  type Interval,
   type Survival,
 } from '../contracts/analysis';
 import { ENDED_BY, ENDED_BY_STRATEGY_BASE, type RunData } from '../contracts/run';
@@ -128,6 +129,7 @@ export function suggestedForProbability(p: number, n: number, halfWidth: number)
 
 /** The convergence grid n_j = ceil(N^(j/199)), deduplicated, N included (display only: Math.pow). */
 export function convergenceGrid(N: number): number[] {
+  if (!(N >= 1)) return [];
   const out: number[] = [];
   for (let j = 0; j < 200; j++) {
     const v = Math.min(N, Math.max(1, Math.ceil(Math.pow(N, j / 199))));
@@ -208,4 +210,12 @@ export function convergence(d: RunData, targets: Partial<Convergence['target']> 
     (Z95 * sd) / Math.sqrt(n) <= hStar &&
     (wb.hi - wb.lo) / 2 <= o.target.pHalfWidth;
   return o;
+}
+
+/** Wilson interval for the share still playing at `rounds` (S(rounds) x N sessions). */
+export function survivalWilson(d: RunData, rounds: number): Interval {
+  const { n } = domainOf(d);
+  const s = survival(d).alive;
+  const r = Math.min(Math.max(0, Math.floor(rounds)), s.length - 1);
+  return wilson(Math.round(s[r]! * n), n);
 }

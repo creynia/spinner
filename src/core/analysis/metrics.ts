@@ -51,19 +51,20 @@ export function distribution(
 ): Distribution {
   const n = values.length;
   const sorted = sortedCopy(values);
-  const { mean, sd } = meanSd(sorted);
+  const { mean, sd } = meanSd(values);
   const q = {} as Record<QuantileKey, number>;
   for (const [k, p] of QUANTILES) q[k] = quantile7(sorted, p);
   const out: Distribution = {
     n,
     mean: meanEstimate(mean, sd, n),
     sd,
-    skew: skewness(sorted, mean, sd),
+    skew: skewness(values, mean, sd),
     min: n ? sorted[0]! : NaN,
     max: n ? sorted[n - 1]! : NaN,
     q,
     histogram: histogramFD(values, {
       integer: opts.integer ?? true,
+      sorted,
       markers: { ...opts.markers, mean },
     }),
   };

@@ -38,6 +38,10 @@ export function diffMeans(
     const n = Math.min(a.length, b.length);
     const d = new Float64Array(n);
     for (let i = 0; i < n; i++) d[i] = b[i]! - a[i]!;
+    if (n < 2) {
+      const v = n === 1 ? d[0]! : 0;
+      return { value: v, se: 0, ci: { lo: v, hi: v, level }, df: 0 };
+    }
     const { mean, sd } = meanSd(d);
     const se = sd / Math.sqrt(n);
     return { value: mean, se, ci: ci(mean, se), df: n - 1 };
