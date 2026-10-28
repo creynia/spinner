@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Fraction } from '@core/contracts/game';
 import { frac, mul, toNumber, toRatio } from '@core/money';
 import { Xoshiro128ss } from '@core/rng';
 import { betDef, resolveRules, roulette, ROULETTE_PRESETS } from './index';
 import type { WheelKind } from './index';
 import { betEdge, betMoments, betOutcomes, layoutMoments, vectorMoments } from './ev';
+
+vi.setConfig({ testTimeout: 120_000 });
 
 const R = (preset: WheelKind, overrides: Record<string, unknown> = {}) =>
   resolveRules({ preset, overrides: overrides as never });

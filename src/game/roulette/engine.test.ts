@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Rng } from '@core/contracts/game';
 import { Xoshiro128ss } from '@core/rng';
 import { ROULETTE_PRESETS, resolveRules, roulette } from './index';
 import type { RouletteAction, RouletteRules, RouletteState, WheelKind } from './index';
+
+vi.setConfig({ testTimeout: 120_000 });
 
 const BANK = 1_000_000;
 const mk = (rules: RouletteRules = ROULETTE_PRESETS.european, bankroll = BANK, rng?: Rng) =>

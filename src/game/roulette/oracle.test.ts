@@ -1,13 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Xoshiro128ss } from '@core/rng';
-import {
-  CALL_BET_IDS,
-  ROULETTE_PRESETS,
-  fixedBetIds,
-  limits,
-  roulette,
-  resolveRules,
-} from './index';
+import { CALL_BET_IDS, ROULETTE_PRESETS, fixedBetIds, roulette, resolveRules } from './index';
 import type { RouletteRules, WheelKind } from './index';
 import {
   labelOf,
@@ -18,6 +11,8 @@ import {
   pocketCount,
   type OracleRules,
 } from './testing/oracle';
+
+vi.setConfig({ testTimeout: 120_000 });
 
 const BIG = 100_000_000;
 

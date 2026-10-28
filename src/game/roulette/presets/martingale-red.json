@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "martingale-red",
+  "name": "Martingale: red",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "Double after each loss, back to one unit after a win; eight steps ($25 to $3,200), then reset.",
+  "progressions": {
+    "m": {
+      "kind": "martingale",
+      "base": {
+        "units": 1
+      },
+      "maxSteps": 8,
+      "onCap": "reset",
+      "track": "red"
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "prog": "m"
+          }
+        }
+      ],
+      "rules": []
+    }
+  ]
+}
