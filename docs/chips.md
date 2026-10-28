@@ -25,10 +25,10 @@ All "before v1" items are closed by #17 and #18:
 - ~~Pass `{ tableMax }` everywhere~~ (#17 audit).
 - ~~strategy.md §17.9 heap/throughput test~~ (#17).
 
-## Open before calling perf "measured"
+## Perf
 
-- **Browser benchmark screen** (`src/app/screens/Settings/Benchmark.tsx`) is still a placeholder. The 20 s budget for 10,000 × 500 is a projection: serial node throughput ÷ 3 ≈ 9.3 s, a lower bound with no worker overhead. Build the benchmark (harness-data-analysis.md §14.2), then measure on a mid-range Android (PLAYBOOK §7.2).
-- There is no npm script for the node perf tests (`PERF=1 vitest -c tests/perf/vitest.config.ts`); add `npm run perf`.
+- ~~Browser benchmark screen and real budget test~~ (#19). The 10,000 × 500 reference run took 7.7 s on 3 Workers in headless Chromium on the build VM, against the 20 s budget. It is not yet measured on a mid-range Android; see `docs/design/open-questions.md`.
+- There is no npm script for the node perf tests (`PERF=1 vitest -c tests/perf/vitest.config.ts`); add `npm run perf:node`.
 
 ## Later (nice to have)
 
