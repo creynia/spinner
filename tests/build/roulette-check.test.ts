@@ -68,6 +68,32 @@ describe('checkAtTable on roulette (game.md §8.1)', () => {
   });
 });
 
+describe('rows that share a bet are folded (as the engine merges them)', () => {
+  it('two reds of $25 place $50 in total', () => {
+    const c = check(1000, ['red', 25], ['red', 25]);
+    expect(c.total).toBe(5000);
+    expect(c.perSpot[0]).toMatchObject({ status: 'ok', placed: 5000 });
+    expect(c.perSpot[1]).toMatchObject({ status: 'adjusted', code: 'merged', placed: 0 });
+  });
+  it('two reds of $4,000 are clamped together to the $5,000 maximum', () => {
+    const c = check(100_000, ['red', 4000], ['red', 4000]);
+    expect(c.total).toBe(500_000);
+    expect(c.perSpot[0]).toMatchObject({ status: 'adjusted', code: 'clamped', placed: 500_000 });
+    expect(c.perSpot[1]).toMatchObject({ code: 'merged', placed: 0 });
+  });
+  it('an alias folds into its canonical bet', () => {
+    expect(plugin.bets.parse('17')).toBe('straight:17');
+    const c = check(1000, ['straight:17', 15], ['17', 10]);
+    expect(c.total).toBe(2500);
+    expect(c.perSpot.map((p) => p.status)).toEqual(['ok', 'adjusted']);
+  });
+  it('duplicates of a rejected bet are rejected too', () => {
+    const c = check(1000, ['red', 5], ['red', 5]);
+    expect(c.perSpot.map((p) => p.status)).toEqual(['rejected', 'rejected']);
+    expect(c.total).toBe(0);
+  });
+});
+
 describe('base-level warning (S2) and defaultDenom', () => {
   it('1 chip on Red at $5 is below the outside minimum and dropped', () => {
     const c = check(1000, ['red', 5]);

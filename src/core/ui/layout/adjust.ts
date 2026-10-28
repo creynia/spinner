@@ -21,7 +21,7 @@ export function adjustSpots(
   const maxChips = lim.maxChips ?? MAX_CHIPS_PER_SPOT;
   const i = spots.findIndex((s) => s.bet === bet);
   const keep = spots.map((s) => ({ ...s }));
-  if (delta === 0) return { spots: keep };
+  if (!Number.isInteger(delta) || delta === 0) return { spots: keep };
   if (delta > 0) {
     if (i < 0) {
       if (spots.length >= maxSpots) return { spots: keep, refused: 'max-spots' };

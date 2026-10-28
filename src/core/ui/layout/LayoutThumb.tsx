@@ -12,13 +12,23 @@ export function LayoutThumb<R>({ ui, rules, spots, chipValue }: LayoutThumbProps
   return (
     <div class="layout-thumb" role="group" aria-label={label} data-spots={spots.length}>
       {Board && chipValue === null ? (
-        <Board rules={rules} spots={spots} tool="add" chipValue={null} onAdjust={noop} readOnly />
+        <div inert>
+          <Board rules={rules} spots={spots} tool="add" chipValue={null} onAdjust={noop} readOnly />
+        </div>
+      ) : chipValue === null ? (
+        <ul class="layout-thumb-counts">
+          {spots.map((s) => (
+            <li>
+              {s.bet} × {s.chips}
+            </li>
+          ))}
+        </ul>
       ) : (
         <ui.TableView
           rules={rules}
           layout={spots.slice(0, MAX_LAYOUT_SPOTS).map((s) => ({
             bet: s.bet,
-            amount: s.chips * (chipValue ?? 100),
+            amount: s.chips * chipValue,
           }))}
           lastOutcome={null}
           highlight={null}

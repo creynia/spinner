@@ -1,12 +1,14 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/preact';
 import type { ComponentType } from 'preact';
+import { useState } from 'preact/hooks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { coin, COIN_BET } from '../../testing';
 import type { CoinRules } from '../../testing';
 import type { GamePlugin } from '../../contracts/game';
 import { MAX_LAYOUT_SPOTS } from '../../contracts/layout';
 import type { BetPickerProps, ChipBoardProps } from '../game-ui';
-import { ChipRack, LayoutEditor, LayoutThumb, SpotList } from '.';
+import { Sheet } from '../kit';
+import { ChipRack, LayoutEditor, LayoutThumb, SpotList, defaultDenom } from '.';
 import type { LayoutEditorProps, TableCheck } from '.';
 
 const plugin = coin as unknown as GamePlugin<unknown, unknown, CoinRules, unknown>;
@@ -459,7 +461,7 @@ describe('LayoutThumb', () => {
         ui={{ TableView: ui.TableView }}
         rules={rules}
         spots={[{ bet: COIN_BET, chips: 1 }]}
-        chipValue={null}
+        chipValue={500}
       />,
     );
     expect(screen.getByTestId('tableview')).toBeTruthy();
@@ -469,5 +471,136 @@ describe('LayoutThumb', () => {
       <LayoutThumb ui={ui} rules={rules} spots={[{ bet: COIN_BET, chips: 2 }]} chipValue={null} />,
     );
     expect(screen.getByRole('group', { name: 'Layout preview: 1 spot, 2 chips' })).toBeTruthy();
+  });
+});
+
+describe('review fixes', () => {
+  it('two adjusts in one task both apply', () => {
+    render(editor());
+    const p = boardProps!;
+    void act(() => {
+      p.onAdjust(COIN_BET, 1);
+      p.onAdjust(COIN_BET, 1);
+      p.onAdjust('x', 1);
+    });
+    expect(boardProps!.spots).toEqual([
+      { bet: COIN_BET, chips: 2 },
+      { bet: 'x', chips: 1 },
+    ]);
+  });
+
+  it('shortcuts stay active when the editor is hosted in a Sheet, not under its own sheet', () => {
+    render(
+      <Sheet open title="Host" onClose={() => {}}>
+        {editor()}
+      </Sheet>,
+    );
+    fireEvent.click(screen.getByText('tap heads'));
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    expect(boardProps!.spots).toEqual([]);
+    fireEvent.click(screen.getByText('tap heads'));
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    expect(boardProps!.spots).toHaveLength(1);
+  });
+
+  it('explains a disabled Save', () => {
+    const { container } = render(editor({ name: ' ' }));
+    expect(container.querySelector('.le-hint')!.textContent).toBe('Name needed');
+    cleanup();
+    const r = render(editor());
+    expect(r.container.querySelector('.le-hint')!.textContent).toBe('Add a chip to save');
+    fireEvent.click(screen.getByText('tap heads'));
+    expect(r.container.querySelector('.le-hint')).toBeNull();
+  });
+
+  it('E does nothing on the List tab', () => {
+    render(editor());
+    fireEvent.click(screen.getByRole('tab', { name: 'List' }));
+    fireEvent.keyDown(document, { key: 'e' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Table' }));
+    expect(boardProps!.tool).toBe('add');
+  });
+
+  it('summarises how many spots would be placed', () => {
+    const { container } = render(
+      editor({
+        initialSpots: [
+          { bet: COIN_BET, chips: 1 },
+          { bet: 'nope', chips: 1 },
+        ],
+      }),
+    );
+    expect(container.querySelector('.le-summary')!.textContent).toContain('1 of 2 spots placed');
+  });
+
+  it('defaultDenom throws on empty denominations', () => {
+    expect(() => defaultDenom(plugin, rules, [], [])).toThrow(RangeError);
+  });
+
+  it('thumb without chips and counts draws text, not money', () => {
+    const { container } = render(
+      <LayoutThumb
+        ui={{ TableView: ui.TableView }}
+        rules={rules}
+        spots={[{ bet: COIN_BET, chips: 2 }]}
+        chipValue={null}
+      />,
+    );
+    expect(container.textContent).toContain(`${COIN_BET} × 2`);
+    expect(TableView).not.toHaveBeenCalled();
+  });
+
+  it('the read-only board is inert', () => {
+    const { container } = render(
+      <LayoutThumb ui={ui} rules={rules} spots={[{ bet: COIN_BET, chips: 1 }]} chipValue={null} />,
+    );
+    expect(container.querySelector('[inert]')).toBeTruthy();
+  });
+});
+
+describe('SpotList focus', () => {
+  it('keeps focus in the list after Move and Remove', () => {
+    const Host = () => {
+      const [spots, setSpots] = useState([
+        { bet: 'a', chips: 1 },
+        { bet: 'b', chips: 1 },
+        { bet: 'c', chips: 1 },
+      ]);
+      return (
+        <SpotList
+          rules={rules}
+          catalog={[]}
+          spots={spots}
+          BetPicker={FakePicker}
+          step={() => 1}
+          chipValue={null}
+          onAdjust={() => {}}
+          onRemove={(b) => setSpots((s) => s.filter((x) => x.bet !== b))}
+          onMove={(b, d) =>
+            setSpots((s) => {
+              const i = s.findIndex((x) => x.bet === b);
+              const n = [...s];
+              [n[i], n[i + d]] = [n[i + d]!, n[i]!];
+              return n;
+            })
+          }
+        />
+      );
+    };
+    render(<Host />);
+    const down = screen.getByRole('button', { name: 'Move a down' });
+    down.focus();
+    fireEvent.click(down);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Move a down' }));
+    expect((document.activeElement as HTMLElement).closest('li')!.dataset.bet).toBe('a');
+    const rm = screen.getByRole('button', { name: 'Remove a' });
+    rm.focus();
+    fireEvent.click(rm);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement!.getAttribute('aria-label')).toBe('Remove c');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove c' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove b' }));
+    expect(document.activeElement!.textContent).toBe('Add a bet');
   });
 });

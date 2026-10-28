@@ -4,7 +4,7 @@
 import type { ComponentChildren } from 'preact';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { BetId, Cents } from '../../contracts/game';
-import { MAX_CHIPS_PER_SPOT, MAX_LAYOUT_SPOTS } from '../../contracts/layout';
+import { MAX_CHIPS_PER_SPOT, MAX_LAYOUT_SPOTS, type LayoutSpot } from '../../contracts/layout';
 import { Button, Field, Select, Sheet, Tabs, TextInput, useId } from '../kit';
 import { ChipRack } from './ChipRack';
 import { SpotList } from './SpotList';
@@ -65,6 +65,14 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
 
   const hist = useChipHistory(props.initialSpots);
   const spots = hist.spots;
+  // The latest committed spots, updated synchronously so two edits in one task both apply.
+  const spotsRef = useRef(spots);
+  spotsRef.current = spots;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const commit = (next: readonly LayoutSpot[], text: string) => {
+    spotsRef.current = next;
+    hist.push(next, text);
+  };
   const [tool, setTool] = useState<ChipTool>('add');
   const [tab, setTab] = useState('table');
   const [value, setValue] = useState<Cents | null>(props.chipValue);
@@ -117,7 +125,7 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
   const adjust = useCallback(
     (bet: BetId, delta: number) => {
       const name_ = label(bet);
-      const r = adjustSpots(spots, bet, delta, { maxSpots });
+      const r = adjustSpots(spotsRef.current, bet, delta, { maxSpots });
       if (r.refused === 'max-spots') {
         say(`A layout holds at most ${plural(maxSpots, 'spot')}`);
         return;
@@ -132,34 +140,35 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
       }
       const n = r.spots.find((s) => s.bet === bet)?.chips ?? 0;
       if (delta > 0) {
-        hist.push(r.spots, `${name_}, ${plural(n, 'chip')}`);
+        commit(r.spots, `${name_}, ${plural(n, 'chip')}`);
         say(`${name_} · ${plural(n, 'chip')}`);
         setLast(bet);
       } else {
-        hist.push(r.spots, n === 0 ? `Removed ${name_}` : `${name_}, ${plural(n, 'chip')}`);
+        commit(r.spots, n === 0 ? `Removed ${name_}` : `${name_}, ${plural(n, 'chip')}`);
         say(n === 0 ? `${name_} removed` : `${name_} · ${plural(n, 'chip')}`);
         setLast(n === 0 ? null : bet);
       }
     },
-    [spots, maxSpots, hist, label, say],
+    [maxSpots, hist, label, say],
   );
 
   const remove = (bet: BetId) => {
-    hist.push(
-      spots.filter((s) => s.bet !== bet),
+    commit(
+      spotsRef.current.filter((s) => s.bet !== bet),
       `Removed ${label(bet)}`,
     );
     say(`${label(bet)} removed`);
     setLast(null);
   };
   const move = (bet: BetId, dir: -1 | 1) => {
-    const i = spots.findIndex((s) => s.bet === bet);
+    const cur = spotsRef.current;
+    const i = cur.findIndex((s) => s.bet === bet);
     const j = i + dir;
-    if (i < 0 || j < 0 || j >= spots.length) return;
-    const next = [...spots];
+    if (i < 0 || j < 0 || j >= cur.length) return;
+    const next = [...cur];
     [next[i], next[j]] = [next[j]!, next[i]!];
-    hist.push(next, `Moved ${label(bet)} ${dir < 0 ? 'up' : 'down'}`);
-    say(`${label(bet)} moved ${dir < 0 ? 'up' : 'down'}, now ${j + 1} of ${spots.length}`);
+    commit(next, `Moved ${label(bet)} ${dir < 0 ? 'up' : 'down'}`);
+    say(`${label(bet)} moved ${dir < 0 ? 'up' : 'down'}, now ${j + 1} of ${cur.length}`);
   };
   const undo = () => {
     if (!hist.canUndo) return;
@@ -208,7 +217,12 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
   // Shortcuts act on the document while the editor is mounted; typing in a field is left alone.
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   keys.current = (e) => {
-    if (editable(e.target) || document.querySelector('.sheet')) return;
+    if (editable(e.target)) return;
+    // A sheet above the editor (its own More sheet, a dialog) owns the keyboard; the sheet the
+    // editor itself is hosted in does not.
+    const sheets = document.querySelectorAll('.sheet');
+    const top = sheets[sheets.length - 1];
+    if (top && !(rootRef.current && top.contains(rootRef.current))) return;
     const mod = e.ctrlKey || e.metaKey;
     const k = e.key.toLowerCase();
     if (mod && k === 'z') {
@@ -219,6 +233,7 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
       e.preventDefault();
       redo();
     } else if (!mod && !e.altKey && k === 'e') {
+      if (!(wide || tab === 'table')) return;
       e.preventDefault();
       chooseTool(tool === 'add' ? 'remove' : 'add');
     }
@@ -324,14 +339,14 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
     </div>
   );
 
+  const whyNot = !nameOk ? 'Name needed' : spots.length === 0 ? 'Add a chip to save' : null;
   const saveBtn = (
-    <Button
-      variant="primary"
-      disabled={spots.length === 0 || !nameOk || saving}
-      onClick={() => void save()}
-    >
-      Save
-    </Button>
+    <div class="le-save">
+      <Button variant="primary" disabled={whyNot !== null || saving} onClick={() => void save()}>
+        Save
+      </Button>
+      {whyNot ? <span class="le-hint">{whyNot}</span> : null}
+    </div>
   );
 
   const board = (
@@ -366,16 +381,18 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
 
   const chips = totalChips(spots);
   const problems = check?.perSpot.filter((p) => p.status !== 'ok') ?? [];
+  const notPlaced = problems.filter((p) => p.status === 'rejected').length;
   const summary =
     spots.length === 0
       ? 'Empty: tap the table to add chips'
       : `${plural(chips, 'chip')} · ${plural(spots.length, 'spot')}` +
+        (notPlaced > 0 ? ` · ${spots.length - notPlaced} of ${spots.length} spots placed` : '') +
         (check && value !== null
           ? ` · at ${money(value)}: ${money(check.total)} ${problems.length ? '!' : '✓'}`
           : '');
 
   return (
-    <div class={`layout-editor${wide ? ' is-wide' : ''}`}>
+    <div class={`layout-editor${wide ? ' is-wide' : ''}`} ref={rootRef}>
       <header class="le-head">
         <button type="button" class="le-btn" aria-label="Back" title="Back" onClick={close}>
           <Icon>←</Icon>
@@ -458,9 +475,7 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
             />
           </Field>
           <div class="field">
-            <span class="le-label" id={`${id}-preview`}>
-              Preview chip value
-            </span>
+            <span class="le-label">Preview chip value</span>
             <ChipRack
               denominations={denominations}
               value={value}

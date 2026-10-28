@@ -33,7 +33,21 @@ export function checkAtTable<S, A, R, V>(
   bankroll: Cents,
 ): TableCheck {
   const state = plugin.createState({ rules, rng: sessionRng(1, 0, 'engine'), bankroll });
-  const entries: LayoutEntry[] = rows.map((r) => ({ bet: r.bet, amount: r.cents }));
+  // Rows that name the same bet (aliases included, via the plugin's own `parse`) are folded into
+  // the first one before `reconcile`, as the engine would merge them: the first row carries the
+  // result, later ones are reported `adjusted` with code `merged` and nothing placed.
+  const groups = new Map<string, number[]>();
+  rows.forEach((r, i) => {
+    const canon = plugin.bets.parse(r.bet) ?? r.bet;
+    const g = groups.get(canon);
+    if (g) g.push(i);
+    else groups.set(canon, [i]);
+  });
+  const firsts = [...groups.values()].map((g) => g[0]!);
+  const entries: LayoutEntry[] = firsts.map((i) => ({
+    bet: rows[i]!.bet,
+    amount: [...groups.values()].find((g) => g[0] === i)!.reduce((n, k) => n + rows[k]!.cents, 0),
+  }));
   const rec = plugin.reconcile(state, entries);
   const perSpot: TableCheckSpot[] = rows.map((r) => ({
     bet: r.bet,
@@ -41,30 +55,34 @@ export function checkAtTable<S, A, R, V>(
     placed: r.cents,
     status: 'ok',
   }));
-  const index = new Map<LayoutEntry, number>(entries.map((e, i) => [e, i]));
+  const index = new Map<LayoutEntry, number>(entries.map((e, k) => [e, firsts[k]!]));
   const at = (e: LayoutEntry): number => {
     const i = index.get(e);
     if (i !== undefined) return i;
-    // A plugin that returns copies: match the first untouched row of that bet.
+    // A plugin that returns copies of the entries: match by bet.
     return rows.findIndex((r) => r.bet === e.bet);
+  };
+  for (const g of groups.values())
+    perSpot[g[0]!]!.placed = g.reduce((n, k) => n + rows[k]!.cents, 0);
+  const mark = (i: number, status: 'adjusted' | 'rejected', placed: number, code: string) => {
+    const p = perSpot[i];
+    if (!p) return;
+    p.status = status;
+    p.placed = placed;
+    p.code = code;
+    p.reason = explain(code);
   };
   for (const a of rec.adjusted) {
     const i = at(a.entry);
-    const p = perSpot[i];
-    if (!p) continue;
-    p.status = p.status === 'rejected' ? 'rejected' : 'adjusted';
-    p.placed = a.to;
-    p.code = a.reason;
-    p.reason = explain(a.reason);
+    if (perSpot[i]?.status !== 'rejected') mark(i, 'adjusted', a.to, a.reason);
   }
-  for (const x of [...rec.rejected, ...rec.deferred]) {
-    const i = at(x.entry);
-    const p = perSpot[i];
-    if (!p) continue;
-    p.status = 'rejected';
-    p.placed = 0;
-    p.code = x.reason;
-    p.reason = explain(x.reason);
+  for (const x of [...rec.rejected, ...rec.deferred]) mark(at(x.entry), 'rejected', 0, x.reason);
+  for (const g of groups.values()) {
+    const head = perSpot[g[0]!]!;
+    for (const k of g.slice(1)) {
+      if (head.status === 'rejected') mark(k, 'rejected', 0, head.code ?? 'rejected');
+      else mark(k, 'adjusted', 0, 'merged');
+    }
   }
   return {
     total: perSpot.reduce((n, p) => n + p.placed, 0),
