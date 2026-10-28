@@ -416,9 +416,8 @@ library ChipLayout ──copy──► stage.x-chips { spots, chip, from }
   no change.
 - `definitionId` changes only for definitions that carry `x-chips`, because the block is hashed.
   That is intended: provenance is part of the experiment, just as `name` is.
-- `simKey` (which ignores names) still includes `x-chips.from.name`. Renaming a library layout does
-  not touch existing definitions, so this only matters for two definitions that differ by layout
-  name alone. That is acceptable, and it is documented.
+- `simKey` ignores `x-chips.from` entirely (§8.2, D13), so two definitions that differ only in
+  layout provenance share a `simKey`. `definitionId` still hashes `from`.
 
 ---
 
@@ -477,8 +476,8 @@ plus split 1|4 ×1, a $25 inside total.
   - A visible label "Bet" (≈ 36 px) names the radiogroup through `aria-labelledby`; its
     accessible name is "Bet type".
   - Six 44 px options show the number of pockets covered: "Auto", "1", "2", "3", "4", "6". Their
-    accessible names are "Auto", "Straight", "Split", "Street", "Corner, trio or basket" and
-    "Six line".
+    accessible names start with the visible text (WCAG 2.5.3 label-in-name): "Auto", "1, straight",
+    "2, split", "3, street", "4, corner (trio and basket nearest the zero)" and "6, six line".
   - Width: 36 + 6 × 44 + 6 × 4 gaps = **324 px ≤ 328**.
 
 ### 4.2 Landscape (844 × 390 and wider; `useOrientation` → `landscape` above 600 px)
@@ -1181,6 +1180,7 @@ pool of 10.
 - **Depends on:** L0.
 - **Batons:** none.
 - **Acceptance:**
+  - Grep every caller and test of `importDefinitions` and update them for the `{ definitions, layouts }` return.
   - B1 is fixed as §8 specifies: a frozen `V1_STORE_NAMES`, a guarded upgrade 2, and a **fresh DB
     at v2 that opens as `idb` with all 11 stores and indexes**.
   - The v1 → v2 upgrade loses no data.
@@ -1289,6 +1289,7 @@ pool of 10.
 - **Depends on:** L1 (`isChipPath`, `recompileStageChips`).
 - **Batons:** none. The contract comment was updated in L0.
 - **Acceptance:**
+  - `leafPaths` and `buildVariants` both pass `def` to `sweepPathAllowed`. Sweep tests use a layout that is legal at the lowest swept chip value (e.g. Red 5 chips), because `buildVariants` rejects the whole sweep if any variant errors.
   - All of §8.1: the chip-value sweep recompiles rows, and the other `x-` paths and the compiled
     chip-row amounts are denied.
   - §8.2: `simKey` ignores `x-chips.from`, and every existing `simKey` and `definitionId` vector is
@@ -1329,6 +1330,7 @@ pool of 10.
 - **Depends on:** L5, L6 and L8 (and L3b at runtime).
 - **Batons:** none expected. If the e2e needs a new helper in `tests/e2e/helpers.ts`, ask for it.
 - **Acceptance:**
+  - The sweep e2e uses a layout that is legal at the lowest swept chip value (e.g. Red 5 chips).
   - The full owner flow at four viewports: tap a layout, save it, use it in two definitions at $5
     and $25, run, edit the layout and see the stale banner, and sweep the chip value at $5 / $25 /
     $100.
