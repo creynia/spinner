@@ -166,7 +166,7 @@ export type Effect =
   | { press: BetId; by: Expr; cap?: Expr }
   | { set: VarName; to: Expr }
   | { inc: VarName; by?: Expr }                     // by default 1; may be negative
-  | { goto: Slug }
+  | { goto: Slug; reenter?: boolean }               // goto to the current stage is a no-op unless reenter
   | { prog: Slug; do: 'win' | 'loss' | 'push' | 'reset' | 'advance' | 'back' }
   | { stop: Slug }
   | { skipRound: true }
@@ -324,7 +324,7 @@ The current stage's **flattened rule list** (§3.6) is evaluated in order. For e
 
 Effects take effect immediately; later effects and later rules see their results (vars, progression state, stage, event set). Effect semantics are in §6. Three effects end phase 3 early:
 
-- **`goto: S`** runs the old stage's `onExit`, switches `stage = S`, sets `roundsInStage = 0`, increments `stageEntries[S]`, clears all `once: 'stage'` flags, runs `S.onEnter`, and **ends rule evaluation for this window**. The new stage's rules first run in window `w + 1`. Phase 4 uses the **new** stage's layout, so round `w` is played under `S` and counts as `S`'s first round (`roundsInStage` is 1 at window `w + 1`). `goto` to the current stage is a re-entry (`onExit`, `onEnter`, counters reset). `onEnter`/`onExit` may not contain `goto` (`E_GOTO_IN_HOOK`), so a window performs at most one stage change.
+- **`goto: S`** runs the old stage's `onExit`, switches `stage = S`, sets `roundsInStage = 0`, increments `stageEntries[S]`, clears all `once: 'stage'` flags, runs `S.onEnter`, and **ends rule evaluation for this window**. The new stage's rules first run in window `w + 1`. Phase 4 uses the **new** stage's layout, so round `w` is played under `S` and counts as `S`'s first round (`roundsInStage` is 1 at window `w + 1`). `goto` to the **current** stage is a no-op (traced `no-op`, counts toward the cap, does **not** end evaluation) unless it says `reenter: true`, in which case it is a full re-entry (`onExit`, `onEnter`, counters reset, evaluation ends). This keeps an inherited "go to the child" rule harmless inside the child (golden C1). `onEnter`/`onExit` may not contain `goto` (`E_GOTO_IN_HOOK`), so a window performs at most one stage change.
 - **`stop: reason`** ends the window immediately: no further effects, no `onExit`, no layout, no round. The harness ends the session with `endedBy = 'strategy:<reason>'`.
 - An **effect-cap overflow** (below) ends the window with a runtime error.
 
@@ -489,7 +489,7 @@ Every effect counts 1 toward the window cap (§3.4). "Patch" effects change only
 | 6.4 | `{ press: b, by, cap? }` | Patch: if `amountOn(b) > 0`, set `b` to `min(amountOn(b) + by, cap)` (cap default: no cap); else no-op traced `not-on-table`. Only on bets with `persistent: true` (`E_PRESS_NON_PERSISTENT` otherwise, PLAYBOOK §5.8). To make a pressed amount stick across windows the layout entry uses `{ keepOr: ... }` (golden C5). |
 | 6.5 | `{ set: x, to }` | Var `x` := value (null ⇒ unchanged, traced). |
 | 6.6 | `{ inc: x, by? }` | Var `x` += `by` (default 1). |
-| 6.7 | `{ goto: S }` | §3.4. Ends rule evaluation. |
+| 6.7 | `{ goto: S, reenter? }` | §3.4. Ends rule evaluation, except a `goto` to the current stage without `reenter: true`, which is a no-op. |
 | 6.8 | `{ prog: p, do }` | `win`/`loss`/`push`: feed that result now (§7), as if a tracked bet resolved; caps and events apply immediately (a `prog-cap` raised here is visible to later rules this window; `onCap: 'stop'` ends the window with `stop = 'cap-<p>'`). `reset`: initial state and re-latch. `advance`/`back`: move one level up/down (cap rules apply to `advance`; `back` floors at level 0). `advance`/`back` on `labouchere` or `oscars-grind` are `E_PROG_OP_UNSUPPORTED`. A manual feed does not change arming. |
 | 6.9 | `{ stop: reason }` | §3.4. Reason is a Slug; reasons starting `cap-` or `done-` are reserved (`E_RESERVED_REASON`). |
 | 6.10 | `{ skipRound: true }` | §3.5: the desired layout is the current table, unchanged. Rules continue to run (vars, gotos); later patch effects are executed but ignored for the layout and traced `ignored-skip`. |
@@ -716,7 +716,7 @@ Two levels: `ctx = null` runs structural checks (S) only, for imports and share 
 | `E_EXTENDS_CYCLE` | S | `/stages/2/extends` | cycle in `extends` |
 | `E_EXTENDS_DEPTH` | S | `/stages/2/extends` | chain deeper than 4 |
 | `E_GOTO_IN_HOOK` | S | `/stages/1/onEnter/0` | `goto` in `onEnter`/`onExit` |
-| `E_GOTO_SELF_ALWAYS` | S | `/stages/1/rules/0` | `goto` to its own stage under `{ always: true }` (or no other condition), without `once` or `cooldown` |
+| `E_GOTO_SELF_ALWAYS` | S | `/stages/1/rules/0` | `goto` with `reenter: true` to its own stage under `{ always: true }`, without `once` or `cooldown` (restarts the stage every window) |
 | `E_UNREACHABLE_EFFECT` | S | `/stages/0/rules/0/then/2` | effects after `goto`/`stop` in the same list |
 | `E_RESERVED_REASON` | S | `/stages/0/rules/1/then/0/stop` | stop reason starting `cap-` / `done-` |
 | `E_EXPR_CYCLE` | S | `/progressions/a/base` | a base/step/maxAmount reads `{ prog }` of itself, or progressions read each other in a cycle |
@@ -1228,7 +1228,7 @@ Unit is $25 (2500) unless the strategy says otherwise, to match the $25 minimum 
 
 ```json
 { "schema": 1, "id": "red-with-zero-boost", "name": "Red with a zero boost", "game": "roulette", "unit": 2500,
-  "vars": { "boosts": 0 },
+  "vars": { "boosts": 0, "zeroOff": 0, "lastBoostEnd": -1 },
   "stages": [
     { "id": "base",
       "layout": [ { "bet": "red", "amount": { "units": 1 } } ],
@@ -1236,16 +1236,16 @@ Unit is $25 (2500) unless the strategy says otherwise, to match the $25 minimum 
         { "id": "boost-on", "when": { "countInLast": { "event": "zero", "n": 20, "atLeast": 2, "partial": true } },
           "cooldown": 20, "then": [ { "goto": "boost" } ] } ] },
     { "id": "boost", "extends": "base",
-      "onEnter": [ { "inc": "boosts" } ],
-      "onExit": [ { "set": "boosts", "to": { "min": [ { "var": "boosts" }, 99 ] } } ],
+      "onEnter": [ { "inc": "boosts" }, { "set": "zeroOff", "to": 0 } ],
+      "onExit": [ { "set": "lastBoostEnd", "to": "round" } ],
       "layout": [ { "bet": "red", "amount": { "units": 2 } },
-                  { "bet": "straight:0", "amount": 500 } ],
+                  { "bet": "straight:0", "amount": 500, "when": { "cmp": [ { "var": "zeroOff" }, "==", 0 ] } } ],
       "rules": [
-        { "id": "zero-off", "once": "stage", "when": { "cmp": ["net", ">", 0] }, "then": [ { "remove": "straight:0" } ] },
+        { "id": "zero-off", "once": "stage", "when": { "cmp": ["net", ">", 0] }, "then": [ { "set": "zeroOff", "to": 1 } ] },
         { "id": "boost-off", "when": { "cmp": ["roundsInStage", ">=", 10] }, "then": [ { "goto": "base" } ] } ] } ] }
 ```
 
-Here the child's `red` entry overrides the parent's; the inherited `boost-on` rule runs after the child's rules and shares its cooldown across both stages. `zero-off` is a patch, so it removes the zero bet only in the window it fires (`once: 'stage'` keeps it from firing again in that boost), illustrating that patches do not persist; the trace shows the zero bet back the next window. (Golden test asserts exactly that.)
+Here the child's `red` entry overrides the parent's; the inherited `boost-on` rule runs after the child's rules and shares its cooldown across both stages. `zero-off` sets a var rather than using a `remove` patch because patches last one window only (§6); the layout `when` is evaluated after the rules (§3.5.1), so the zero bet is already gone in the window the rule fires. `once: 'stage'` re-arms it on the next boost.
 
 **R20 cooldown-pause**: flat black; after three losses in a row sit out five spins, at most once every 30 spins.
 
@@ -1295,13 +1295,15 @@ Note: `lossStreak` is unchanged by sat-out rounds (`none`), so the cooldown is w
       { "when": { "cmp": ["lastNet", "<", 0] }, "then": [ { "prog": "d", "do": "loss" } ] } ] } ] }
 ```
 
-**R24 skip-after-zero-if**: red, two units after a black and one otherwise; sit out the spin after a zero.
+**R24 skip-after-zero-if**: red, two units after a black and one otherwise; sit out the spin after a zero; no red bet (a one-window `remove` patch) after four reds in a row.
 
 ```json
 { "schema": 1, "id": "skip-after-zero-if", "name": "Red, double after black, skip after zero", "game": "roulette", "unit": 2500,
   "stages": [ { "id": "play",
     "layout": [ { "bet": "red", "amount": { "if": [ { "fact": ["lastColor", "==", "black"] }, { "units": 2 }, { "units": 1 } ] } } ],
-    "rules": [ { "when": { "event": "zero" }, "then": [ { "skipRound": true } ] } ] } ] }
+    "rules": [
+      { "when": { "event": "zero" }, "then": [ { "skipRound": true } ] },
+      { "when": { "streak": { "fact": "lastColor", "equals": "red", "atLeast": 4 } }, "then": [ { "remove": "red" } ] } ] } ] }
 ```
 
 ### 15.2 Craps (fixtures for the craps app; crappy ids)
@@ -1333,7 +1335,7 @@ Note: `lossStreak` is unchanged by sat-out rounds (`none`), so the cooldown is w
 }
 ```
 
-Semantics worth pinning: in `inside`, the inherited `pointsInRow >= 2 → goto inside` rule fires again every window while the count stays at 2+, which is a **re-entry** each window (resets `roundsInStage`). The golden pins this behaviour and the validator emits no error (the condition is not `always`). The pass-line bet left out of the point-phase layout is kept by §3.5.3, so reconcile reports zero rejections.
+Semantics worth pinning: in `inside`, the inherited `pointsInRow >= 2 → goto inside` rule keeps firing while the count stays at 2+. Because a `goto` to the current stage is a no-op that does not end evaluation (§3.4), the inherited stop-win rule after it still runs; with re-entry semantics it would never be reached while `pointsInRow >= 2`. The golden pins this. The pass-line bet left out of the point-phase layout is kept by §3.5.3, so reconcile reports zero rejections.
 
 **C2 pass-2x-odds**
 
@@ -1431,10 +1433,11 @@ Semantics worth pinning: in `inside`, the inherited `pointsInRow >= 2 → goto i
 | `stop` from rule / from cap | R6, R12, R14, R16, R21, C1 / R3, R22 |
 | `skipRound` | R20, R24 |
 | `set`, `inc` (negative) | R6, R16, R18, R20, C1, C7 |
-| `remove` patch, `press`, `keepOr`, implicit contract keep | R19, C5, C5, C1–C3, C6 |
+| `remove` patch, `press`, `keepOr`, implicit contract keep | R24, C5, C5, C1–C3, C6 |
 | `streak`, `countInLast` (fact, event, `partial`), `since` | R13, R17, R19, R14 |
 | `everyN`, `pctOfBankroll`, `tableMin`, `floorTo`, `max` | R18 |
-| `if`, `sub`, `min`, `times`, `amountOn`, `onTable`, `stageEntries` | R24, R16, R19, C1, C2, C3, R14 |
+| `if`, `sub`, `max`, `times`, `amountOn`, `onTable`, `stageEntries`, `not` | R24, R16, R18, C1, C2, C3, R14, C3 |
+| goto to the current stage (no-op) | C1 |
 | `event` plugin / core `bet-won` / `prog-cap` | R24, C1 / R13, C5 / R13 |
 | call bet, six-line, straight, corner, dozens | R21, R10, R10/R14, R23, R11/R15 |
 | fractional units | C4 |
