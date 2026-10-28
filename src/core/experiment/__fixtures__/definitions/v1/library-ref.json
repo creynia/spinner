@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "name": "  Library flat  ",
+  "notes": "",
+  "tags": ["b", " a ", "b", ""],
+  "game": {
+    "id": "roulette",
+    "rules": { "preset": "european", "overrides": { "laPartage": false } }
+  },
+  "strategy": { "ref": "flat-red" },
+  "session": { "bankroll": 50000, "maxRounds": 100, "stopWin": 20000, "roundsPerHour": 40 },
+  "run": {
+    "sessions": 200,
+    "seed": 7,
+    "checkpointSchedule": [50, 10, 10, 0, 999],
+    "sampleSessions": 0
+  }
+}

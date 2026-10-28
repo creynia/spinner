@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "id": "red-mart-then-flat",
+  "name": "Martingale on red, then flat",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "PLAYBOOK §3.6 scaled ×5 for the $25 table: Martingale up to 6 steps; once up $500 flat-bet for 50 spins then stop; stop if down $1,500.",
+  "progressions": {
+    "m": {
+      "kind": "martingale",
+      "base": {
+        "units": 1
+      },
+      "maxSteps": 6,
+      "onCap": "reset",
+      "track": "red"
+    }
+  },
+  "stages": [
+    {
+      "id": "mart",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "prog": "m"
+          }
+        }
+      ],
+      "rules": [
+        {
+          "when": {
+            "cmp": ["net", ">=", 50000]
+          },
+          "then": [
+            {
+              "goto": "flat"
+            }
+          ]
+        },
+        {
+          "when": {
+            "cmp": ["net", "<=", -150000]
+          },
+          "then": [
+            {
+              "stop": "down-1500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flat",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "units": 1
+          }
+        }
+      ],
+      "rules": [
+        {
+          "when": {
+            "cmp": ["roundsInStage", ">=", 50]
+          },
+          "then": [
+            {
+              "stop": "plan-complete"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

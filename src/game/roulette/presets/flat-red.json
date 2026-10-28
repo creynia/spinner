@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "flat-red",
+  "name": "Flat: red",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "One unit on red every spin. The baseline every other system is compared with.",
+  "stages": [
+    {
+      "id": "flat",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "units": 1
+          }
+        }
+      ],
+      "rules": []
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "one-three-two-six-red",
+  "name": "1-3-2-6: red",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "1, 3, 2, 6 units on consecutive wins; back to 1 after a loss or after the fourth win.",
+  "progressions": {
+    "s": {
+      "kind": "1-3-2-6",
+      "base": {
+        "units": 1
+      },
+      "track": "red"
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "prog": "s"
+          }
+        }
+      ],
+      "rules": []
+    }
+  ]
+}

@@ -1,8 +1,17 @@
 // The bet catalog (game.md §3). The id lists and the catalog are real (UI pickers need them on day
 // one); `parseBet` and `betDef` are stubs (game WP).
 import type { BetCatalogEntry, BetId } from '@core/contracts/game';
-import { pocketLabels } from './pockets';
-import type { BetDef, Family, RouletteRules, WheelKind } from './types';
+import {
+  SECTORS,
+  WHEEL_ORDER,
+  columnOf,
+  dozenOf,
+  isRed,
+  pocketIndexOf,
+  pocketLabels,
+  pocketRank,
+} from './pockets';
+import type { BetDef, Family, PocketIndex, RouletteRules, WheelKind } from './types';
 
 export const BET_FAMILIES = [
   'straight',
@@ -182,12 +191,243 @@ function insideOrOutside(family: Family): 'inside' | 'outside' {
     : 'inside';
 }
 
-/** Canonical id (aliases folded), wheel-independent; null when unparseable (game.md §3.2). */
-export function parseBet(_id: string): BetId | null {
-  throw new Error('TODO(game)');
+const WHEELS: readonly WheelKind[] = ['european', 'american', 'triple-zero'];
+
+/** Every canonical non-parameterised id on any wheel (the legal set `parseBet` checks against). */
+const KNOWN: ReadonlySet<string> = new Set([
+  ...WHEELS.flatMap((w) => fixedBetIds(w)),
+  ...CALL_BET_IDS,
+]);
+const FIXED: Record<WheelKind, ReadonlySet<string>> = {
+  european: new Set(fixedBetIds('european')),
+  american: new Set(fixedBetIds('american')),
+  'triple-zero': new Set(fixedBetIds('triple-zero')),
+};
+
+const ALIASES: Readonly<Record<string, string>> = {
+  'first-four': 'basket',
+  'top-line': 'basket',
+  '1-18': 'low',
+  manque: 'low',
+  '19-36': 'high',
+  passe: 'high',
+  rouge: 'red',
+  noir: 'black',
+  pair: 'even',
+  impair: 'odd',
+  'voisins-du-zero': 'voisins',
+  'tiers-du-cylindre': 'tiers',
+  'zero-spiel': 'jeu-zero',
+  'jeu-0': 'jeu-zero',
+};
+
+/** '0', '00', '000' or 1..36 without a leading zero. */
+function isPocketLabel(s: string): boolean {
+  if (s === '0' || s === '00' || s === '000') return true;
+  return /^[1-9]\d?$/.test(s) && Number(s) <= 36;
 }
 
-/** A bet resolved for one wheel; null when the wheel does not have it. */
-export function betDef(_id: BetId, _wheel: WheelKind): BetDef | null {
-  throw new Error('TODO(game)');
+const sortPockets = (tokens: readonly string[]): string[] =>
+  [...tokens].sort((a, b) => pocketRank(a) - pocketRank(b));
+
+const range = (from: number, count: number): string[] =>
+  Array.from({ length: count }, (_, i) => String(from + i));
+
+/**
+ * Canonical id (aliases folded), wheel-independent; null when unparseable (game.md §3.2). Case
+ * insensitive, trims, ignores accents. The result is a legal bet of its family on some wheel
+ * (`split:17-21` is null); whether the current wheel has it is `betDef` / `available`.
+ */
+export function parseBet(input: string): BetId | null {
+  if (typeof input !== 'string') return null;
+  let s = input.trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  if (s.length === 0 || s.length > 80) return null;
+  if (Object.hasOwn(ALIASES, s)) s = ALIASES[s]!;
+  if (isPocketLabel(s)) return `straight:${s}`;
+  if (KNOWN.has(s)) return s;
+  const parts = s.split(':');
+  const head = parts[0]!;
+  if (head === 'prison') {
+    const inner = parts.length > 1 ? parseBet(parts.slice(1).join(':')) : null;
+    return inner !== null && (EVEN_MONEY_IDS as readonly string[]).includes(inner)
+      ? `prison:${inner}`
+      : null;
+  }
+  if (head === 'neighbours') {
+    if (parts.length < 2 || parts.length > 3) return null;
+    const p = parts[1]!;
+    if (!isPocketLabel(p) || p === '00' || p === '000') return null;
+    const k = parts.length === 3 ? parts[2]! : '2';
+    return /^[1-9]$/.test(k) ? `neighbours:${p}:${k}` : null;
+  }
+  if (parts.length !== 2) return null;
+  if (head === 'straight') return null; // handled above through KNOWN; other pockets are illegal
+  if (!['split', 'street', 'trio', 'corner', 'sixline'].includes(head)) return null;
+  let tokens = parts[1]!.split('-');
+  if (!tokens.every(isPocketLabel)) return null;
+  const first = Number(tokens[0]);
+  if (head === 'street' && tokens.length === 1 && first >= 1) tokens = range(first, 3);
+  else if (head === 'sixline' && tokens.length === 1 && first >= 1) tokens = range(first, 6);
+  else if (
+    head === 'sixline' &&
+    tokens.length === 2 &&
+    first >= 1 &&
+    Number(tokens[1]) === first + 5
+  )
+    tokens = range(first, 6);
+  const id = `${head}:${sortPockets(tokens).join('-')}`;
+  return KNOWN.has(id) ? id : null;
+}
+
+// ------------------------------------------------------------------ bet definitions per wheel
+
+const idx = (tokens: readonly string[]): PocketIndex[] => sortPockets(tokens).map(pocketIndexOf);
+
+const CALL_COMPONENTS: Record<
+  (typeof CALL_BET_IDS)[number],
+  readonly (readonly [spot: string, weight: number])[]
+> = {
+  voisins: [
+    ['trio:0-2-3', 2],
+    ['split:4-7', 1],
+    ['split:12-15', 1],
+    ['split:18-21', 1],
+    ['split:19-22', 1],
+    ['split:32-35', 1],
+    ['corner:25-26-28-29', 2],
+  ],
+  tiers: [
+    ['split:5-8', 1],
+    ['split:10-11', 1],
+    ['split:13-16', 1],
+    ['split:23-24', 1],
+    ['split:27-30', 1],
+    ['split:33-36', 1],
+  ],
+  orphelins: [
+    ['straight:1', 1],
+    ['split:6-9', 1],
+    ['split:14-17', 1],
+    ['split:17-20', 1],
+    ['split:31-34', 1],
+  ],
+  'jeu-zero': [
+    ['split:0-3', 1],
+    ['split:12-15', 1],
+    ['straight:26', 1],
+    ['split:32-35', 1],
+  ],
+};
+
+function evenMoneyPockets(id: string): PocketIndex[] {
+  const all = Array.from({ length: 36 }, (_, i) => i + 1);
+  switch (id) {
+    case 'red':
+      return all.filter(isRed);
+    case 'black':
+      return all.filter((n) => !isRed(n));
+    case 'odd':
+      return all.filter((n) => n % 2 === 1);
+    case 'even':
+      return all.filter((n) => n % 2 === 0);
+    case 'low':
+      return all.filter((n) => n <= 18);
+    default:
+      return all.filter((n) => n >= 19);
+  }
+}
+
+function basketPockets(wheel: WheelKind): PocketIndex[] {
+  return wheel === 'european'
+    ? [0, 1, 2, 3]
+    : wheel === 'american'
+      ? [0, 37, 1, 2, 3]
+      : [0, 37, 38, 1, 2, 3];
+}
+
+const limitClassOf = (family: Family): BetDef['limitClass'] =>
+  family === 'call' || family === 'neighbours' ? 'call' : insideOrOutside(family);
+
+function buildDef(id: BetId, wheel: WheelKind): BetDef | null {
+  const family = familyOf(id);
+  if (family === null) return null;
+  const base = { id, family, limitClass: limitClassOf(family), evenMoney: family === 'even-money' };
+  const rest = id.split(':').slice(1).join(':');
+  switch (family) {
+    case 'call': {
+      if (wheel !== 'european') return null;
+      const comps = CALL_COMPONENTS[id as (typeof CALL_BET_IDS)[number]];
+      const components = comps.map(([spot, weight]) => ({ spot, weight }));
+      const pockets = [...SECTORS[id as keyof typeof SECTORS]].sort((a, b) => a - b);
+      return {
+        ...base,
+        pockets,
+        pays: 0,
+        components,
+        pieces: components.reduce((n, c) => n + c.weight, 0),
+      };
+    }
+    case 'neighbours': {
+      if (wheel !== 'european') return null;
+      const [p, k] = rest.split(':');
+      const order = WHEEL_ORDER.european;
+      const at = order.indexOf(p as never);
+      if (at < 0 || !/^[1-9]$/.test(k ?? '')) return null;
+      const kk = Number(k);
+      const pockets: PocketIndex[] = [];
+      for (let d = -kk; d <= kk; d++) pockets.push(Number(order[(at + d + 37 * 2) % 37]));
+      const components = pockets.map((q) => ({ spot: `straight:${q}`, weight: 1 }));
+      return {
+        ...base,
+        pockets: [...pockets].sort((a, b) => a - b),
+        pays: 0,
+        components,
+        pieces: 2 * kk + 1,
+      };
+    }
+    case 'basket':
+      return { ...base, pockets: basketPockets(wheel), pays: payout(family, wheel), pieces: 1 };
+    case 'even-money':
+      return { ...base, pockets: evenMoneyPockets(id), pays: 1, pieces: 1 };
+    case 'dozen': {
+      const d = Number(rest);
+      return {
+        ...base,
+        pockets: Array.from({ length: 36 }, (_, i) => i + 1).filter((n) => dozenOf(n) === d),
+        pays: 2,
+        pieces: 1,
+      };
+    }
+    case 'column': {
+      const c = Number(rest);
+      return {
+        ...base,
+        pockets: Array.from({ length: 36 }, (_, i) => i + 1).filter((n) => columnOf(n) === c),
+        pays: 2,
+        pieces: 1,
+      };
+    }
+    default: {
+      if (!FIXED[wheel].has(id)) return null;
+      return { ...base, pockets: idx(rest.split('-')), pays: payout(family, wheel), pieces: 1 };
+    }
+  }
+}
+
+const DEFS: Record<WheelKind, Map<string, BetDef | null>> = {
+  european: new Map(),
+  american: new Map(),
+  'triple-zero': new Map(),
+};
+
+/** A bet resolved for one wheel (frozen, cached); null when the wheel does not have it. */
+export function betDef(id: BetId, wheel: WheelKind): BetDef | null {
+  const cache = DEFS[wheel];
+  let def = cache.get(id);
+  if (def === undefined) {
+    const built = buildDef(id, wheel);
+    def = built && Object.freeze({ ...built, pockets: Object.freeze(built.pockets) });
+    if (def) cache.set(id, def); // misses are cheap to recompute; never cache junk ids
+  }
+  return def;
 }
