@@ -242,3 +242,34 @@ describe('isQuotaError', () => {
     expect(isQuotaError(null)).toBe(false);
   });
 });
+
+describe('closed connection', () => {
+  it('rejects reads instead of throwing synchronously', async () => {
+    const r = await openStore('x', { factory: new IDBFactory() });
+    r.db?.close();
+    await expect(r.backend.get('settings', 'k')).rejects.toBeDefined();
+    await expect(r.backend.getAll('settings')).rejects.toBeDefined();
+    await expect(r.backend.getAllKeys('settings')).rejects.toBeDefined();
+    await expect(r.backend.tx(['settings'], 'readonly', () => undefined)).rejects.toBeDefined();
+  });
+
+  it('calls onBlocked when an older connection stays open during an upgrade', async () => {
+    const factory = new IDBFactory();
+    const onBlocked = vi.fn();
+    const first = await openStore('x', { factory });
+    // ignore the versionchange so the connection stays open and blocks the newer open
+    if (first.db) first.db.onversionchange = null;
+    const req = factory.open('x', 2);
+    req.onblocked = onBlocked;
+    req.onupgradeneeded = () => undefined;
+    await new Promise((res) => setTimeout(res, 30));
+    expect(onBlocked).toHaveBeenCalled();
+    first.db?.close();
+    await new Promise<void>((res) => {
+      req.onsuccess = () => {
+        req.result.close();
+        res();
+      };
+    });
+  });
+});

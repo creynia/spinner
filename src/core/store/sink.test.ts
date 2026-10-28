@@ -294,3 +294,36 @@ describe('meta-only flush', () => {
     expect(await b.getAllKeys('runParts')).toEqual([]);
   });
 });
+
+describe('two runs on one sink', () => {
+  it("commits each run's parts with that run's own meta in one transaction", async () => {
+    const b = createMemoryBackend();
+    const sink = createRunSink(b);
+    const other = await makeRun({
+      sessions: 40,
+      maxRounds: 60,
+      chunkSize: 8,
+      samples: 5,
+      checkpoints: 16,
+      seed: 5,
+    });
+    const pa = splitIntoParts(run, 1);
+    const pb = splitIntoParts(other, 1);
+    const ma = partialMeta(2);
+    const mb = {
+      ...partialMeta(1),
+      runId: other.meta.runId,
+      definitionId: other.meta.definitionId,
+    };
+    // first flush occupies the queue; the next three coalesce into one transaction
+    const first = sink.flush(pa[0]!, partialMeta(1));
+    await Promise.all([first, sink.flush(pa[1]!, ma), sink.flush(pb[0]!, mb)]);
+    expect((await b.get<RunMeta>('runs', run.meta.runId))?.completedSessions).toBe(
+      ma.completedSessions,
+    );
+    expect((await b.get<RunMeta>('runs', other.meta.runId))?.completedSessions).toBe(
+      mb.completedSessions,
+    );
+    expect((await b.getAllKeys('runParts')).length).toBe(3);
+  });
+});

@@ -130,19 +130,8 @@ export function createRepo(backend: Backend): Repo {
         while (await backend.get('runs', id)) id = newRunId(meta.definitionId);
         meta = { ...meta, runId: id };
       }
-      const existing = await backend.get<DefinitionRecord>('definitions', meta.definitionId);
-      if (!existing) {
-        await putOne('definitions', {
-          v: 1,
-          id: meta.definitionId,
-          definition: data.definition,
-          createdAt: meta.createdAt,
-          updatedAt: meta.createdAt,
-          origin: opts.origin ?? 'import',
-          runIds: [],
-        } satisfies DefinitionRecord);
-      }
-      await writeCompacted(backend, { ...data, meta }, meta);
+      // the definition record (with `origin`) is written in the same transaction as the results
+      await writeCompacted(backend, { ...data, meta }, meta, opts.origin ?? 'import');
       return { status: 'imported', runId: meta.runId };
     },
 

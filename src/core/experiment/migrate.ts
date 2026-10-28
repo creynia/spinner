@@ -35,7 +35,9 @@ export function runMigrations(
   let doc: Record<string, unknown> = structuredClone(x);
   const v0 = doc[field];
   if (typeof v0 !== 'number' || !Number.isInteger(v0) || v0 < 1) {
-    throw fail(`not ${what}: missing or invalid ${field}`);
+    throw fail(
+      `not ${what === 'run file' ? 'a spinner run file' : 'a ' + what}: missing or invalid ${field}`,
+    );
   }
   let v: number = v0;
   if (v > current) throw fail(`${what} made with a newer version (${field} ${v} > ${current})`);
