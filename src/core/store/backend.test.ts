@@ -6,6 +6,7 @@ import {
   createMemoryBackend,
   openStore,
   STORE_NAMES,
+  V1_STORE_NAMES,
   type Backend,
   isQuotaError,
 } from './index';
@@ -101,9 +102,10 @@ describe.each(backends)('backend suite: %s', (_name, make) => {
     ).rejects.toBeDefined();
   });
 
-  it('has all ten stores', async () => {
+  it('has all eleven stores', async () => {
     const b = await make();
-    expect(STORE_NAMES).toHaveLength(10);
+    expect(STORE_NAMES).toHaveLength(11);
+    expect(V1_STORE_NAMES).toHaveLength(10);
     for (const s of STORE_NAMES) expect(await b.getAll(s)).toEqual([]);
   });
 });
@@ -116,7 +118,7 @@ describe('openStore', () => {
     expect(r.reason).toBe('unavailable');
   });
 
-  it('opens IndexedDB and creates the ten stores', async () => {
+  it('opens IndexedDB and creates the eleven stores', async () => {
     const r = await openStore('x', { factory: new IDBFactory() });
     expect(r.persistent).toBe(true);
     expect(r.backend.kind).toBe('idb');
@@ -210,7 +212,7 @@ describe('openStore', () => {
     await openStore('x', { factory, onVersionChange });
     // another "tab" asks for a newer version: our connection is told to close and the upgrade runs
     await new Promise<void>((resolve, reject) => {
-      const other = factory.open('x', 2);
+      const other = factory.open('x', 3);
       other.onsuccess = () => {
         other.result.close();
         resolve();
@@ -259,7 +261,7 @@ describe('closed connection', () => {
     const first = await openStore('x', { factory });
     // ignore the versionchange so the connection stays open and blocks the newer open
     if (first.db) first.db.onversionchange = null;
-    const req = factory.open('x', 2);
+    const req = factory.open('x', 3);
     req.onblocked = onBlocked;
     req.onupgradeneeded = () => undefined;
     await new Promise((res) => setTimeout(res, 30));
