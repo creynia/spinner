@@ -146,7 +146,7 @@
 .rl-chip text {
   fill: var(--rl-chip-ink);
   font:
-    700 10px/1 system-ui,
+    700 9px/1 system-ui,
     sans-serif;
   pointer-events: none;
 }

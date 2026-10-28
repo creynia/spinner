@@ -6,7 +6,7 @@ import { betDef, catalog, familyOf, fixedBetIds, parseBet } from '../bets';
 import { pocketLabels } from '../pockets';
 import type { WheelKind } from '../types';
 import { BetPicker, OutcomeGlyph, TableView, rouletteUi } from './index';
-import { anchorOf, buildBoard, hotZone, minTapSize } from './geometry';
+import { CHIP_R, anchorOf, buildBoard, chipAt, hotZone, labelBox, minTapSize } from './geometry';
 import { chipsOf } from './chips';
 
 const WHEELS: WheelKind[] = ['european', 'american', 'triple-zero'];
@@ -123,6 +123,44 @@ describe.each(WHEELS)('BetPicker on %s', (wheel) => {
     expect(button.disabled).toBe(wheel !== 'european');
     fireEvent.input(input, { target: { value: 'nonsense' } });
     expect(button.disabled).toBe(true);
+  });
+});
+
+describe('BetPicker keyboard and focus', () => {
+  const rules = ROULETTE_PRESETS.european;
+  it('writes a lowercase tabindex on SVG regions (SVG attributes are case-sensitive)', () => {
+    const { container } = render(<BetPicker rules={rules} onPick={() => undefined} />);
+    for (const g of container.querySelectorAll('svg [role=button]')) {
+      expect(g.getAttribute('tabindex')).toBe('0');
+      expect(g.hasAttribute('tabIndex')).toBe(false);
+    }
+  });
+
+  it('opens the sheet from the keyboard, modal, with Tab trapped', () => {
+    const { container } = render(<BetPicker rules={rules} onPick={() => undefined} />);
+    fireEvent.keyDown(q(container, '[data-pocket="17"]'), { key: 'Enter' });
+    const dlg = q(container, '[role=dialog]');
+    expect(dlg.getAttribute('aria-modal')).toBe('true');
+    const buttons = [...dlg.querySelectorAll('button')];
+    buttons.at(-1)!.focus();
+    const ev = fireEvent.keyDown(buttons.at(-1)!, { key: 'Tab' });
+    expect(ev).toBe(false); // default prevented: focus wrapped
+    expect(document.activeElement).toBe(buttons[0]);
+  });
+
+  it('pairs tabs and panel, roves tabindex and moves with the arrow keys', () => {
+    const { container } = render(<BetPicker rules={rules} onPick={() => undefined} />);
+    const tabs = () => [...container.querySelectorAll<HTMLElement>('[role=tab]')];
+    expect(tabs().map((t) => t.tabIndex)).toEqual([0, -1, -1]);
+    const panel = q(container, '[role=tabpanel]');
+    expect(tabs()[0]!.getAttribute('aria-controls')).toBe(panel.id);
+    fireEvent.keyDown(tabs()[0]!, { key: 'ArrowRight' });
+    expect(tabs()[1]!.getAttribute('aria-selected')).toBe('true');
+    expect(q(container, '[role=tabpanel]').getAttribute('aria-labelledby')).toBe(tabs()[1]!.id);
+    fireEvent.keyDown(tabs()[1]!, { key: 'End' });
+    expect(tabs()[2]!.getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(tabs()[2]!, { key: 'Home' });
+    expect(tabs()[0]!.getAttribute('aria-selected')).toBe('true');
   });
 });
 
@@ -298,6 +336,37 @@ describe('OutcomeGlyph', () => {
 });
 
 describe('geometry', () => {
+  it.each(WHEELS)('keeps chips off their own label (%s)', (wheel) => {
+    for (const o of ['portrait', 'landscape'] as const) {
+      const b = buildBoard(wheel, o);
+      const spots = [
+        ...b.outside.map((x) => x.id),
+        ...[...b.pockets.keys()].map((p) => `straight:${p}`),
+      ];
+      for (const spot of spots)
+        for (const pending of [false, true]) {
+          const c = chipAt(b, spot, pending)!;
+          const l = labelBox(b, spot)!;
+          const hit =
+            c.x + CHIP_R > l.x &&
+            c.x - CHIP_R < l.x + l.w &&
+            c.y + CHIP_R > l.y &&
+            c.y - CHIP_R < l.y + l.h;
+          expect(hit, `${wheel} ${o} ${spot} pending=${pending}`).toBe(false);
+        }
+    }
+  });
+
+  it('puts the triple-zero trio on the zero row edge, outside the 000 cell', () => {
+    for (const o of ['portrait', 'landscape'] as const) {
+      const b = buildBoard('triple-zero', o);
+      const a = anchorOf(b, 'trio:0-00-000')!;
+      const z = b.pockets.get('000')!;
+      const inside = a.x > z.x && a.x < z.x + z.w && a.y > z.y && a.y < z.y + z.h;
+      expect(inside).toBe(false);
+    }
+  });
+
   it.each(WHEELS)('keeps every tap target >= 44 px at the reference viewports (%s)', (wheel) => {
     // 390 px phone with 16 px gutters; 844 px landscape with a 180 px rail and 16 px gutters.
     expect(minTapSize(buildBoard(wheel, 'portrait'), 390 - 32)).toBeGreaterThanOrEqual(44);
@@ -310,13 +379,14 @@ describe('geometry', () => {
       for (const id of fixedBetIds(wheel)) {
         const a = anchorOf(b, id);
         expect(a, `${o} ${id}`).not.toBeNull();
-        expect(a!.x).toBeGreaterThanOrEqual(0);
-        expect(a!.y).toBeGreaterThanOrEqual(0);
+        expect(a!.x).toBeGreaterThanOrEqual(b.view.x);
+        expect(a!.y).toBeGreaterThanOrEqual(b.view.y);
         expect(a!.x).toBeLessThanOrEqual(b.width);
         expect(a!.y).toBeLessThanOrEqual(b.height);
         const z = hotZone(b, id);
         if (z) {
-          expect(z.x).toBeGreaterThanOrEqual(0);
+          expect(z.x).toBeGreaterThanOrEqual(b.view.x);
+          expect(z.y).toBeGreaterThanOrEqual(b.view.y);
           expect(z.x + z.w).toBeLessThanOrEqual(b.width);
           expect(z.y + z.h).toBeLessThanOrEqual(b.height);
         } else expect(['straight', 'even-money', 'dozen', 'column']).toContain(familyOf(id));

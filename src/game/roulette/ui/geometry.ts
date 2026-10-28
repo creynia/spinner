@@ -25,9 +25,11 @@ export interface OutsideBox {
 export interface Board {
   orientation: Orientation;
   wheel: WheelKind;
-  /** viewBox size. */
+  /** Board size; the felt is drawn in 0..width x 0..height. */
   width: number;
   height: number;
+  /** viewBox: the board plus a margin on the zero side for the triple-zero 0-00-000 trio. */
+  view: Rect;
   /** Pocket label -> rect. */
   pockets: Map<string, Rect>;
   outside: OutsideBox[];
@@ -60,6 +62,9 @@ const EVEN_ORDER = [
   ['high', '19–36'],
 ] as const;
 const DOZEN_TEXT = ['1st 12', '2nd 12', '3rd 12'] as const;
+
+/** Margin on the zero side so a chip centred on the zero row's outer edge is not clipped. */
+const ZERO_PAD = 12;
 
 /** Right padding of the portrait viewBox so chips on the outer edge are not clipped. */
 export const PORTRAIT = { width: 374, height: 672 } as const;
@@ -105,6 +110,7 @@ export function buildBoard(wheel: WheelKind, orientation: Orientation): Board {
       orientation,
       wheel,
       ...PORTRAIT,
+      view: { x: 0, y: -ZERO_PAD, w: PORTRAIT.width, h: PORTRAIT.height + ZERO_PAD },
       pockets,
       outside,
       edge: X0 + 3 * CW,
@@ -140,6 +146,7 @@ export function buildBoard(wheel: WheelKind, orientation: Orientation): Board {
       orientation,
       wheel,
       ...LANDSCAPE,
+      view: { x: -ZERO_PAD, y: 0, w: LANDSCAPE.width + ZERO_PAD, h: LANDSCAPE.height },
       pockets,
       outside,
       edge: 3 * RH,
@@ -218,9 +225,10 @@ export function anchorOf(b: Board, id: string): Point | null {
     case 'corner': {
       const r = intersect(rs.map((q) => inflate(q, 1)));
       if (r) return center(r);
-      // The triple-zero trio 0-00-000: three zeros in a row, so sit on their outer edge.
+      // The triple-zero trio 0-00-000: three zeros in a row and no number touches all of them, so
+      // it sits on the zero row's outer edge (the viewBox is padded there), clear of the 000 cell.
       const c = center(bbox(rs));
-      return b.orientation === 'portrait' ? { x: c.x, y: HOT } : { x: HOT, y: c.y };
+      return b.orientation === 'portrait' ? { x: c.x, y: 0 } : { x: 0, y: c.y };
     }
     case 'street':
     case 'sixline': {
@@ -257,7 +265,53 @@ export function hotZone(b: Board, id: string): Rect | null {
 
 /** Size in CSS px of the smallest tappable region when the SVG is `cssWidth` wide. */
 export function minTapSize(b: Board, cssWidth: number): number {
-  const scale = cssWidth / b.width;
+  const scale = cssWidth / b.view.w;
   const rects = [...b.pockets.values(), ...b.outside.map((o) => o.rect)];
   return Math.min(...rects.map((r) => Math.min(r.w, r.h))) * scale;
+}
+
+export const CHIP_R = 11;
+const FONT_NUM = 17;
+const FONT_OUT = 13;
+
+/**
+ * Where a chip sits. Inside spots and lines use their anchor; a straight chip goes to the top-right
+ * corner of its cell and an outside chip to a corner of its box, so the number or label stays
+ * readable. A pending (imprisoned) chip takes the opposite end of the box so both can show.
+ */
+export function chipAt(b: Board, spot: string, pending: boolean): Point | null {
+  const box = b.outside.find((o) => o.id === spot);
+  if (box) {
+    const { x, y, w, h } = box.rect;
+    const cx = x + w / 2;
+    if (isRotated(b, box.rect)) return { x: cx, y: pending ? y + h - 16 : y + 16 };
+    if (w < 60) return { x: cx, y: pending ? y + 12 : y + h - 12 };
+    return { x: x + w - 14, y: pending ? y + h - 12 : y + 12 };
+  }
+  if (spot.startsWith('straight:')) {
+    const r = b.pockets.get(spot.slice(9));
+    if (r) return { x: r.x + r.w - CHIP_R, y: r.y + CHIP_R };
+  }
+  return anchorOf(b, spot);
+}
+
+/** Tall outside boxes of the portrait table print their label rotated. */
+export const isRotated = (b: Board, r: Rect): boolean =>
+  b.orientation === 'portrait' && r.h > r.w * 1.5;
+
+const glyphs = (t: string): number => [...t].length;
+/** Approximate box of a printed label (cap height 0.7 em, 0.58 em per character). */
+function textBox(c: Point, text: string, font: number, rotated: boolean): Rect {
+  const w = glyphs(text) * font * 0.58;
+  const h = font * 0.7;
+  return rotated
+    ? { x: c.x - h / 2, y: c.y - w / 2, w: h, h: w }
+    : { x: c.x - w / 2, y: c.y - h / 2, w, h };
+}
+/** Approximate box of the text printed in an outside box or number cell, null if none. */
+export function labelBox(b: Board, id: string): Rect | null {
+  const box = b.outside.find((o) => o.id === id);
+  if (box) return textBox(center(box.rect), box.text, FONT_OUT, isRotated(b, box.rect));
+  const r = b.pockets.get(id.replace('straight:', ''));
+  return r ? textBox(center(r), id.replace('straight:', ''), FONT_NUM, false) : null;
 }
