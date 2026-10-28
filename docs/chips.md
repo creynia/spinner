@@ -13,18 +13,24 @@ Owned by the orchestrator. Each entry: what, where it came from, and when to pic
 ## Nits from reviews
 
 - ~~PR #2: `dollars(0.29)` throws~~ (fixed in #8, via core-strategy's early validate commit).
-- PR #2: confirm the e2e smoke covers `#/more`. Owner: integration.
+- ~~PR #2: confirm the e2e smoke covers `#/more`~~ (covered by `tests/e2e/smoke.spec.ts` and `shell.spec.ts`).
 
-## Deferred to integration (must be done before v1 is called done)
+## Integration items (done)
 
-- **Wire the gallery analyzer** (`build/vite-plugin-gallery.ts` `GalleryAnalyzer`) to core-store's bundle decoder and `@core/analysis` headline metrics. Until then committing a bundle under `gallery/` breaks the build (PR #5).
-- **Service-worker update-path e2e**: build A → build B → update toast → reload → new SHA in About (architecture.md §8.4; PR #5).
-- **Roulette golden traces** for every preset (seed 20261028, session 0, bankroll $5,000) in `src/game/roulette/__fixtures__`, and a "zero reconcile rejections over a full run" test per preset (PR #8).
-- Harness: a committed test for a plugin exception in `createState` (session ends with `error`), and assert `wagered > 0` in `tests/build/harness-roulette.test.ts` (PR #9).
-- Pass `{ tableMax }` to `runMetrics`/`compareRuns`/`sweepResult` everywhere (`pAtTableMax` is null otherwise) (PR #4).
-- The shell's db adapter (`src/app/services/db.ts`) can switch to core-store's `createRepo` (PR #7).
-- strategy.md §17.9 heap/throughput test in `tests/perf` (PR #11).
-- Confirm the e2e smoke covers `#/more` (PR #2).
+All "before v1" items are closed by #17 and #18:
+- ~~Wire the gallery analyzer to core-store and `@core/analysis`~~ (#18).
+- ~~Service-worker update-path e2e~~ (#18, `tests/e2e/sw-update.spec.ts`).
+- ~~Roulette golden traces and a zero-`apply`-rejections test per preset~~ (#17).
+- ~~Harness tests for a `createState` exception and `wagered > 0`~~ (#17).
+- ~~Pass `{ tableMax }` everywhere~~ (#17 audit).
+- ~~strategy.md §17.9 heap/throughput test~~ (#17).
+
+## Perf
+
+- ~~Browser benchmark screen and real budget test~~ (#19). The 10,000 × 500 reference run took 6.8–9.1 s on 3 Workers in headless Chromium on the build VM (see `docs/perf.md`), against the 20 s budget. It is not yet measured on a mid-range Android; see `docs/design/open-questions.md`.
+- There is no npm script for the node perf tests (`PERF=1 npx vitest run -c tests/perf/vitest.config.ts`); add `npm run perf:node`.
+- `tests/perf/budget.spec.ts` asserts at least 2 workers. On a runner with 2 cores or fewer, `poolSize()` gives 1 and the test fails. GitHub's hosted runners have 4 vCPU (#19 review).
+- Core harness: `controller.settled()` resolves on the *next* transition, so awaiting it on a finished run hangs. App callers guard for this (Sweep, Benchmark). Clarify the docstring, or add a `whenSettled()` that resolves at once for a terminal run (#19 review).
 
 ## Later (nice to have)
 
@@ -34,3 +40,18 @@ Owned by the orchestrator. Each entry: what, where it came from, and when to pic
 - Strategy: dedupe history trackers whose predicates differ only by threshold; the 64 KiB definition limit counts UTF-16 units, not bytes (PR #11).
 - Store: library backup import/export (harness-data-analysis.md §10.4) (PR #10).
 - Analysis: report both sample sizes for Welch differences (needs a `PairDiff` contract field) (PR #4).
+- Builder editor gaps (#14). These have no editor yet; they still import/export as JSON:
+  - fact `in`/`notIn`;
+  - `cmp` against expressions;
+  - `countInLast` `atMost`/partial windows, and `since` `atMost`;
+  - event args;
+  - `press.cap`, `goto.reenter`, bet `parent`/`working`, `act`;
+  - a full expression tree;
+  - Labouchère and custom-sequence editors.
+- Define: sticky right column on desktop. Library: export of a single definition with its runs, and per-run storage use (#14).
+- A read-only Analyze view for gallery runs, without importing them first (#15).
+- Compare and Sweep take `tableMax` from the first run's definition. Runs with different limits get one value (#17 audit).
+- Import's `classify()` matches error message text, because core-store exposes no error codes. Add codes to core-store errors (#15).
+- The shell's db adapter (`src/app/services/db.ts`) is not switched to core-store's `createRepo`, because core's Repo has no `deleteAll` or definitions export. Add those to core-store first (#7, #18).
+- The `vite build` warning "configLoader: 'native' … unsupported" comes from `build/vite-plugin-gallery.ts` importing extensionless `src/core` modules. Fix it before Vite makes native the default: add extensions, bundle the analyzer, or set `configLoader: 'runner'` (#18 review).
+- e2e: `sw-update.spec.ts` skips the phone-360 and phone-landscape projects; `resume.spec.ts` relies on 100k sessions to outlast the reload (#18).

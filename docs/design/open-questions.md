@@ -9,3 +9,11 @@ Each entry is a question the orchestrator would have asked the user. It was deci
 | 3 | 2026-10-28 | game.md | Triple-zero table layout (basket, splits with 000) could not be confirmed from a reliable source. | Kept as designed in game.md. | Drop the basket and extra zero splits. If you know the real layout, describe it. | Low: catalog entries. |
 | 4 | 2026-10-28 | game.md | Bankroll can't cover the full desired bet. | Bet what is left if it meets the minimum; otherwise the session busts. | Reject → bust immediately. | Low. |
 | 5 | 2026-10-28 | harness-data-analysis.md | Phone worker count on many-small-core phones (Pixel 6a). | `min(cores − 1, 8)`, 1 on weak phones, to be measured on a real device during polish. | Fixed 2 on phones. | Low. |
+
+## Checks only you can do
+
+The build VM cannot reach github.io or a real phone, so these PLAYBOOK §15 items are still open:
+
+1. **Phone check.** Open https://creynia.github.io/spinner/ on a mid-range Android, install it as a PWA, then run Settings → Benchmark (10,000 × 500). Check that it finishes under 90 s (the phone budget; 20 s is the laptop budget, PLAYBOOK §7.2) and the layout works at 360 px. The build VM measured 6.8–9.1 s on 3 Workers (see `docs/perf.md`). Add a row to `docs/perf.md` (device, browser, workers, ms, rounds/s), as harness-data-analysis.md §14 asks.
+2. **Update path on the live site.** After the next deploy, Settings → Check for updates should show the toast, and the SHA in About should change. The e2e test covers this against two local builds only.
+3. **Phone sleep mid-run.** Lock the phone during a run, unlock it, and check that the run resumes, or offers Resume, and that the finished run has all its sessions and the same headline results as an uninterrupted run with the same seed.
