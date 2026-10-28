@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "name": "Flat red",
+  "game": { "id": "roulette", "rules": "european" },
+  "strategy": {
+    "schema": 1,
+    "id": "flat-red",
+    "name": "Flat red",
+    "game": "roulette",
+    "unit": 2500,
+    "stages": [
+      { "id": "main", "layout": [{ "bet": "red", "amount": { "units": 1 } }], "rules": [] }
+    ]
+  },
+  "session": { "bankroll": 100000, "maxRounds": 500 },
+  "run": { "sessions": 10000, "seed": 42 }
+}

@@ -9,7 +9,7 @@ export {
   openStore,
   STORE_DEFS,
   STORE_NAMES,
-  UPGRADES,
+  DB_UPGRADES,
   type Backend,
   type OpenFailure,
   type OpenOptions,

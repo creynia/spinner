@@ -33,7 +33,7 @@ export const defaultStrategyHooks: StrategyHooks = {
   validateStrategy: stubSafe(validateStrategy, () => []),
 };
 
-export const LIMITS = {
+export const DEFINITION_LIMITS = {
   maxSessions: 100_000,
   maxRounds: 100_000,
   maxBankroll: 100_000_000,
@@ -129,8 +129,8 @@ function normalizeSchedule(
   for (const x of spec as number[]) if (x >= 0 && x <= maxRounds) set.add(x);
   const list = [...set].sort((a, b) => a - b);
   if (
-    list.length > LIMITS.maxCustomCheckpoints ||
-    (sessions !== undefined && sessions * list.length * 4 > LIMITS.maxCheckpointBytes)
+    list.length > DEFINITION_LIMITS.maxCustomCheckpoints ||
+    (sessions !== undefined && sessions * list.length * 4 > DEFINITION_LIMITS.maxCheckpointBytes)
   ) {
     errors.push(err('checkpoints-too-many', path, 'too many checkpoints'));
   }
@@ -213,8 +213,24 @@ export function normalizeDefinition(
   // session and run
   const session = isObject(src.session) ? src.session : {};
   const run = isObject(src.run) ? src.run : {};
-  const bankroll = intField(session, 'bankroll', '/session', 1, LIMITS.maxBankroll, errors, true);
-  const maxRounds = intField(session, 'maxRounds', '/session', 1, LIMITS.maxRounds, errors, true);
+  const bankroll = intField(
+    session,
+    'bankroll',
+    '/session',
+    1,
+    DEFINITION_LIMITS.maxBankroll,
+    errors,
+    true,
+  );
+  const maxRounds = intField(
+    session,
+    'maxRounds',
+    '/session',
+    1,
+    DEFINITION_LIMITS.maxRounds,
+    errors,
+    true,
+  );
   const stopWin = intField(
     session,
     'stopWin',
@@ -240,20 +256,34 @@ export function normalizeDefinition(
   if (roundsPerHour !== undefined && (typeof roundsPerHour !== 'number' || !(roundsPerHour > 0))) {
     errors.push(err('E_RANGE', '/session/roundsPerHour', 'roundsPerHour must be positive'));
   }
-  const sessions = intField(run, 'sessions', '/run', 1, LIMITS.maxSessions, errors, true);
+  const sessions = intField(
+    run,
+    'sessions',
+    '/run',
+    1,
+    DEFINITION_LIMITS.maxSessions,
+    errors,
+    true,
+  );
   const seed = intField(run, 'seed', '/run', 0, 0xffffffff, errors, true);
   const sampleSessions = intField(
     run,
     'sampleSessions',
     '/run',
     0,
-    LIMITS.maxSampleSessions,
+    DEFINITION_LIMITS.maxSampleSessions,
     errors,
     false,
   );
-  if (sessions !== undefined && maxRounds !== undefined && sessions * maxRounds > LIMITS.maxWork) {
+  if (
+    sessions !== undefined &&
+    maxRounds !== undefined &&
+    sessions * maxRounds > DEFINITION_LIMITS.maxWork
+  ) {
     errors.push(
-      err('E_LIMIT', '/run/sessions', 'sessions x maxRounds is too large', { max: LIMITS.maxWork }),
+      err('E_LIMIT', '/run/sessions', 'sessions x maxRounds is too large', {
+        max: DEFINITION_LIMITS.maxWork,
+      }),
     );
   }
   const checkpointSchedule = normalizeSchedule(run.checkpointSchedule, maxRounds, sessions, errors);

@@ -278,7 +278,7 @@ export function createRunSink(backend: Backend): StoreRunSink {
     try {
       await guarded(last.meta.runId, (b) =>
         b.tx(['runs', 'runParts'], 'readwrite', (t) => {
-          for (const it of items) t.put('runParts', it.part);
+          for (const it of items) if (it.part.chunkCount > 0) t.put('runParts', it.part);
           t.put('runs', { ...last.meta, storage: b.kind });
         }),
       );

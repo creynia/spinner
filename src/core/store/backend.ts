@@ -40,7 +40,7 @@ export const STORE_DEFS: Record<StoreName, StoreDef> = {
 };
 
 /** Structural upgrades only, by target version (§9.1); record contents migrate lazily via `v`. */
-export const UPGRADES: Record<number, (db: IDBDatabase) => void> = {
+export const DB_UPGRADES: Record<number, (db: IDBDatabase) => void> = {
   1: (db) => {
     for (const name of STORE_NAMES) {
       const def = STORE_DEFS[name];
@@ -344,7 +344,7 @@ export async function openStore(name: string, opts: OpenOptions = {}): Promise<O
       }
       req.onupgradeneeded = (ev) => {
         try {
-          for (let v = ev.oldVersion + 1; v <= DB_VERSION; v++) UPGRADES[v]?.(req.result);
+          for (let v = ev.oldVersion + 1; v <= DB_VERSION; v++) DB_UPGRADES[v]?.(req.result);
         } catch {
           req.transaction?.abort();
         }

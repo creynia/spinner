@@ -29,7 +29,12 @@ export {
   STRATEGY_MIGRATIONS,
   type MigrationTable,
 } from './migrate';
-export { defaultStrategyHooks, LIMITS, normalizeDefinition, type StrategyHooks } from './normalize';
+export {
+  defaultStrategyHooks,
+  DEFINITION_LIMITS,
+  normalizeDefinition,
+  type StrategyHooks,
+} from './normalize';
 export {
   decodeShareLink,
   encodeShareLink,
