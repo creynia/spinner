@@ -105,31 +105,27 @@ export async function listLayoutEntries(): Promise<LayoutEntry[]> {
     return u ? u.definitions + u.strategies : 0;
   };
   const built = await Promise.all(
-    BUILTIN_LAYOUTS.map(
-      async (layout): Promise<LayoutEntry> => ({
-        id: layout.id,
-        layout,
-        hash: await layoutHash(layout),
-        builtin: true,
-        usedIn: used(layout.id, true),
-      }),
-    ),
+    BUILTIN_LAYOUTS.map(async (layout): Promise<LayoutEntry> => ({
+      id: layout.id,
+      layout,
+      hash: await layoutHash(layout),
+      builtin: true,
+      usedIn: used(layout.id, true),
+    })),
   );
   return [
     ...built,
     ...records
       .filter((r) => r.layout.game === LAYOUT_GAME)
-      .map(
-        (r): LayoutEntry => ({
-          id: r.id,
-          layout: r.layout,
-          hash: r.hash,
-          builtin: false,
-          record: r,
-          updatedAt: r.updatedAt,
-          usedIn: used(r.id, false),
-        }),
-      ),
+      .map((r): LayoutEntry => ({
+        id: r.id,
+        layout: r.layout,
+        hash: r.hash,
+        builtin: false,
+        record: r,
+        updatedAt: r.updatedAt,
+        usedIn: used(r.id, false),
+      })),
   ];
 }
 

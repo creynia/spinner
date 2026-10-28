@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createMemoryBackend } from '@core';
 import { BUILTIN_LAYOUTS } from '@game/roulette';
 import { createBackendRepo, setRepoForTests } from '../../services/db';
-import { countUsage, createLayout, importLayoutText, layoutFileText } from '../../services/layouts';
+import {
+  countUsage,
+  createLayout,
+  layoutErrors,
+  importLayoutText,
+  layoutFileText,
+} from '../../services/layouts';
 import { libraryRepo, saveStrategy } from '../Define/data';
 import { Library } from './index';
 
@@ -50,7 +56,7 @@ describe('Layouts tab', () => {
     const first = rows()[0] as HTMLElement;
     expect(within(first).getByText('Built-in')).toBeTruthy();
     expect(first.querySelector('.layout-thumb')).toBeTruthy();
-    expect(within(first).getByRole('button', { name: /Duplicate .* to edit/ })).toBeTruthy();
+    expect(within(first).getByRole('button', { name: /^Duplicate to edit/ })).toBeTruthy();
     expect(within(first).queryByRole('button', { name: /^Delete/ })).toBeNull();
     expect(within(first).queryByRole('button', { name: /^Rename/ })).toBeNull();
     expect(within(first).getByText('Used in 0')).toBeTruthy();
@@ -81,7 +87,7 @@ describe('Layouts tab', () => {
         .querySelector('[data-layout="mine"]') as HTMLElement;
     expect(within(li()).getByText('Used in 2')).toBeTruthy();
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Duplicate .* to edit/ })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Duplicate to edit/ })[0]!);
     await waitFor(() => expect(rows()).toHaveLength(BUILTIN_LAYOUTS.length + 2));
     expect((await repo.listLayouts()).map((r) => r.origin).sort()).toEqual(['builtin', 'user']);
 
@@ -119,7 +125,7 @@ describe('editor page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'More' }));
     const name = screen.getByLabelText('Name');
     fireEvent.input(name, { target: { value: 'Mine 2' } });
-    await act(async () => {
+    await act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     });
     await waitFor(async () =>
@@ -147,6 +153,10 @@ describe('editor page', () => {
 });
 
 describe('services', () => {
+  it('every built-in layout (neighbours included) validates on its variant', () => {
+    for (const l of BUILTIN_LAYOUTS) expect(layoutErrors(l), l.id).toEqual([]);
+  });
+
   it('countUsage scans definitions and strategies, separating built-ins from library ids', () => {
     const s = (from: { id: string; builtin?: true }) => ({
       strategy: strategy('a', chipsStage(from)),

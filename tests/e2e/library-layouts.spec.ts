@@ -24,7 +24,7 @@ test('Layouts tab: create, save, rename, duplicate, export, re-import, delete', 
   }
 
   // Duplicate a built-in.
-  await page.getByRole('button', { name: 'Duplicate James Bond to edit' }).click();
+  await page.getByRole('button', { name: 'Duplicate to edit James Bond' }).click();
   await expect(row(page, 'Copy of James Bond')).toBeVisible();
   await expect(row(page, 'Copy of James Bond').getByText('Built-in')).toHaveCount(0);
 
@@ -39,7 +39,7 @@ test('Layouts tab: create, save, rename, duplicate, export, re-import, delete', 
   await expect(page.getByText(/3 chips · 2 spots/)).toBeVisible();
   await screenCheck(page, guard, 'editor');
   await page.getByRole('button', { name: 'More' }).click();
-  await page.getByLabel('Name').fill('E2E layout');
+  await page.getByRole('textbox', { name: 'Name' }).fill('E2E layout');
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Saved E2E layout')).toBeVisible();
@@ -51,8 +51,8 @@ test('Layouts tab: create, save, rename, duplicate, export, re-import, delete', 
 
   // Rename.
   await page.getByRole('button', { name: 'Rename E2E layout' }).click();
-  await page.getByLabel('Name').fill('E2E renamed');
-  await page.getByRole('button', { name: 'Rename', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Name' }).fill('E2E renamed');
+  await page.getByRole('dialog').getByRole('button', { name: 'Rename', exact: true }).click();
   await expect(row(page, 'E2E renamed')).toBeVisible();
 
   // Export.

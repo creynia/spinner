@@ -176,7 +176,7 @@ export function Layouts({
                     {e.builtin ? (
                       <Button
                         variant="primary"
-                        aria-label={`Duplicate ${l.name} to edit`}
+                        aria-label={`Duplicate to edit ${l.name}`}
                         onClick={() =>
                           void act(async () => {
                             const rec = await duplicateLayout(e);
@@ -220,7 +220,7 @@ export function Layouts({
                       Export
                     </Button>
                     <Button
-                      aria-label={`Use ${l.name} in a new experiment`}
+                      aria-label={`Use in Define: ${l.name}`}
                       href={href(`/define?layout=${encodeURIComponent(e.id)}`)}
                     >
                       Use in Define

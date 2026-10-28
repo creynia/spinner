@@ -21,12 +21,7 @@ import {
 export const GAME_ID = 'roulette';
 
 export type ImportProblemKind =
-  | 'foreign-game'
-  | 'newer-version'
-  | 'damaged'
-  | 'not-spinner'
-  | 'library'
-  | 'invalid';
+  'foreign-game' | 'newer-version' | 'damaged' | 'not-spinner' | 'library' | 'invalid';
 
 export interface ImportProblem {
   kind: ImportProblemKind;

@@ -29,6 +29,7 @@
   margin: 0;
   padding: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .lay-card {
@@ -42,8 +43,9 @@
   min-width: 0;
 }
 .lay-thumb {
-  flex: 0 0 9rem;
-  max-width: 100%;
+  flex: 1 1 9rem;
+  max-width: 16rem;
+  width: 100%;
   min-width: 0;
   overflow: hidden;
 }
@@ -66,4 +68,25 @@
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--muted, var(--text));
+}
+
+.lay-thumb .layout-thumb,
+.lay-thumb svg {
+  max-width: 100%;
+  height: auto;
+}
+.lay-card {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+/* Four tabs: let the strip scroll inside the card instead of widening the page. */
+.tabs,
+.tabpanel {
+  min-width: 0;
+  max-width: 100%;
+}
+.tablist {
+  width: 0;
+  min-width: 100%;
 }
