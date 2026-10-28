@@ -3,6 +3,7 @@ import type { BetCatalogEntry } from '../../contracts/game';
 import type { FactDecl, FactParam, FactSchema, FactType } from '../../contracts/facts';
 import type { Diagnostic } from '../../contracts/strategy';
 import type { GameUi } from '../game-ui';
+import type { BuilderChipsEnv } from '../layout/types';
 
 export interface BuilderEnv {
   facts: FactSchema;
@@ -16,6 +17,13 @@ export interface BuilderEnv {
   unit: number;
   /** Extra non-bet targets facts accept (roulette: zero, green). */
   extraTargets?: readonly string[];
+  /**
+   * Tap-to-place chips (layouts.md §7.2). Absent: the builder is the rows-only builder it was
+   * before chips, and its output is byte-for-byte the same.
+   */
+  chips?: BuilderChipsEnv<unknown>;
+  /** The rules preset the table is drawn on ('european'...), written to layouts saved from a stage. */
+  chipsVariant?: string;
 }
 
 export interface SessionFactDef {
