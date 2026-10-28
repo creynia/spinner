@@ -1373,7 +1373,16 @@ class Validator {
   }
 
   /** Constant value of an expression with literals/units only; null when not constant. */
+  private cd = 0;
   private constEval(e: unknown): number | null {
+    if (this.cd > 64) return null;
+    this.cd++;
+    const r = this.constEval1(e);
+    this.cd--;
+    return r;
+  }
+
+  private constEval1(e: unknown): number | null {
     if (typeof e === 'number') return Number.isFinite(e) ? e : null;
     if (!isObj(e)) return null;
     if ('units' in e) return num(e.units) && this.unit ? e.units * this.unit : null;
@@ -1582,12 +1591,13 @@ class Validator {
 }
 
 /** Names of progressions read through `{ prog }` anywhere inside `x`. */
-function scanProgs(x: unknown, out: Set<string>): void {
+function scanProgs(x: unknown, out: Set<string>, depth = 0): void {
+  if (depth > 64) return;
   if (Array.isArray(x)) {
-    for (const y of x) scanProgs(y, out);
+    for (const y of x) scanProgs(y, out, depth + 1);
   } else if (isObj(x)) {
     if (typeof x.prog === 'string' && !('do' in x)) out.add(x.prog);
-    for (const k of Object.keys(x)) if (!k.startsWith('x-')) scanProgs(x[k], out);
+    for (const k of Object.keys(x)) if (!k.startsWith('x-')) scanProgs(x[k], out, depth + 1);
   }
 }
 

@@ -56,6 +56,7 @@ type CFn = () => boolean;
 type Obj = Record<string, unknown>;
 
 const MAX_EFFECTS = 16;
+const PROG_DO_NAMES = ['', 'win', 'loss', 'push', 'reset', 'advance', 'back'] as const;
 const FED_NAMES = ['none', 'win', 'loss', 'push', 'unarmed'] as const;
 
 // ------------------------------------------------------------------ memory
@@ -1447,22 +1448,23 @@ class Interp {
         const a = (op.amount as Fn)();
         if (a === Infinity || a === -Infinity) return this.nonFinite();
         this.patch(P_BET, op.bet, a, E.mask, op.parent, op.working);
-        this.note(rule, 'bet', { bet: op.bet, amount: Number.isNaN(a) ? 'null' : a }, ign);
+        if (this.tracing)
+          this.note(rule, 'bet', { bet: op.bet, amount: Number.isNaN(a) ? 'null' : a }, ign);
         return 0;
       }
       case OpCode.Remove:
         this.removed.push(op.bet);
         this.patch(P_REMOVE, op.bet, 0, 0, undefined, undefined);
-        this.note(rule, 'remove', { bet: op.bet }, ign);
+        if (this.tracing) this.note(rule, 'remove', { bet: op.bet }, ign);
         return 0;
       case OpCode.Clear:
         this.patch(P_CLEAR, '', 0, 0, undefined, undefined);
-        this.note(rule, 'clear', {}, ign);
+        if (this.tracing) this.note(rule, 'clear', {}, ign);
         return 0;
       case OpCode.Press: {
         const on = this.amountOn(op.bet);
         if (!(on > 0)) {
-          this.note(rule, 'press', { bet: op.bet }, 'not-on-table');
+          if (this.tracing) this.note(rule, 'press', { bet: op.bet }, 'not-on-table');
           return 0;
         }
         E.mask = 0;
@@ -1474,11 +1476,11 @@ class Interp {
         }
         if (v === Infinity || v === -Infinity) return this.nonFinite();
         if (v !== v) {
-          this.note(rule, 'press', { bet: op.bet }, 'null-skipped');
+          if (this.tracing) this.note(rule, 'press', { bet: op.bet }, 'null-skipped');
           return 0;
         }
         this.patch(P_BET, op.bet, v, E.mask, undefined, undefined);
-        this.note(rule, 'press', { bet: op.bet, amount: v }, ign);
+        if (this.tracing) this.note(rule, 'press', { bet: op.bet, amount: v }, ign);
         return 0;
       }
       case OpCode.Set:
@@ -1489,20 +1491,22 @@ class Interp {
         if (next === Infinity || next === -Infinity) return this.nonFinite();
         if (next !== next) {
           m.anomalies++;
-          this.note(
-            rule,
-            op.code === OpCode.Set ? 'set' : 'inc',
-            { var: op.text, from: cur },
-            'null-skipped',
-          );
+          if (this.tracing)
+            this.note(
+              rule,
+              op.code === OpCode.Set ? 'set' : 'inc',
+              { var: op.text, from: cur },
+              'null-skipped',
+            );
           return 0;
         }
         m.vars[op.slot] = next;
-        this.note(rule, op.code === OpCode.Set ? 'set' : 'inc', {
-          var: op.text,
-          from: cur,
-          to: next,
-        });
+        if (this.tracing)
+          this.note(rule, op.code === OpCode.Set ? 'set' : 'inc', {
+            var: op.text,
+            from: cur,
+            to: next,
+          });
         return 0;
       }
       case OpCode.Goto:
@@ -1511,17 +1515,17 @@ class Interp {
         return this.doProg(op, rule);
       case OpCode.Stop:
         this.stopReason = op.text;
-        this.note(rule, 'stop', { reason: op.text });
+        if (this.tracing) this.note(rule, 'stop', { reason: op.text });
         return 2;
       case OpCode.Skip:
         this.skip = true;
-        this.note(rule, 'skipRound', {});
+        if (this.tracing) this.note(rule, 'skipRound', {});
         return 0;
       default: {
         const a: { act: string; args?: Record<string, string | number> } = { act: op.text };
         if (op.args) a.args = op.args;
         this.acts.push(a);
-        this.note(rule, 'act', { act: op.text }, ign);
+        if (this.tracing) this.note(rule, 'act', { act: op.text }, ign);
         return 0;
       }
     }
@@ -1532,10 +1536,10 @@ class Interp {
     const target = op.slot;
     const tid = this.stages[target]!.id;
     if (target === m.stage && !op.flag) {
-      this.note(rule, 'goto', { stage: tid }, 'no-op');
+      if (this.tracing) this.note(rule, 'goto', { stage: tid }, 'no-op');
       return 0;
     }
-    this.note(rule, 'goto', { stage: tid });
+    if (this.tracing) this.note(rule, 'goto', { stage: tid });
     const from = this.stages[m.stage]!;
     if (from.onExit.length > 0) {
       if (this.tracing) this.tFired.push(`@exit:${from.id}`);
@@ -1562,14 +1566,10 @@ class Interp {
     const p = this.progs[i]!;
     const f = m.prog;
     const o = i * STRIDE;
-    this.note(rule, 'prog', {
-      prog: op.text,
-      do: ['', 'win', 'loss', 'push', 'reset', 'advance', 'back'][op.progDo] as string,
-    });
+    if (this.tracing) this.note(rule, 'prog', { prog: op.text, do: PROG_DO_NAMES[op.progDo] });
     switch (op.progDo) {
       case ProgDo.Reset:
         resetState(p.params, f, o, m.lines);
-        f[o + F_CAPS] = f[o + F_CAPS] as number;
         this.latch(i, false);
         return 0;
       case ProgDo.Advance:
@@ -1582,7 +1582,9 @@ class Interp {
       default: {
         const amt = amountOf(p.params, f, o, m.lines);
         const a = Number.isFinite(amt) ? amt : 0;
-        const flags = feed(p.params, f, o, m.lines, op.progDo, a, a);
+        // Manual feeds are even money: the profit has the sign of the result.
+        const profit = op.progDo === ProgDo.Win ? a : op.progDo === ProgDo.Loss ? -a : 0;
+        const flags = feed(p.params, f, o, m.lines, op.progDo, profit, a);
         return this.flags(i, flags) ? 2 : 0;
       }
     }
@@ -1698,7 +1700,10 @@ class Interp {
     parent: string | undefined,
     working: LayoutEntry['working'] | undefined,
   ): void {
-    if (this.dN >= D_CAP) return;
+    if (this.dN >= D_CAP) {
+      this.E.mem.anomalies++; // visible: counted, never silently dropped
+      return;
+    }
     const n = this.dN++;
     this.dBet[n] = bet;
     this.dAmt[n] = amt;
