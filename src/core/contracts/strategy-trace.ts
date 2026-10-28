@@ -55,7 +55,7 @@ export interface TraceWindow {
     adjusted: { bet: string; to: number; reason: string }[];
   };
   outcome?: {
-    summary: Record<string, number | string | boolean>;
+    summary: Record<string, number | string | boolean | null>;
     net: number;
     resolutions: { bet: string; result: string; profit: number }[];
   };

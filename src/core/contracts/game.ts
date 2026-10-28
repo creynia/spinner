@@ -145,7 +145,8 @@ export interface RoundOutcome {
     profit: Cents;
   }[];
   events: readonly GameEvent[];
-  summary: Record<string, number | string | boolean>;
+  /** Plugin-defined, JSON-safe. `null` is allowed (game.md §14 `sector: ... | null`). */
+  summary: Record<string, number | string | boolean | null>;
 }
 
 /** A game decision handed to `reconcile` for the `act` effect (strategy.md §6.11, §18.6). */

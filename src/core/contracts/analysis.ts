@@ -20,7 +20,6 @@
  *   endedByLabel(code: number, reasons: string[]): EndedBy
  */
 import type { Cents } from './game';
-import type { EndedBy } from './run';
 
 export const Z95 = 1.959963984540054;
 export const MIN_N_FOR_CI = 30;
