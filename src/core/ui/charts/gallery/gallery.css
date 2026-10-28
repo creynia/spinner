@@ -1,0 +1,61 @@
+/* Dev gallery only: stand-ins for the app tokens (tokens.css belongs to app-shell). */
+:root {
+  --bg: #f6f4ee;
+  --surface: #ffffff;
+  --text: #1b2430;
+  --muted: #4f5b6b;
+  --border: #d5d2c8;
+  --focus: #1f5fbf;
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0c1511;
+    --surface: #15221c;
+    --text: #e8efe9;
+    --muted: #a3b3a9;
+    --border: #2b3d34;
+    --focus: #8ab8ff;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #0c1511;
+  --surface: #15221c;
+  --text: #e8efe9;
+  --muted: #a3b3a9;
+  --border: #2b3d34;
+  --focus: #8ab8ff;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+main {
+  padding: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  main {
+    grid-template-columns: 1fr 1fr;
+  }
+  .wide {
+    grid-column: 1 / -1;
+  }
+}
+h1 {
+  font-size: 1.25rem;
+  margin: 0;
+  grid-column: 1 / -1;
+}
