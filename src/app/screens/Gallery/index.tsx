@@ -2,7 +2,14 @@
 // read-only: the bundle is imported (origin 'gallery', marked imported) and Analyze opens on it.
 // Opening twice reuses the run already in the store (repo.importRun is idempotent per digest).
 import { useEffect, useState } from 'preact/hooks';
-import { formatMoney, sha256Hex, type GalleryEntry, type GalleryIndexV1, type Repo } from '@core';
+import {
+  GALLERY_MAX_BUNDLE_BYTES,
+  formatMoney,
+  sha256Hex,
+  type GalleryEntry,
+  type GalleryIndexV1,
+  type Repo,
+} from '@core';
 import { Button, Card, EmptyState } from '@core/ui';
 import { href, navigate } from '../../router';
 import { importBytes, type ImportProblem } from '../Import/importFile';
@@ -32,7 +39,10 @@ export const defaultGalleryDeps: GalleryDeps = {
   async fetchBundle(entry) {
     const r = await fetch(new URL(`gallery/${entry.file}`, base()));
     if (!r.ok) throw new Error(`${entry.file}: HTTP ${r.status}`);
-    return new Uint8Array(await r.arrayBuffer());
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (bytes.byteLength > GALLERY_MAX_BUNDLE_BYTES || bytes.byteLength !== entry.bytes)
+      throw new Error(`${entry.file}: size does not match the gallery index`);
+    return bytes;
   },
   getRepo: getStoreRepo,
   go: navigate,

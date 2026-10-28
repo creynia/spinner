@@ -88,13 +88,24 @@ test('Watch: step, keyboard, play, re-simulate, no overflow, axe clean', async (
   await expect(page.locator('h1')).toHaveCount(1);
   const cur = () => page.locator('.tr-detail').getAttribute('data-window');
   expect(await cur()).toBe('2');
-  await page.getByRole('button', { name: 'Next round' }).click();
-  expect(await cur()).toBe('3');
-  await page.locator('.tr-replay').focus();
+  // Keys work on a fresh page, with nothing clicked or focused.
   await page.keyboard.press('ArrowRight');
-  expect(await cur()).toBe('4');
-  await page.keyboard.press('ArrowLeft');
   expect(await cur()).toBe('3');
+  await page.keyboard.press('ArrowLeft');
+  expect(await cur()).toBe('2');
+  // End with focus on Next: the button stays focusable (aria-disabled), later keys still work.
+  await page.getByRole('button', { name: 'Next round' }).focus();
+  await page.keyboard.press('End');
+  await expect(page.getByRole('button', { name: 'Next round' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await expect(page.getByRole('button', { name: 'Next round' })).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  expect(Number(await cur())).toBeGreaterThan(0);
+  await page.keyboard.press('Home');
+  expect(await cur()).toBe('0');
+  await expect(page.locator('[data-announce]')).toContainText('Round 1 of');
   // The fixed stepper never hides content: at the end of the page the detail panel ends above it.
   await page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)');
   const [bottom, top] = await page.evaluate<[number, number]>(

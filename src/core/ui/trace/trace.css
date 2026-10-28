@@ -316,3 +316,15 @@ li[data-status='rejected'] .tr-bet {
     box-shadow: none;
   }
 }
+
+.tr-stepper .btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}
+.tr-row,
+.tr-bet,
+.tr-replay button,
+.tr-replay input,
+.tr-replay select {
+  scroll-margin-bottom: 200px;
+}

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { GameUi } from '../game-ui';
 import type { TraceWindow } from '../../contracts/strategy-trace';
+import { formatMoney } from '../../money';
 import { EquityLine } from './EquityLine';
 import { Stepper } from './Stepper';
 import { TraceList } from './TraceList';
@@ -56,11 +57,14 @@ export function TraceReplay<R>(props: TraceReplayProps<R>) {
       return roundRef.current < n - 1;
     },
   });
-  // Playing from the end restarts at the beginning.
+  // Playing from the end restarts at the beginning. With reduced motion Play is inert.
   const playPause = () => {
+    if (reduced) return;
     if (!playing && roundRef.current >= n - 1) go(0);
     setPlaying(!playing);
   };
+  const playPauseRef = useRef(playPause);
+  playPauseRef.current = playPause;
 
   const w = trace[round];
   const layout = useMemo(() => (w ? placedLayout(w) : []), [w]);
@@ -68,23 +72,45 @@ export function TraceReplay<R>(props: TraceReplayProps<R>) {
   const series = useMemo(() => equitySeries(trace, props.bankroll), [trace, props.bankroll]);
   const { TableView, OutcomeGlyph } = ui;
 
-  const onKey = (e: KeyboardEvent) => {
-    const t = e.target as HTMLElement;
-    if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') return;
-    const k = e.key;
-    if (k === 'ArrowRight') go(round + 1);
-    else if (k === 'ArrowLeft') go(round - 1);
-    else if (k === 'Home') go(0);
-    else if (k === 'End') go(n - 1);
-    else if (k === ' ' && t.tagName !== 'BUTTON') playPause();
-    else return;
-    e.preventDefault();
-  };
+  // Keys work from a fresh page: listen on the document while mounted.
+  useLayoutEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || t?.isContentEditable) return;
+      const k = e.key;
+      const last = Math.max(n - 1, 0);
+      if (k === 'ArrowRight') go(roundRef.current + 1);
+      else if (k === 'ArrowLeft') go(roundRef.current - 1);
+      else if (k === 'Home') go(0);
+      else if (k === 'End') go(last);
+      else if ((k === ' ' || k === 'Spacebar') && tag !== 'BUTTON' && tag !== 'A')
+        playPauseRef.current();
+      else return;
+      e.preventDefault();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [n]);
+
+  // A polite status line for screen readers, debounced while playing.
+  const [announce, setAnnounce] = useState('');
+  useEffect(() => {
+    const cur = trace[round];
+    if (!cur) return;
+    const text = `Round ${round + 1} of ${n}${cur.outcome ? `, net ${formatMoney(cur.outcome.net)}` : ''}, equity ${formatMoney(cur.equity)}`;
+    const t = setTimeout(() => setAnnounce(text), playing ? 600 : 0);
+    return () => clearTimeout(t);
+  }, [round, playing, n, trace]);
 
   if (!w) return <p class="muted">This session has no recorded rounds.</p>;
 
   return (
-    <div class="tr-replay" onKeyDown={onKey} data-testid="trace-replay">
+    <div class="tr-replay" data-testid="trace-replay">
+      <p class="visually-hidden" role="status" aria-live="polite" data-announce>
+        {announce}
+      </p>
       <div class="tr-table">
         <TableView
           rules={props.rules}

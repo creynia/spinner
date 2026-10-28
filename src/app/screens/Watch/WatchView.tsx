@@ -15,7 +15,14 @@ type State =
   | { s: 'error'; message: string }
   | { s: 'nosim'; reason: string }
   | { s: 'resim' }
-  | { s: 'ready'; trace: SessionTrace; row: SummaryRow | null; source: Source; mismatch: boolean };
+  | {
+      s: 'ready';
+      trace: SessionTrace;
+      row: SummaryRow | null;
+      source: Source;
+      mismatch: boolean;
+      versionNote?: string;
+    };
 
 const SAME_FIELDS = [
   'final',
@@ -72,6 +79,7 @@ export function WatchView(props: ScreenProps & { deps?: WatchDeps }) {
     const stored = data.samples.find((x) => x.index === index);
     const canSim =
       data.meta.gameVersion === deps.gameVersion && data.meta.coreVersion === deps.coreVersion;
+    const note = `This is a stored trace from game ${data.meta.gameVersion} and core ${data.meta.coreVersion}; this app has game ${deps.gameVersion} and core ${deps.coreVersion}, so it cannot be re-simulated here.`;
     if (stored && !stored.truncated) {
       setState({
         s: 'ready',
@@ -79,6 +87,7 @@ export function WatchView(props: ScreenProps & { deps?: WatchDeps }) {
         row: stored.row,
         source: 'sample',
         mismatch: false,
+        versionNote: canSim ? undefined : note,
       });
       return;
     }
@@ -90,6 +99,7 @@ export function WatchView(props: ScreenProps & { deps?: WatchDeps }) {
           row: stored.row,
           source: 'truncated',
           mismatch: false,
+          versionNote: note,
         });
       else
         setState({
@@ -215,8 +225,13 @@ export function WatchView(props: ScreenProps & { deps?: WatchDeps }) {
       {header}
       {state.mismatch ? (
         <p class="banner" role="status" data-mismatch>
-          This run was made with a different engine version: the re-simulated session does not match
-          the stored results.
+          The re-simulated session differs from the stored results (determinism check failed). The
+          run may come from a different engine build.
+        </p>
+      ) : null}
+      {state.versionNote ? (
+        <p class="banner" role="status" data-version-note>
+          {state.versionNote}
         </p>
       ) : null}
       {state.source === 'truncated' ? (

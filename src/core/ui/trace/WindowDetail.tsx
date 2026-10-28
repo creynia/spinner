@@ -163,6 +163,20 @@ export function WindowDetail(props: WindowDetailProps) {
         )}
       </section>
 
+      {w.acts && w.acts.length > 0 ? (
+        <section aria-labelledby={`tr-acts-${w.w}`}>
+          <h4 id={`tr-acts-${w.w}`}>Game actions</h4>
+          <ul class="tr-res">
+            {w.acts.map((a, i) => (
+              <li key={i}>
+                {a.act}
+                {a.args ? ` ${detailText(a.args)}` : ''}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {progs.length > 0 ? (
         <section aria-labelledby={`tr-prog-${w.w}`}>
           <h4 id={`tr-prog-${w.w}`}>Progression steps</h4>

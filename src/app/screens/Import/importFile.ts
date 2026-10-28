@@ -40,6 +40,8 @@ export type ImportOutcome =
   | { ok: true; kind: 'definition'; definitionId: string; name: string }
   | { ok: false; problem: ImportProblem };
 
+// core-store's decoder returns message strings only (no error codes), so classification matches
+// on their wording; switch to codes if the decoder ever exposes them.
 export function classify(message: string): ImportProblem {
   const m = message.toLowerCase();
   const detail = message;

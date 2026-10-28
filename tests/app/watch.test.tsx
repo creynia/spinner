@@ -78,14 +78,14 @@ describe('Watch: a stored sample of a real roulette session', () => {
     await waitFor(() => expect(container.querySelector('.tr-replay')).not.toBeNull());
     const cur = () => container.querySelector('.tr-detail')!.getAttribute('data-window');
     expect(cur()).toBe('2');
-    fireEvent.keyDown(container.querySelector('.tr-replay')!, { key: 'ArrowRight' });
+    fireEvent.keyDown(document.body, { key: 'ArrowRight' });
     expect(cur()).toBe('3');
-    fireEvent.keyDown(container.querySelector('.tr-replay')!, { key: 'ArrowLeft' });
-    fireEvent.keyDown(container.querySelector('.tr-replay')!, { key: 'Home' });
+    fireEvent.keyDown(document.body, { key: 'ArrowLeft' });
+    fireEvent.keyDown(document.body, { key: 'Home' });
     expect(cur()).toBe('0');
     fireEvent.input(getByRole('slider', { name: 'Round' }), { target: { value: '7' } });
     expect(cur()).toBe('7');
-    fireEvent.keyDown(container.querySelector('.tr-replay')!, { key: 'End' });
+    fireEvent.keyDown(document.body, { key: 'End' });
     expect(Number(cur())).toBe(data.samples[0]!.trace.length - 1);
   });
 
@@ -118,6 +118,54 @@ describe('Watch: a stored sample of a real roulette session', () => {
   });
 });
 
+describe('Watch: keyboard and accessibility', () => {
+  it('keeps focus on a button that reaches its limit and still handles keys', async () => {
+    const { container, getByRole } = render(<WatchView {...props('0')} deps={deps()} />);
+    await waitFor(() => expect(container.querySelector('.tr-replay')).not.toBeNull());
+    const next = getByRole('button', { name: 'Next round' });
+    next.focus();
+    fireEvent.keyDown(next, { key: 'End' });
+    expect(next.getAttribute('aria-disabled')).toBe('true');
+    expect(next.hasAttribute('disabled')).toBe(false);
+    expect(document.activeElement).toBe(next);
+    const last = container.querySelector('.tr-detail')!.getAttribute('data-window');
+    fireEvent.click(next);
+    expect(container.querySelector('.tr-detail')!.getAttribute('data-window')).toBe(last);
+    fireEvent.keyDown(next, { key: 'ArrowLeft' });
+    expect(container.querySelector('.tr-detail')!.getAttribute('data-window')).not.toBe(last);
+  });
+  it('Space toggles play, and Play is inert under reduced motion even at the end', async () => {
+    const { container, getByRole } = render(<WatchView {...props('0')} deps={deps()} />);
+    await waitFor(() => expect(container.querySelector('.tr-replay')).not.toBeNull());
+    fireEvent.keyDown(document.body, { key: ' ' });
+    expect(getByRole('button', { name: 'Pause' })).not.toBeNull();
+    fireEvent.keyDown(document.body, { key: ' ' });
+    expect(getByRole('button', { name: 'Play' })).not.toBeNull();
+    cleanup();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({ matches: true, addEventListener() {}, removeEventListener() {} }),
+    );
+    try {
+      const r = render(<WatchView {...props('0')} deps={deps()} />);
+      await waitFor(() => expect(r.container.querySelector('.tr-replay')).not.toBeNull());
+      fireEvent.keyDown(document.body, { key: 'End' });
+      const at = r.container.querySelector('.tr-detail')!.getAttribute('data-window');
+      fireEvent.click(r.getByRole('button', { name: 'Play' }));
+      expect(r.container.querySelector('.tr-detail')!.getAttribute('data-window')).toBe(at);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it('announces the round politely', async () => {
+    const { container } = render(<WatchView {...props('0')} deps={deps()} />);
+    await waitFor(() =>
+      expect(container.querySelector('[data-announce]')!.textContent).toMatch(/^Round 1 of \d+/),
+    );
+    expect(container.querySelector('[data-announce]')!.getAttribute('aria-live')).toBe('polite');
+  });
+});
+
 describe('Watch: re-simulating any index', () => {
   it('replays a non-sample session exactly and shows no engine-version notice', async () => {
     const stored = new Set(data.samples.map((s) => s.index));
@@ -139,7 +187,7 @@ describe('Watch: re-simulating any index', () => {
     const { container } = render(<WatchView {...props('5')} deps={d} />);
     await waitFor(() => expect(container.querySelector('[data-mismatch]')).not.toBeNull());
     expect(container.querySelector('[data-mismatch]')!.textContent).toContain(
-      'different engine version',
+      'determinism check failed',
     );
   });
 
@@ -152,6 +200,7 @@ describe('Watch: re-simulating any index', () => {
     cleanup();
     const b = render(<WatchView {...props(String(data.samples[0]!.index))} deps={d} />);
     await waitFor(() => expect(b.container.querySelector('.tr-replay')).not.toBeNull());
+    expect(b.container.querySelector('[data-version-note]')!.textContent).toContain('game 0.1.0');
   });
 
   it('offers best, median and worst', async () => {

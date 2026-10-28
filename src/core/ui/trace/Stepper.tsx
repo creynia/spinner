@@ -80,8 +80,8 @@ export function Stepper(p: StepperProps) {
           type="button"
           class="btn"
           aria-label="First round"
-          disabled={p.round <= 0}
-          onClick={p.onFirst}
+          aria-disabled={p.round <= 0 || undefined}
+          onClick={() => !(p.round <= 0) && p.onFirst()}
         >
           <FirstIcon />
         </button>
@@ -89,8 +89,8 @@ export function Stepper(p: StepperProps) {
           type="button"
           class="btn"
           aria-label="Previous round"
-          disabled={p.round <= 0}
-          onClick={p.onPrev}
+          aria-disabled={p.round <= 0 || undefined}
+          onClick={() => !(p.round <= 0) && p.onPrev()}
         >
           <PrevIcon />
         </button>
@@ -99,7 +99,6 @@ export function Stepper(p: StepperProps) {
           class="btn btn-primary"
           aria-label={p.playing ? 'Pause' : 'Play'}
           aria-disabled={p.reducedMotion || undefined}
-          disabled={p.round >= last && !p.playing}
           onClick={p.onPlayPause}
         >
           {p.playing ? <PauseIcon /> : <PlayIcon />}
@@ -109,8 +108,8 @@ export function Stepper(p: StepperProps) {
           type="button"
           class="btn"
           aria-label="Next round"
-          disabled={p.round >= last}
-          onClick={p.onNext}
+          aria-disabled={p.round >= last || undefined}
+          onClick={() => !(p.round >= last) && p.onNext()}
         >
           <NextIcon />
         </button>
@@ -118,8 +117,8 @@ export function Stepper(p: StepperProps) {
           type="button"
           class="btn"
           aria-label="Last round"
-          disabled={p.round >= last}
-          onClick={p.onLast}
+          aria-disabled={p.round >= last || undefined}
+          onClick={() => !(p.round >= last) && p.onLast()}
         >
           <LastIcon />
         </button>
