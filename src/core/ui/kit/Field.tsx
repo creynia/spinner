@@ -1,6 +1,6 @@
 // Form pieces: Field (label, hint, error), TextInput, Select, Toggle (switch), Segmented (radio group).
 import type { ComponentChildren } from 'preact';
-import { useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 
 let seq = 0;
 /** A stable unique id per component instance, to link a label to its control. */
@@ -120,22 +120,37 @@ export interface SegmentedProps<T extends string> {
   onChange: (v: T) => void;
 }
 
-/** A radio group drawn as joined buttons. */
+/** A radio group drawn as joined buttons: one tab stop, arrows/Home/End move and select. */
 export function Segmented<T extends string>({
   label,
   value,
   options,
   onChange,
 }: SegmentedProps<T>) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onKey = (e: KeyboardEvent, i: number) => {
+    const n = options.length;
+    let to = -1;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') to = (i + 1) % n;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') to = (i - 1 + n) % n;
+    else if (e.key === 'Home') to = 0;
+    else if (e.key === 'End') to = n - 1;
+    if (to < 0) return;
+    e.preventDefault();
+    onChange(options[to]!.value);
+    ref.current?.querySelectorAll<HTMLElement>('[role=radio]')[to]?.focus();
+  };
   return (
-    <div class="segmented" role="radiogroup" aria-label={label}>
-      {options.map((o) => (
+    <div class="segmented" role="radiogroup" aria-label={label} ref={ref}>
+      {options.map((o, i) => (
         <button
           type="button"
           role="radio"
           class="seg"
           aria-checked={o.value === value}
+          tabIndex={o.value === value ? 0 : -1}
           onClick={() => onChange(o.value)}
+          onKeyDown={(e) => onKey(e, i)}
         >
           {o.label}
         </button>

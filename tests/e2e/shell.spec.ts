@@ -17,7 +17,7 @@ for (const route of ['#/', '#/settings', '#/more', '#/nope']) {
     const small = await page.evaluate(() => {
       const bad: string[] = [];
       for (const el of document.querySelectorAll(
-        'button, a.btn, a.chip, a.row-link, [role=tab], select, input:not(.visually-hidden)',
+        'button, a, a.btn, a.chip, a.row-link, [role=tab], select, input:not(.visually-hidden)',
       )) {
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) continue;
