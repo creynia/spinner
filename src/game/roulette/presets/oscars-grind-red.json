@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "oscars-grind-red",
+  "name": "Oscar's Grind: red",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "Aim for +1 unit per cycle: raise by a unit after a win while the cycle is behind, never bet more than needed to finish it.",
+  "progressions": {
+    "o": {
+      "kind": "oscars-grind",
+      "base": {
+        "units": 1
+      },
+      "track": "red"
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "prog": "o"
+          }
+        }
+      ],
+      "rules": []
+    }
+  ]
+}

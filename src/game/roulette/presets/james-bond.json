@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "id": "james-bond",
+  "name": "James Bond",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "20 units a spin: 14 on 19-36, 5 on the 13-18 six-line, 1 on zero ($350 / $125 / $25). Loses only on 1-12.",
+  "stages": [
+    {
+      "id": "flat",
+      "layout": [
+        {
+          "bet": "high",
+          "amount": {
+            "units": 14
+          }
+        },
+        {
+          "bet": "sixline:13-14-15-16-17-18",
+          "amount": {
+            "units": 5
+          }
+        },
+        {
+          "bet": "straight:0",
+          "amount": {
+            "units": 1
+          }
+        }
+      ],
+      "rules": []
+    }
+  ]
+}
