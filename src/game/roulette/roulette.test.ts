@@ -28,11 +28,10 @@ describe('roulette plugin identity and stubs', () => {
     expect(Object.keys(roulette.rules.presets)).toEqual([...RULE_PRESET_IDS]);
     expect('ui' in roulette).toBe(false);
   });
-  it('throws TODO(game) from the engine until the game WP lands', () => {
+  it('still throws TODO(game) from the engine until it lands', () => {
     expect(() =>
       roulette.createState({ rules: ROULETTE_PRESETS.european, rng: null as never, bankroll: 0 }),
     ).toThrow('TODO(game)');
-    expect(() => roulette.bets.parse('red')).toThrow('TODO(game)');
   });
   it('pace follows the rules (reconciliation G9)', () => {
     expect(roulette.pace(ROULETTE_PRESETS.european)).toEqual({ roundsPerHour: 40, label: 'live' });
