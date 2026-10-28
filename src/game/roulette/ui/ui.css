@@ -146,7 +146,7 @@
 .rl-chip text {
   fill: var(--rl-chip-ink);
   font:
-    700 10px/1 system-ui,
+    700 9px/1 system-ui,
     sans-serif;
   pointer-events: none;
 }
@@ -154,14 +154,14 @@
   stroke-dasharray: 4 3;
   fill: var(--rl-chip);
 }
-.rl-badge rect {
+.rl-badge circle {
   fill: #ffffff;
   stroke: #6b5a1e;
 }
 .rl-badge text {
   fill: #1b2430;
   font:
-    700 9px/1 system-ui,
+    700 10px/1 system-ui,
     sans-serif;
 }
 .rl-dolly rect {
