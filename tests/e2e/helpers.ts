@@ -61,3 +61,27 @@ export async function expectAxeClean(page: Page, state: string): Promise<void> {
 export async function pingWorker(page: Page): Promise<string> {
   return page.evaluate<string>('window.__spinner.ping()');
 }
+
+/**
+ * One screen check: no element wider than the viewport outside a component-level scroller, no
+ * console errors so far, no serious axe violations. Shared by the flow specs.
+ */
+export async function screenCheck(page: Page, guard: Guard, label: string): Promise<void> {
+  const wide = await page.evaluate(() => {
+    const w = document.documentElement.clientWidth;
+    return [...document.querySelectorAll('body *')]
+      .filter((el) => {
+        if (el.getBoundingClientRect().right <= w + 1) return false;
+        for (let p: Element | null = el.parentElement; p; p = p.parentElement) {
+          if (/auto|scroll|hidden/.test(getComputedStyle(p).overflowX)) return false;
+          if (p.classList.contains('visually-hidden')) return false;
+        }
+        return true;
+      })
+      .slice(0, 5)
+      .map((el) => `${el.tagName}.${String(el.getAttribute('class'))}`);
+  });
+  expect(wide, `${label}: elements wider than the viewport`).toEqual([]);
+  await guard.check(label);
+  await expectAxeClean(page, label);
+}

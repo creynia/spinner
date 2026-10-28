@@ -2,6 +2,7 @@
 // Reads gallery/*.spinner.json[.gz], enforces both size gates, validates the header, and emits
 // gallery/index.json (GalleryIndexV1) plus the bundles, renamed `<slug>-<sha8>.<ext>`, into dist.
 import { createHash } from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -248,6 +249,32 @@ export function galleryPlugin(opts: GalleryOptions = {}): Plugin {
     };
   };
   let built: GalleryBuild | undefined;
+  const middleware = async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    next: () => void,
+  ): Promise<void> => {
+    const m = /\/gallery\/([^/?]+)(?:\?.*)?$/.exec(req.url ?? '');
+    if (!m) return next();
+    try {
+      const g = await buildGallery(options());
+      if (m[1] === 'index.json') {
+        res.setHeader('content-type', 'application/json');
+        res.end(canonicalJson(g.index));
+        return;
+      }
+      const f = g.files.get(decodeURIComponent(m[1]!));
+      if (!f) return next();
+      res.setHeader(
+        'content-type',
+        m[1]!.endsWith('.gz') ? 'application/gzip' : 'application/json',
+      );
+      res.end(f);
+    } catch (e) {
+      res.statusCode = 500;
+      res.end((e as Error).message);
+    }
+  };
   return {
     name: 'spinner-gallery',
     configResolved(config) {
@@ -272,27 +299,22 @@ export function galleryPlugin(opts: GalleryOptions = {}): Plugin {
       }
     },
     configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const m = /\/gallery\/([^/?]+)(?:\?.*)?$/.exec(req.url ?? '');
-        if (!m) return next();
-        try {
-          const g = await buildGallery(options());
-          if (m[1] === 'index.json') {
-            res.setHeader('content-type', 'application/json');
-            res.end(canonicalJson(g.index));
-            return;
-          }
-          const f = g.files.get(decodeURIComponent(m[1]!));
-          if (!f) return next();
-          res.setHeader(
-            'content-type',
-            m[1]!.endsWith('.gz') ? 'application/gzip' : 'application/json',
-          );
-          res.end(f);
-        } catch (e) {
-          res.statusCode = 500;
-          res.end((e as Error).message);
-        }
+      server.middlewares.use(middleware);
+    },
+    // `vite preview` (sirv) would serve `.gz` with `Content-Encoding: gzip`, and fetch() would then
+    // hand the app decompressed bytes. GitHub Pages sends them as plain application/gzip; match it.
+    configurePreviewServer(server) {
+      const dist = resolve(root, server.config.build.outDir, 'gallery');
+      server.middlewares.use((req, res, next) => {
+        const m = /\/gallery\/([^/?]+\.spinner\.json(?:\.gz)?)(?:\?.*)?$/.exec(req.url ?? '');
+        const file = m ? join(dist, decodeURIComponent(m[1]!)) : '';
+        if (!m || !file.startsWith(dist) || !existsSync(file)) return next();
+        res.setHeader(
+          'content-type',
+          file.endsWith('.gz') ? 'application/gzip' : 'application/json',
+        );
+        res.setHeader('cache-control', 'no-cache');
+        res.end(readFileSync(file));
       });
     },
   };
