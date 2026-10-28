@@ -68,14 +68,14 @@ test('Import: valid run, errors, no overflow, axe clean', async ({ page, guard }
   await expectAxeClean(page, 'import ok');
 });
 
-test('Gallery: empty state, no overflow, axe clean', async ({ page, guard }, info) => {
+test('Gallery: curated bundles listed, no overflow, axe clean', async ({ page, guard }, info) => {
   await page.goto('./?e2e#/gallery');
   await expect(page.locator('h1')).toHaveCount(1);
-  await expect(page.getByText('No curated bundles yet')).toBeVisible();
+  await expect(page.locator('ul.gal-list > li').first()).toBeVisible();
   await guard.check('gallery');
   await expectAxeClean(page, 'gallery');
   expect(await smallTargets(page)).toEqual([]);
-  await shot(page, info.project.name, 'gallery-empty');
+  await shot(page, info.project.name, 'gallery');
 });
 
 test('Watch: step, keyboard, play, re-simulate, no overflow, axe clean', async ({

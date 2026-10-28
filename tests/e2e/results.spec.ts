@@ -126,6 +126,10 @@ test('live run: charts update, pause, interrupted reload offers Resume', async (
   await state(page, guard, 'run mid-run');
   await shot(page, 'run-mid', info);
   await expect(page.locator('[data-field=rate]')).toContainText('sessions/s');
+  // "Time spent" moves while the run is going (it was 0 s until the first pause).
+  await expect(page.locator('dt:has-text("Time spent") + dd')).not.toHaveText('0 s', {
+    timeout: 15_000,
+  });
   // Reload while running: the run comes back as interrupted, with Resume.
   await page.reload();
   await expect(page.locator('[data-warning=interrupted]')).toBeVisible({ timeout: 30_000 });

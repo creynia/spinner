@@ -141,3 +141,26 @@ export function useRun(runId: string) {
 
   return { meta, progress, controller, live, refresh };
 }
+
+/**
+ * Elapsed time to show: the stored total (`timing.elapsedMs`, only updated when a run segment ends)
+ * plus the running segment seen by this page.
+ */
+export function elapsedNow(storedMs: number, segmentStart: number | null, now: number): number {
+  return storedMs + (segmentStart === null ? 0 : Math.max(0, now - segmentStart));
+}
+
+/** Ticks once a second while `running`, so "Time spent" moves during a run. */
+export function useElapsed(storedMs: number, running: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  const start = useRef<number | null>(null);
+  if (running && start.current === null) start.current = Date.now();
+  if (!running) start.current = null;
+  useEffect(() => {
+    if (!running) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+  return elapsedNow(storedMs, start.current, now);
+}

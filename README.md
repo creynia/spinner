@@ -8,10 +8,26 @@ Static web app for GitHub Pages; no backend, no accounts. Everything stays on yo
 
 - **Open it:** <https://creynia.github.io/spinner/>
 - **Add to Home screen (Android/Chrome):** open the link, tap the Chrome menu (three dots), then **Add to Home screen** (or **Install app**). On iPhone/iPad (Safari): tap **Share**, then **Add to Home Screen**. It launches full screen and works offline after the first load.
-- **Share a definition:** build a strategy in **Define**, then use **Share link**. The link carries the whole definition (nothing is uploaded), so anyone who opens it lands in Define with your strategy filled in, ready to run with the same seed.
-- **Export a run:** open a finished run in **Analyze**, then **Export**. You get a run file (`.spinner.json`, gzipped when the browser supports it) that **Import** reads back byte for byte, a summaries CSV for spreadsheets, and the definition as JSON. Results live in your browser's storage only, so export anything you want to keep or send to someone.
-- **Updates:** the installed app updates itself and shows "Update available · Reload". If it doesn't, open **Settings**, then **Check for updates**, and tap **Reload** on the toast. If none shows, close the app completely and open it again.
-- **Gallery:** curated result bundles open read-only from **More**, then **Gallery**. A bundle you open is kept for offline use.
+
+| Home                                                                              | Define                                                              | Analyze                                                                                                   |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| ![Home: recent runs with one-line verdicts](docs/screenshots/home-390-light.webp) | ![Define: strategy builder](docs/screenshots/define-390-light.webp) | ![Analyze overview: verdict, distribution, key numbers](docs/screenshots/analyze-overview-390-light.webp) |
+
+### How to
+
+1. **Define.** Tap **New experiment**, pick a strategy from **Presets** (flat, Martingale, Fibonacci, James Bond, Labouchere and more) or build your own from stages, bets and rules, then set the bankroll, unit, spins per session and the number of sessions (10,000 sessions of 500 spins is the default). **Quick check** runs 200 sessions in under a second and shows a one-line verdict; **Dry run** replays one session so you can see what the strategy does.
+2. **Run.** **Run** simulates every session in background workers on your device, with a live fan chart and histogram. Closing the tab or reloading mid-run is safe: reopen the run and tap **Resume**; the finished results are identical to an uninterrupted run with the same seed.
+3. **Analyze.** Overview (verdict, distribution, key numbers with confidence intervals), Paths, Risk (drawdown, exposure, bust), Where the money went, Convergence, and Sessions. Tap any session to **Watch** it round by round with the rules that fired. **Compare** two or more runs side by side (paired by session when they share a seed).
+4. **Share and export.** On **Analyze, Export**: a run file (`.spinner.json.gz`) that **Import** reads back exactly, `summaries.csv` for spreadsheets, `definition.json`, and a **share link** that carries the whole definition (nothing is uploaded). Imported runs are marked "imported" and analyze exactly like local ones. Results live in your browser's storage only, so export anything you want to keep.
+
+| Paths                                                                                   | Watch                                                                                    | Compare                                                          |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| ![Analyze paths: fan chart and survival](docs/screenshots/analyze-paths-390-light.webp) | ![Watch: one session on the table with the trace](docs/screenshots/watch-390-light.webp) | ![Compare: paired runs](docs/screenshots/compare-390-light.webp) |
+
+On a desktop the same screens go side by side ([Analyze](docs/screenshots/analyze-overview-1280-light.webp), [Watch](docs/screenshots/watch-1280-light.webp), [Gallery](docs/screenshots/gallery-1280-light.webp)); dark mode follows your system ([Analyze, dark](docs/screenshots/analyze-overview-390-dark.webp)). More screenshots are in [`docs/screenshots/`](docs/screenshots/).
+
+- **Gallery:** curated result bundles (flat, Martingale, Fibonacci, d'Alembert, Labouchere, James Bond; 10,000 sessions of 500 spins each) open read-only from **More**, then **Gallery**. A bundle you open is kept for offline use.
+- **Updates:** the installed app updates itself and shows "Update available · Reload" (or "Reload (run will resume)" while a run is active). If it doesn't, open **Settings**, then **Check for updates**, and tap **Reload** on the toast. If none shows, close the app completely and open it again.
 
 ## Is this gambling advice?
 

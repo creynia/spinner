@@ -49,6 +49,13 @@ export function Analyze({ params, query }: ScreenProps) {
   return (
     <div class="results-screen">
       <h1>Analyze: {data.definition.name}</h1>
+      {data.meta.imported ? (
+        <p class="muted" data-imported>
+          <span class="chip-note">imported</span> from spinner {data.meta.imported.appVersion}
+          {data.meta.imported.trimmed ? ', gallery trim (fewer checkpoints and samples)' : ''}
+          {data.meta.imported.partial ? ', partial run' : ''}
+        </p>
+      ) : null}
       <div class="actions">
         <Button href={`#/define?from=${encodeURIComponent(data.meta.runId)}`}>Run again</Button>
         <Button href={`#/compare?runs=${encodeURIComponent(data.meta.runId)}`}>Compare</Button>

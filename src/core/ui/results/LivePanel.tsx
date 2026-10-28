@@ -10,14 +10,23 @@ export interface LivePanelProps {
   fan: FanData | null;
   histogram: Hist | null;
   sessions: number;
+  /** Sessions the live fan uses when it is a prefix of the run so far (shown in its title). */
+  fanSessions?: number;
 }
 
-export function LivePanel({ fan, histogram, sessions }: LivePanelProps) {
+export function LivePanel({ fan, histogram, sessions, fanSessions }: LivePanelProps) {
   const wide = useMediaQuery('(min-width: 900px)');
   const [tab, setTab] = useState<'paths' | 'results'>('paths');
   const paths =
     fan && fan.rounds.length > 1 ? (
-      <FanChart fan={fan} title="Live: net result by round" />
+      <FanChart
+        fan={fan}
+        title={
+          fanSessions && fanSessions < sessions
+            ? `Live: net result by round (first ${fanSessions.toLocaleString('en-US')} sessions)`
+            : 'Live: net result by round'
+        }
+      />
     ) : (
       <p class="muted">Paths appear after the first batch arrives.</p>
     );
