@@ -7,8 +7,13 @@ export function definitionId(d: NormalizedDefinition): Promise<DefinitionId> {
   return sha256Hex(canonicalJson(d as unknown as Json));
 }
 
+const hasChipsFrom = (st: unknown): boolean => {
+  const b = typeof st === 'object' && st !== null ? (st as Record<string, unknown>)['x-chips'] : 0;
+  return typeof b === 'object' && b !== null && 'from' in b;
+};
+
 /**
- * Ignores `name`, `notes`, `tags` and the strategy's `name`, `notes`, `tags`; includes the game
+ * Ignores `x-chips.from`, `name`, `notes`, `tags` and the strategy's `name`, `notes`, `tags`; includes the game
  * and core versions (§8.3). Finds "you already ran this" and lets a sweep reuse a finished run.
  */
 export function simKey(
@@ -20,6 +25,15 @@ export function simKey(
   for (const k of ['name', 'notes', 'tags']) delete definition[k];
   const strategy: Record<string, unknown> = { ...d.strategy };
   for (const k of ['name', 'notes', 'tags']) delete strategy[k];
+  // Layout provenance (`x-chips.from`) is not simulation input (layouts.md §8.2).
+  const stages = strategy.stages;
+  if (Array.isArray(stages) && stages.some((st) => hasChipsFrom(st))) {
+    strategy.stages = stages.map((st: unknown) => {
+      if (!hasChipsFrom(st)) return st;
+      const { from: _from, ...rest } = (st as Record<string, Record<string, unknown>>)['x-chips']!;
+      return { ...(st as object), 'x-chips': rest };
+    });
+  }
   definition.strategy = strategy;
   return sha256Hex(canonicalJson({ definition, gameVersion, coreVersion } as unknown as Json));
 }

@@ -48,6 +48,9 @@ export function Sheet({ open, title, onClose, children }: SheetProps) {
       dlg.querySelector<HTMLElement>(FOCUSABLE)
     )?.focus();
     const onKey = (e: KeyboardEvent) => {
+      // Only the topmost sheet (the last in document order; nested ones come after) reacts.
+      const all = document.querySelectorAll('.sheet');
+      if (all[all.length - 1] !== dlg) return;
       if (e.key === 'Escape') {
         closeRef.current();
       } else if (e.key === 'Tab') {

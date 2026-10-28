@@ -9,6 +9,11 @@ Each entry is a question the orchestrator would have asked the user. It was deci
 | 3 | 2026-10-28 | game.md | Triple-zero table layout (basket, splits with 000) could not be confirmed from a reliable source. | Kept as designed in game.md. | Drop the basket and extra zero splits. If you know the real layout, describe it. | Low: catalog entries. |
 | 4 | 2026-10-28 | game.md | Bankroll can't cover the full desired bet. | Bet what is left if it meets the minimum; otherwise the session busts. | Reject → bust immediately. | Low. |
 | 5 | 2026-10-28 | harness-data-analysis.md | Phone worker count on many-small-core phones (Pixel 6a). | `min(cores − 1, 8)`, 1 on weak phones, to be measured on a real device during polish. | Fixed 2 on phones. | Low. |
+| 6 | 2026-10-28 | layouts.md Q1 | Does a saved layout carry a default chip value? | No; the stage picks, preselecting the smallest standard chip that meets the table minimums. | Store a default on the layout. | Low: one optional field. |
+| 7 | 2026-10-28 | layouts.md Q2 | Bankroll can't fund the whole layout. | The table's existing rule: fund spots in placement order, cut over-max spots; previewed in the editor. | Shrink all spots evenly; skip the spin; end the session. | Low: a stage option later, no contract change. |
+| 8 | 2026-10-28 | layouts.md Q3 | Should experiments follow later edits to a saved layout? | No; each stage keeps its copy and Define offers Update / Keep. | Update everywhere automatically, or a bulk "update all" tool. | Low. |
+| 9 | 2026-10-28 | layouts.md Q4 | How do you remove chips? | An Add / Remove toggle (plus right-click on desktop); long-press opens a bet sheet with −/+. | Tap a stack to remove; an eraser mode. | Low: UI only. |
+| 10 | 2026-10-28 | layouts.md Q5 | Should presets show as chips by default? | No; "Edit on the table" converts a stage on request. | Convert all presets. | Medium: preset definition ids, the pinned id vectors and existing "already ran" matches change; traces do not. |
 
 ## Checks only you can do
 

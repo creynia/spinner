@@ -7,7 +7,7 @@ import type {
   Json,
   NormalizedDefinition,
 } from '@core/contracts/experiment';
-import { newRunId, normalizeDefinition, setPointer, sweepPathAllowed } from '@core';
+import { applySweepValue, newRunId, normalizeDefinition, sweepPathAllowed } from '@core';
 import { createStore } from '../../state/store';
 import { game } from '../../services/game';
 import { getController, getCoreRepo, resumeStored, runKeys, startRun } from '../../services/runs';
@@ -28,7 +28,7 @@ export function leafPaths(def: NormalizedDefinition): Leaf[] {
   const walk = (node: unknown, path: string): void => {
     if (typeof node === 'number' || typeof node === 'string') {
       if (
-        sweepPathAllowed(path) &&
+        sweepPathAllowed(path, def) &&
         !['/name', '/notes'].includes(path) &&
         !path.startsWith('/tags')
       )
@@ -39,6 +39,14 @@ export function leafPaths(def: NormalizedDefinition): Leaf[] {
   };
   walk(def, '');
   return out;
+}
+
+/** The picker label of a leaf: the chip value of a stage reads "Stage play: chip value" (layouts.md §8.1). */
+export function leafLabel(def: NormalizedDefinition, leaf: Leaf): string {
+  const m = /^\/strategy\/stages\/(\d+)\/x-chips\/chip$/.exec(leaf.path);
+  const stage = m ? def.strategy.stages[Number(m[1])] : undefined;
+  const text = m && stage ? `Stage ${stage.id}: chip value` : leaf.path;
+  return `${text} (now ${leaf.value})`;
 }
 
 /** Parse "10, 25, 50" (numbers) or "a, b" (strings) the way the current leaf is typed. */
@@ -90,11 +98,11 @@ export function buildVariants(
 ): BuildResult {
   const errors: { value: Json; message: string }[] = [];
   const variants: Variant[] = [];
-  if (!sweepPathAllowed(path))
+  if (!sweepPathAllowed(path, base))
     return { ok: false, errors: [{ value: path, message: 'That path cannot be swept.' }] };
   for (const value of values) {
     try {
-      const raw = setPointer(base, path, value);
+      const raw = applySweepValue(base, path, value);
       const res = normalizeDefinition(
         { ...raw, name: `${base.name} · ${variantLabel(path, value)}` },
         { plugin: game.plugin, resolveStrategyRef: () => undefined },

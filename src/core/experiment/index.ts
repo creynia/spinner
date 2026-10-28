@@ -43,4 +43,4 @@ export {
   SHARE_FALLBACK_NOTICE,
   SHARE_INFLATED_MAX_BYTES,
 } from './share';
-export { setPointer, sweepPathAllowed } from './pointer';
+export { applySweepValue, setPointer, sweepPathAllowed } from './pointer';

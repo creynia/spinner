@@ -1,7 +1,8 @@
 // Storage backends: IndexedDB, or Maps with structuredClone as the memory fallback
 // (harness-data-analysis.md §9.2-§9.3). Nothing here throws out of `openStore`.
 
-export const STORE_NAMES = [
+/** The ten stores of schema v1. FROZEN: upgrade 1 creates exactly these (layouts.md §8). */
+export const V1_STORE_NAMES = [
   'definitions',
   'strategies',
   'runs',
@@ -13,16 +14,19 @@ export const STORE_NAMES = [
   'groups',
   'settings',
 ] as const;
+
+/** Every store of the current schema: v1 plus `layouts` (v2). */
+export const STORE_NAMES = [...V1_STORE_NAMES, 'layouts'] as const;
 export type StoreName = (typeof STORE_NAMES)[number];
 
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 interface StoreDef {
   keyPath: string | string[];
   indexes: Record<string, string>;
 }
 
-/** Schema v1 (§9.1; reconciliation R6). */
+/** Schema v2 (§9.1; reconciliation R6; layouts.md §8). */
 export const STORE_DEFS: Record<StoreName, StoreDef> = {
   definitions: { keyPath: 'id', indexes: { byUpdated: 'updatedAt' } },
   strategies: { keyPath: 'id', indexes: { byUpdated: 'updatedAt' } },
@@ -37,17 +41,24 @@ export const STORE_DEFS: Record<StoreName, StoreDef> = {
   samples: { keyPath: 'runId', indexes: {} },
   groups: { keyPath: 'id', indexes: { byUpdated: 'updatedAt' } },
   settings: { keyPath: 'key', indexes: {} },
+  layouts: { keyPath: 'id', indexes: { byUpdated: 'updatedAt' } },
 };
+
+function createStores(db: IDBDatabase, names: readonly StoreName[]): void {
+  for (const name of names) {
+    if (db.objectStoreNames.contains(name)) continue;
+    const def = STORE_DEFS[name];
+    const os = db.createObjectStore(name, { keyPath: def.keyPath });
+    for (const [ix, path] of Object.entries(def.indexes)) os.createIndex(ix, path);
+  }
+}
 
 /** Structural upgrades only, by target version (§9.1); record contents migrate lazily via `v`. */
 export const DB_UPGRADES: Record<number, (db: IDBDatabase) => void> = {
-  1: (db) => {
-    for (const name of STORE_NAMES) {
-      const def = STORE_DEFS[name];
-      const os = db.createObjectStore(name, { keyPath: def.keyPath });
-      for (const [ix, path] of Object.entries(def.indexes)) os.createIndex(ix, path);
-    }
-  },
+  // Each upgrade creates only its own stores, each guarded by `contains`, so a fresh install
+  // (oldVersion 0 runs 1 then 2) never creates a store twice.
+  1: (db) => createStores(db, V1_STORE_NAMES),
+  2: (db) => createStores(db, ['layouts']),
 };
 
 /** Operations inside one atomic transaction. */
@@ -323,7 +334,7 @@ export interface OpenResult {
 }
 
 /**
- * Never throws. Tries `indexedDB.open(name, 1)` with a timeout; on a `SecurityError`, an
+ * Never throws. Tries `indexedDB.open(name, DB_VERSION)` with a timeout; on a `SecurityError`, an
  * `InvalidStateError`, a missing `indexedDB`, the timeout or a `VersionError` (the stored database
  * is newer) it returns the memory backend with `persistent: false`. It deletes and overwrites
  * nothing it cannot read (§9.3).

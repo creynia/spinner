@@ -79,3 +79,13 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 - **Run control has one owner**: `src/app/services/runs.ts` moved from app-shell to ui-results, which adds keyed starts, the controller registry, resume after reload and `setRunActive` wiring. Define and Home go through it.
 - **App-shell export/import is definitions-only**; full per-run bundle export lives on the Analyze → Export tab (ui-results).
 - **Core fixtures live next to their module** (`src/core/*/__fixtures__`), never in `tests/fixtures`, because `src/core` may not import outside itself. Game-specific fixtures (such as the roulette strategy goldens above) may live in `tests/fixtures/` or `src/game/roulette/__fixtures__`, since only `src/core` has that restriction.
+
+## Chip layouts (owner request 2026-10-28; design: `docs/design/layouts.md`)
+
+- **Owner request:** tap chips onto the board instead of the multi-step bet flow; save table layouts and reuse them across experiments. A layout is defined in single-denomination chips, and the denomination is picked when a stage uses the layout. Built by an Opus design spike and then the Sonnet swarm, on the same resource protocol (pool 10, baton 2 cpu / 1 browser / 3 GB floor).
+- **A layout is a new game-agnostic entity** `ChipLayout` (chip counts only, no money). It lives in a new IndexedDB store `layouts` (`DB_VERSION` 2) and gets a Library tab (layouts.md D1, D2).
+- **A stage keeps a reference plus a frozen copy** in `stage['x-chips']`. Editing a saved layout never changes existing definitions or runs; Define offers Update / Keep (D3, D4).
+- **The denomination is per stage.** Amount per spot = chips × chip value, and a progression scales the whole layout. Compilation goes to ordinary bet rows, so there is no interpreter, worker or validator change (D5, D6).
+- **Limits follow the existing table rule** (cut to max per spot, fund in placement order), previewed in the editor through the real `reconcile` (D7).
+- **Presets are not migrated;** goldens and definitionId vectors stay unchanged. Any chip-shaped stage can be converted on request (D11).
+- **No `CORE_VERSION` or roulette version bump.** Simulation output does not change, and a bump would stop resume and Watch re-simulation of every existing run. The `version.ts` comment is read as "bump when results change" and is reworded in WP-L0 (orchestrator decision).

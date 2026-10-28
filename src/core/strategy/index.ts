@@ -47,3 +47,21 @@ export { validateStrategy, noExitWarning, type ValidationContext } from './valid
 export { compileStrategy, stepPure, strategyAnomalies } from './compile';
 export { normalizeStrategy } from './normalize';
 export { StrategyCompileError } from './errors';
+// Chip layouts (layouts.md §5.1); stubs until WP-L1.
+export {
+  adjustSpot,
+  chipAmount,
+  compileChips,
+  isChipPath,
+  liftRows,
+  progressionBase,
+  progressionTop,
+  readStageChips,
+  recompileStageChips,
+  resolveChipValue,
+  sameSpots,
+  splitStageLayout,
+  validateChipLayout,
+  validateStageChips,
+  withStageChips,
+} from './chips';

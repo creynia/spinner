@@ -452,3 +452,177 @@
     box-shadow: none;
   }
 }
+
+/* ---- ChipBoard (layouts.md §4): place mode, count chips, ghosts, flags, bet-type lock */
+.rl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.rl-board--place {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+.rl-board--place .rl-chip {
+  pointer-events: none;
+}
+.rl-chip--ghost circle:first-child {
+  stroke-dasharray: 4 3;
+  fill-opacity: 0.75;
+}
+.rl-chip--long text {
+  font-size: 7px;
+}
+.rl-chip--flag circle:first-child {
+  stroke: var(--rl-red);
+  stroke-width: 3;
+}
+.rl-flag circle {
+  fill: #ffffff;
+  stroke: var(--rl-red);
+  stroke-width: 1.5;
+}
+.rl-flag text {
+  fill: var(--rl-red);
+  font:
+    800 10px/1 system-ui,
+    sans-serif;
+}
+.rl-lock {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  position: relative;
+}
+.rl-lock__label {
+  flex: none;
+  width: 32px;
+  font-weight: 600;
+}
+.rl-lock__row {
+  display: flex;
+  gap: 4px;
+}
+.rl-lock__opt {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 1px solid var(--rl-border);
+  border-radius: 8px;
+  background: var(--rl-surface);
+  color: var(--rl-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rl-lock__opt[aria-checked='true'] {
+  background: var(--rl-accent);
+  border-color: var(--rl-accent);
+  color: var(--rl-on-accent);
+}
+.rl-lock__opt:focus-visible {
+  outline: 3px solid var(--rl-focus);
+  outline-offset: 2px;
+}
+.rl-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.rl-step__btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+.rl-step__n {
+  min-width: 2.5ch;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rl-row--steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 0;
+  justify-content: space-between;
+  list-style: none;
+}
+.rl-row--steps .rl-row__text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- one compact mode control in the board's dead corner; sheets are modal at every width */
+.rl-chipboard {
+  min-width: 0;
+}
+.rl-stage {
+  position: relative;
+  margin-inline: auto;
+}
+.rl-mode {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 2px;
+  border: 1px solid var(--rl-line);
+  border-radius: 8px;
+  background: var(--rl-accent);
+  color: var(--rl-on-accent);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rl-mode--top {
+  transform: translateX(-50%);
+}
+.rl-mode:focus-visible,
+.rl-calls-open:focus-visible {
+  outline: 3px solid var(--rl-focus);
+  outline-offset: 2px;
+}
+.rl-lock {
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+.rl-lock__row {
+  flex-wrap: wrap;
+}
+.rl-calls-open {
+  margin-top: 12px;
+  min-height: 44px;
+}
+.rl-sheet--modal {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 72vh;
+  margin: 0 auto;
+  max-width: 640px;
+  border: 0;
+  border-top: 1px solid var(--rl-border);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 24px rgb(0 0 0 / 0.25);
+}
+@media (min-width: 601px) {
+  .rl-backdrop--modal {
+    display: block;
+  }
+  .rl-sheet--modal {
+    position: fixed;
+    margin: 0 auto;
+    padding: 12px var(--gutter, 16px) 16px;
+  }
+}

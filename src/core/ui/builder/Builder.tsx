@@ -1,9 +1,12 @@
 // The strategy builder (strategy.md §13; architecture.md §6.3): stages as reorderable cards, each
 // with a layout list and rule rows that read as sentences. Edits flow model -> JSON on every change.
 import type { ComponentChildren } from 'preact';
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { Condition, Diagnostic, Effect, StrategyDefinition } from '../../contracts/strategy';
+import { validateStageChips } from '../../strategy';
 import { Button, Select, Toggle } from '../kit';
+import type { LayoutChoice } from '../layout/types';
+import { ChipsPanel } from './ChipsPanel';
 import { describeAmount, describeChip, describeEffect } from './describe';
 import {
   AmountEditor,
@@ -21,6 +24,7 @@ import {
   emptyStage,
   freshSlug,
   fromJson,
+  generatedCount,
   moveItem,
   toJson,
   type AmountModel,
@@ -208,9 +212,31 @@ function WhenChips(p: {
   );
 }
 
-export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
-  const model = useMemo(() => fromJson(value), [value]);
+export function Builder({ value, onChange, env, diagnostics: given }: BuilderProps) {
+  const chipsEnv = env.chips;
+  // Without `env.chips` this is the rows-only builder: `x-chips` stays a plain stage key.
+  const model = useMemo(() => fromJson(value, { chips: !!chipsEnv }), [value, !!chipsEnv]);
   const [ed, setEd] = useState<Ed | null>(null);
+  const [choices, setChoices] = useState<LayoutChoice[] | null>(null);
+  const [loadTick, setLoadTick] = useState(0);
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    if (!chipsEnv) return;
+    let live = true;
+    chipsEnv.layouts
+      .list()
+      .then((l) => live && setChoices(l))
+      .catch(() => live && setChoices(null));
+    return () => {
+      live = false;
+    };
+  }, [chipsEnv?.layouts, loadTick]);
+  // Block-level findings (shadowed rows, a malformed block) join the caller's diagnostics.
+  const diagnostics = useMemo(() => {
+    if (!chipsEnv) return given;
+    const have = new Set(given.map((d) => `${d.code}|${d.path}`));
+    return [...given, ...validateStageChips(value).filter((d) => !have.has(`${d.code}|${d.path}`))];
+  }, [given, value, !!chipsEnv]);
   const close = () => setEd(null);
   const mutate = (
     fn: (m: BuilderModel) => void,
@@ -269,14 +295,32 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
             )}
           />
 
-          <h5 class="bsec">Layout</h5>
-          <ul class="blist" aria-label={`Stage ${si + 1} layout`}>
-            {s.layout.length === 0 ? <li class="muted">No bets placed in this stage.</li> : null}
+          {chipsEnv ? (
+            <ChipsPanel
+              env={env}
+              si={si}
+              model={model}
+              card={s}
+              diagnostics={diagnostics}
+              choices={choices}
+              dismissed={dismissed}
+              apply={(fn) => mutate((m) => fn(m.stages[si]!, m))}
+              onDismiss={(k) => setDismissed((d) => new Set(d).add(k))}
+              reload={() => setLoadTick((t) => t + 1)}
+            />
+          ) : null}
+          <h5 class="bsec">{chipsEnv ? 'Other bets' : 'Layout'}</h5>
+          <ul class="blist" aria-label={`Stage ${si + 1} ${chipsEnv ? 'other bets' : 'layout'}`}>
+            {s.layout.length === 0 ? (
+              <li class="muted">{s.chips ? 'No other bets.' : 'No bets placed in this stage.'}</li>
+            ) : null}
             {s.layout.map((l: LayoutRow, li) => {
-              const lp = `${sp}/layout/${li}`;
+              // Diagnostic paths and jump targets count the generated rows in front of these.
+              const row = generatedCount(s) + li;
+              const lp = `${sp}/layout/${row}`;
               const ds = diagsAt(diagnostics, lp);
               return (
-                <li key={li} class="blayout" id={`b-lay-${si}-${li}`}>
+                <li key={li} class="blayout" id={`b-lay-${si}-${row}`}>
                   <div class="brow">
                     <span class="bkw">bet</span>
                     <BChip
@@ -667,8 +711,9 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
           sheet = (
             <EditorSheet title="Delete this stage?" onClose={close}>
               <p>
-                Delete stage <strong>{s.label ?? s.id}</strong> with its {s.layout.length} bets and{' '}
-                {s.rules.length} rules? Go-to effects that point at it will show an error.
+                Delete stage <strong>{s.label ?? s.id}</strong> with its{' '}
+                {s.layout.length + (s.chips?.spots.length ?? 0)} bets and {s.rules.length} rules?
+                Go-to effects that point at it will show an error.
               </p>
               <div class="ed-actions">
                 <Button
