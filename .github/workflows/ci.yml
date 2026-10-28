@@ -84,3 +84,6 @@ jobs:
         with: { name: dist, path: dist }
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --project=perf
+      # Node-side perf: R19 heap/throughput (strategy.md §17.9) and the 10,000 x 500 reference run
+      # on the real plugin with 1 vs 3 workers (tests/perf/vitest.config.ts).
+      - run: npx vitest run -c tests/perf/vitest.config.ts
