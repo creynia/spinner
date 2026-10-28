@@ -232,6 +232,11 @@ export interface StepOutput {
   acts: readonly { act: string; args?: Record<string, string | number> }[];
   stop: string | null; // strategy stop reason → endedBy 'strategy:<reason>'
   error: { code: string; message: string; path?: string } | null; // → endedBy 'error'
+  /**
+   * Strategy anomalies in this window (null amounts, null `set`/`inc`, null bases): the
+   * interpreter resets it every step; the harness sums it into the `anomalies` summary column.
+   */
+  anomalies?: number;
 }
 
 export interface CompileContext<R = unknown, V = unknown> {
