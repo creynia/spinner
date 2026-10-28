@@ -53,7 +53,8 @@ sw.addEventListener('activate', (event) => {
             .map((k) => caches.delete(k)),
         ),
       )
-      .then(() => sw.clients.claim()),
+      .then(() => sw.clients.claim())
+      .then(pruneGallery),
   );
 });
 
@@ -72,8 +73,8 @@ sw.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== new URL(sw.location.href).origin) return;
 
-  if (url.href.startsWith(galleryBase) && url.href !== galleryIndex) {
-    event.respondWith(galleryBundle(req));
+  if (url.href.startsWith(galleryBase) && url.origin + url.pathname !== galleryIndex) {
+    event.respondWith(galleryBundle(req, event));
     return;
   }
 
@@ -95,16 +96,33 @@ sw.addEventListener('fetch', (event) => {
   );
 });
 
-/** Network-first with a copy kept for offline; only successful responses are stored. */
-async function galleryBundle(req: Request): Promise<Response> {
+/**
+ * Network-first with a copy kept for offline. Only complete 200 responses are stored, and a failed
+ * put (quota) never fails the response.
+ */
+async function galleryBundle(req: Request, event: ExtendableEventLike): Promise<Response> {
   const cache = await caches.open(GALLERY_CACHE);
   try {
     const res = await fetch(req);
-    if (res.ok) await cache.put(req, res.clone());
+    if (res.status === 200) event.waitUntil(cache.put(req, res.clone()).catch(() => undefined));
     return res;
   } catch (err) {
     const hit = await cache.match(req);
     if (hit) return hit;
     throw err;
+  }
+}
+
+/** Drops cached bundles that the current index no longer lists. */
+async function pruneGallery(): Promise<void> {
+  try {
+    const index = (await (await fetch(galleryIndex, { cache: 'reload' })).json()) as {
+      entries?: { file: string }[];
+    };
+    const keep = new Set((index.entries ?? []).map((e) => galleryBase + e.file));
+    const cache = await caches.open(GALLERY_CACHE);
+    for (const r of await cache.keys()) if (!keep.has(r.url)) await cache.delete(r);
+  } catch {
+    // offline or no index: keep what we have
   }
 }

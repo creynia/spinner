@@ -4,7 +4,7 @@ Thanks for helping people understand roulette risk. Please read the [Code of Con
 
 ## Setup
 
-Prerequisite: Node 22 (see `.nvmrc`).
+Prerequisite: Node >= 22.12 (see `.nvmrc`).
 
 ```sh
 npm ci
@@ -51,7 +51,7 @@ The gallery is a set of curated result bundles under `gallery/`, listed by the b
 
 1. Run the strategy, open it in **Analyze**, then **Export**, then **For the gallery**. This makes a trimmed `<slug>-<runId8>.spinner.json.gz`.
 2. Commit it under `gallery/` (plain files; Git LFS stays off). Optionally list file names in `gallery/order.json` to set the display order; otherwise they sort by name.
-3. Limits: at most 2 MB per bundle and 20 MB for the folder. `npm run gallery:check` and the build both enforce them, and the build also validates each bundle (game is roulette, digest matches for untrimmed runs).
+3. Limits: at most 2 MB per bundle and 20 MB for the folder. `npm run gallery:check` and the build both enforce them, and the build validates the header (game is roulette). Checking the digest and computing the headline numbers is planned, once core-store's decoder is wired in; until then do not commit bundles.
 
 Only the maintainers commit bundles to `main` (see [`gallery/README.md`](gallery/README.md)).
 
