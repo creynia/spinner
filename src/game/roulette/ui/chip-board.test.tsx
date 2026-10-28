@@ -104,7 +104,7 @@ describe('tap placement', () => {
     openMode();
     const group = getByRole('radiogroup');
     fireEvent.click(group.querySelector('[role=radio][aria-label="2, split"]')!);
-    expect(q(document.body, '.rl-mode').textContent).toBe('Split');
+    expect(q(document.body, '.rl-mode').textContent).toBe('Split ▾');
     // Near the middle of cell 17 a split is still chosen, never the straight.
     const p = at('straight:17');
     fireEvent.click(svg, { detail: 1, ...p });
@@ -272,7 +272,7 @@ describe('call bets and neighbours', () => {
     const e = mount();
     expect(e.container.querySelector('[role=tablist]')).toBeNull();
     const btn = q(e.container, '.rl-mode');
-    expect(btn.textContent).toBe('Auto');
+    expect(btn.textContent).toBe('Auto ▾');
     expect(btn.getAttribute('aria-label')).toBe('Auto, bet type and call bets');
     e.openMode();
     expect(e.getByRole('dialog', { name: 'Bet type' })).toBeTruthy();

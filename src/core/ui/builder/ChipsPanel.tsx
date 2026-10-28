@@ -1,7 +1,7 @@
 // "Chips on the table": the stage card's primary panel (layouts.md §4.7, §7.2). It shows the stage's
 // `x-chips` block (thumbnail, chip value, cost, table check), opens the tap-to-place editor in a
 // sheet, and edits the block through the model helpers; `toJson` regenerates the bet rows.
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Cents } from '../../contracts/game';
 import {
   type ChipLayout,
@@ -40,7 +40,17 @@ import {
 /** Largest amount in cents anywhere (as the validator's limit). */
 const MAX_CENTS = 2 ** 31 - 1;
 
-type Sh = { t: 'edit'; spots: LayoutSpot[] } | { t: 'pick' } | { t: 'saveas' } | { t: 'custom' };
+/** What "Tap chips" lifted, so cancelling the editor can put the stage back exactly as it was. */
+interface Lifted {
+  layout: StageCard['layout'];
+  has: StageCard['has'];
+}
+
+type Sh =
+  | { t: 'edit'; spots: LayoutSpot[]; lifted?: Lifted }
+  | { t: 'pick' }
+  | { t: 'saveas' }
+  | { t: 'custom' };
 type Sub = { t: 'prog' } | null;
 
 export interface ChipsPanelProps {
@@ -120,6 +130,29 @@ export function ChipsPanel(p: ChipsPanelProps) {
   const [msg, setMsg] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const editing = sheet?.t === 'edit';
+  /** Presses the editor's own Back (its unsaved-changes guard decides); set while the sheet is open. */
+  const pressBack = useRef<() => void>(() => {});
+  // Android Back while the editor is open: the screen remounts on every hashchange, which would
+  // lose unsaved edits. A sentinel history entry with the same hash absorbs the first Back; the
+  // editor's guard then asks, and the sentinel is re-pushed so a dirty editor survives it.
+  useEffect(() => {
+    if (!editing) return;
+    let sentinel = true;
+    history.pushState(history.state, '', location.href);
+    const onPop = () => {
+      sentinel = false;
+      history.pushState(history.state, '', location.href);
+      sentinel = true;
+      pressBack.current();
+    };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (sentinel) history.back();
+    };
+  }, [editing]);
   const progs: Record<string, ProgressionSpec> = Object.fromEntries(
     (model.progressions ?? []).map((x) => [x.name, x.spec]),
   );
@@ -187,8 +220,23 @@ export function ChipsPanel(p: ChipsPanelProps) {
     if (chips) return setSheet({ t: 'edit', spots: chips.spots.map((s) => ({ ...s })) });
     const lifted = liftableChips(card);
     // The rows lift with no change to `layout` (§5.1): the editor then opens on those spots.
-    if (lifted) p.apply((cd) => void liftCard(cd));
-    setSheet({ t: 'edit', spots: lifted ? lifted.spots : [] });
+    // Cancelling the editor undoes the lift (`cancelEdit`), so `definitionId` is unchanged.
+    if (lifted) {
+      const before: Lifted = { layout: structuredClone(card.layout), has: { ...card.has } };
+      p.apply((cd) => void liftCard(cd));
+      setSheet({ t: 'edit', spots: lifted.spots, lifted: before });
+    } else setSheet({ t: 'edit', spots: [] });
+  };
+  /** The editor was closed without saving: a lift made only to open it is undone. */
+  const cancelEdit = (lifted: Lifted | undefined) => {
+    if (lifted)
+      p.apply((cd) => {
+        cd.layout = structuredClone(lifted.layout);
+        cd.has = { ...lifted.has };
+        cd.chips = null;
+        cd.chipsStale = false;
+      });
+    setSheet(null);
   };
   const saveEdit = (spots: LayoutSpot[]) => {
     p.apply((cd) => {
@@ -463,16 +511,19 @@ export function ChipsPanel(p: ChipsPanelProps) {
   let sheetEl = null;
   if (sheet?.t === 'edit') {
     // The sheet's own Close, Escape and backdrop go through the editor's unsaved-changes guard.
+    // `LayoutEditor` exposes no imperative close, so the guard presses its own Back button,
+    // found inside this panel's editor wrapper (a ref, never a document-wide lookup).
     const guarded = () => {
-      const back = document.querySelector<HTMLButtonElement>(
-        '.b-chips-editor .le-head button[aria-label="Back"]',
+      const back = editorRef.current?.querySelector<HTMLButtonElement>(
+        '.le-head button[aria-label="Back"]',
       );
       if (back) back.click();
-      else setSheet(null);
+      else cancelEdit(sheet.lifted);
     };
+    pressBack.current = guarded;
     sheetEl = (
       <Sheet open title="Chips on the table" onClose={guarded}>
-        <div class="b-chips-editor">
+        <div class="b-chips-editor" ref={editorRef}>
           <LayoutEditor
             plugin={ce.plugin}
             rules={env.rules}
@@ -484,7 +535,7 @@ export function ChipsPanel(p: ChipsPanelProps) {
             bankroll={ce.bankroll}
             reservedSpots={reserved}
             onSave={(r) => saveEdit(r.spots)}
-            onClose={() => setSheet(null)}
+            onClose={() => cancelEdit(sheet.lifted)}
           />
         </div>
       </Sheet>

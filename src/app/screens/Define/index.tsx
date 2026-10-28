@@ -8,10 +8,12 @@ import { decodeShareLink, importDefinitionFile, SHARE_FALLBACK_NOTICE } from '@c
 import {
   Button,
   Card,
+  defaultDenom,
   Field,
   MoneyInput,
   pathToElementId,
   StrategyEditor,
+  type BuilderChipsEnv,
   type BuilderEnv,
   Segmented,
   Select,
@@ -24,6 +26,7 @@ import { rouletteUi } from '@game/roulette/ui';
 import { EXTRA_TARGETS } from '@game/roulette';
 import { navigate } from '../../router';
 import { game } from '../../services/game';
+import { listLayoutEntries, saveLayout } from '../../services/layouts';
 import { quickCheck } from '../../services/quickCheck';
 import { startRun } from '../../services/runs';
 import { formatVerdict, type VerdictInput } from '../../services/verdict';
@@ -36,10 +39,12 @@ import {
   docToDefinition,
   docWithStrategy,
   getOverride,
+  isSameStrategy,
   PRESET_LIST,
   presetStrategy,
   setOverride,
   strategyUnit,
+  strategyWithLayout,
   withUnit,
   type DefineDoc,
 } from './doc';
@@ -406,6 +411,10 @@ export function Define({ params, query }: ScreenProps) {
   const [pasted, setPasted] = useState('');
   const wide = useWide();
   const analysis = useMemo(() => analyze(doc), [doc]);
+  /** The preset id the strategy was branched from by its first edit, while it is still edited. */
+  const branchedFrom = useRef<string | null>(null);
+  const docRef = useRef(doc);
+  docRef.current = doc;
   const patch = (p: Partial<DefineDoc>) => {
     setDoc((d) => ({ ...d, ...p }));
     setVerdict((v) => (v.state === 'idle' ? v : { state: 'idle' }));
@@ -415,6 +424,7 @@ export function Define({ params, query }: ScreenProps) {
   const routeKey = `${params.definitionId ?? ''}|${query.toString()}`;
   useEffect(() => {
     let live = true;
+    branchedFrom.current = null;
     void (async () => {
       try {
         const defId = params.definitionId;
@@ -494,6 +504,50 @@ export function Define({ params, query }: ScreenProps) {
           }));
           return;
         }
+        const layoutId = query.get('layout');
+        if (layoutId) {
+          const entry = (await listLayoutEntries()).find((e) => e.id === layoutId);
+          if (!live) return;
+          if (!entry) {
+            setLoadError('That layout was not found in your library.');
+            return;
+          }
+          const rulesNow = analyze(defaultDoc()).rules;
+          const chip = rulesNow
+            ? defaultDenom(
+                game.plugin as never,
+                rulesNow,
+                entry.layout.spots,
+                rouletteUi.chips!.denominations,
+              ).denom
+            : 500;
+          const from = {
+            id: entry.id,
+            hash: entry.hash,
+            name: entry.layout.name,
+            ...(entry.builtin ? { builtin: true as const } : {}),
+          };
+          const cur = docRef.current;
+          const r = strategyWithLayout(
+            cur.strategy,
+            defaultDoc().strategy,
+            entry.layout,
+            from,
+            chip,
+          );
+          setDoc({
+            ...cur,
+            strategy: r.strategy,
+            source: { kind: 'custom' },
+            name: r.appended ? cur.name : entry.layout.name,
+          });
+          setNotice(
+            r.appended
+              ? `Added a stage that plays "${entry.layout.name}". Add a rule that moves to it.`
+              : `Started from the layout "${entry.layout.name}".`,
+          );
+          return;
+        }
         const preset = query.get('preset');
         if (preset) {
           const s = presetStrategy(preset);
@@ -531,23 +585,52 @@ export function Define({ params, query }: ScreenProps) {
             roundWord: 'spin',
             unit,
             extraTargets: EXTRA_TARGETS,
+            chips: {
+              ui: rouletteUi as unknown as BuilderChipsEnv['ui'],
+              plugin: game.plugin,
+              layouts: {
+                list: async () =>
+                  (await listLayoutEntries()).map((e) => ({
+                    layout: e.layout,
+                    hash: e.hash,
+                    builtin: e.builtin,
+                  })),
+                save: (l) => saveLayout(l),
+              },
+              bankroll: doc.bankroll,
+            },
+            // Layouts saved from a stage are drawn on this definition's wheel.
+            chipsVariant: doc.preset,
           }
         : null,
-    [rules, unit],
+    [rules, unit, doc.bankroll, doc.preset],
   );
 
   const setStrategy = (next: unknown) => {
     let s = next;
+    let source = doc.source;
     const o = next as { id?: unknown; name?: unknown } | null;
     const sname = o?.name;
     // The first edit of a preset makes it a different strategy: new id, once.
     if (doc.source.kind === 'preset' && o && typeof o === 'object' && o.id === doc.source.id) {
+      branchedFrom.current = doc.source.id ?? null;
       s = { ...o, id: `${doc.source.id}-edit`.slice(0, 40) };
+      source = { kind: 'custom' };
+    } else if (branchedFrom.current && o && typeof o === 'object') {
+      // An edit that is undone (a cancelled editor, say) makes it the preset again, with its id,
+      // so `definitionId` is the preset's.
+      const original = presetStrategy(branchedFrom.current);
+      const same = original && isSameStrategy({ ...o, id: original.id }, original);
+      if (original && same) {
+        s = { ...o, id: original.id };
+        source = { kind: 'preset', id: original.id };
+        branchedFrom.current = null;
+      }
     }
     patch({
       strategy: s,
       name: doc.source.kind === 'preset' && typeof sname === 'string' ? sname : doc.name,
-      source: doc.source.kind === 'preset' ? { kind: 'custom' } : doc.source,
+      source,
     });
   };
 

@@ -185,6 +185,77 @@ describe('ChipsPanel: starting points', () => {
     expect(normalizeStrategy(last()).stages[0]!.layout).toEqual(rows);
   });
 
+  it('cancelling the editor after "Tap chips" puts the stage back exactly as it was', async () => {
+    const start = emptyStrategy(min);
+    render(<Harness init={start} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Tap chips' }));
+    expect(stage(last())['x-chips']).toBeTruthy();
+    const dlg = screen.getByRole('dialog', { name: 'Chips on the table' });
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(last()).toEqual(normalizeStrategy(start));
+    expect(screen.getByRole('button', { name: 'Tap chips' })).toBeTruthy();
+  });
+
+  it('cancelling after "Edit on the table" and edits (Discard, or the sheet Close) reverts too', async () => {
+    const rows = [
+      { bet: COIN_BET, amount: { units: 2 } },
+      { bet: 'tails', amount: { units: 1 } },
+    ];
+    const start = doc({ layout: rows });
+    render(<Harness init={start} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit on the table' }));
+    let dlg = screen.getByRole('dialog', { name: 'Chips on the table' });
+    fireEvent.click(within(dlg).getByText('tap heads'));
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(stage(last())['x-chips']).toBeUndefined();
+    expect(stage(last()).layout).toEqual(rows);
+    // The sheet's own Close goes through the same guard and the same revert.
+    fireEvent.click(screen.getByRole('button', { name: 'Edit on the table' }));
+    dlg = screen.getByRole('dialog', { name: 'Chips on the table' });
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(stage(last())['x-chips']).toBeUndefined();
+    expect(stage(last()).layout).toEqual(rows);
+  });
+
+  it('Android Back (popstate) asks before discarding edits, and closes a clean editor', async () => {
+    const start = emptyStrategy(min);
+    render(<Harness init={start} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Tap chips' }));
+    const dlg = screen.getByRole('dialog', { name: 'Chips on the table' });
+    fireEvent.click(within(dlg).getByText('tap heads'));
+    history.back();
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Discard changes?' })).toBeTruthy(),
+    );
+    // Still there after a second Back, because the sentinel was re-pushed.
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    history.back();
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: 'Discard changes?' })).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(last()).toEqual(normalizeStrategy(start));
+    // A clean editor just closes.
+    fireEvent.click(screen.getByRole('button', { name: 'Tap chips' }));
+    expect(screen.getByRole('dialog', { name: 'Chips on the table' })).toBeTruthy();
+    history.back();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('cancelling the editor of existing chips leaves them alone', async () => {
+    render(<Harness init={fresh()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit chips' }));
+    const dlg = screen.getByRole('dialog', { name: 'Chips on the table' });
+    fireEvent.click(within(dlg).getByRole('button', { name: 'Back' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(ctl.out).toHaveLength(0);
+  });
+
   it('builds the first chips on an empty stage at the smallest legal denomination', () => {
     render(<Harness init={doc({ layout: [] })} />);
     fireEvent.click(screen.getByRole('button', { name: 'Tap chips' }));

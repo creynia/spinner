@@ -111,6 +111,9 @@ function chipsFor(
   return out;
 }
 
+/** The narrowest the board may be made to fit a short window (CSS px). */
+const MIN_BOARD_W = 280;
+
 let boardCount = 0;
 
 export function ChipBoard(props: ChipBoardProps<RouletteRules>) {
@@ -243,8 +246,8 @@ function Editable(
   const geo = useMemo(() => buildBoard(wheel, orientation), [wheel, orientation]);
   const corner = cornerOf(geo);
   const stage = useRef<HTMLDivElement>(null);
-  const maxH = useFitHeight(stage, orientation);
   const ratio = geo.view.w / geo.view.h;
+  const maxH = useFitHeight(stage, orientation, ratio);
   return (
     <section class="rl-ui rl-chipboard" aria-label="Roulette chip board" data-wheel={wheel}>
       <div
@@ -273,12 +276,26 @@ function Editable(
           ref={modeBtn}
           type="button"
           class={`rl-mode${corner.top ? ' rl-mode--top' : ''}`}
-          style={{ left: `${corner.x * 100}%`, top: `${corner.y * 100}%` }}
+          style={{
+            left: `${corner.x * 100}%`,
+            top: `${corner.y * 100}%`,
+            width: `min(44px, ${corner.w * 100}%)`,
+            height: `min(44px, ${corner.h * 100}%)`,
+            // ui.css asks for 44 px minimums; the size above is min(44 px, the dead corner), with
+            // the WCAG 24 px floor.
+            minWidth: 24,
+            minHeight: 24,
+            boxSizing: 'border-box',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            lineHeight: 1,
+          }}
           aria-haspopup="dialog"
           aria-label={`${modeOf.label}, bet type${wheel === 'european' ? ' and call bets' : ''}`}
           onClick={() => setPanel('mode')}
         >
           {modeOf.label}
+          <span aria-hidden="true"> ▾</span>
         </button>
       </div>
       {sheet !== null && (
@@ -328,25 +345,37 @@ function Editable(
   );
 }
 
-/** The board's dead corner as a fraction of the SVG box: portrait, top-left beside the 0 row;
- *  landscape, bottom-left below the 0 cell. The mode button is centred in it. */
-function cornerOf(b: GeoBoard): { x: number; y: number; top: boolean } {
+/** The board's dead corner as fractions of the SVG box (`x`, `y` is where the control's anchor
+ *  sits; `w`, `h` its size): portrait, top-left beside the 0 row; landscape, bottom-left below the
+ *  0 cell. The control is `min(44 px, the corner's own size)` so it never covers a neighbouring box. */
+function cornerOf(b: GeoBoard): { x: number; y: number; w: number; h: number; top: boolean } {
   const z = b.pockets.get('0')!;
   const { view } = b;
   if (b.orientation === 'portrait')
-    // Top-aligned: the 44 px control may hang a few px into the tops of the two left outside boxes
-    // (the corner is only 60 units tall, ~40 px on a phone) but never touches the 0 cell.
-    return { x: (z.x / 2 - view.x) / view.w, y: 0, top: true };
+    // Top-aligned in the corner above the two left outside boxes, beside the 0 cell.
+    return {
+      x: (z.x / 2 - view.x) / view.w,
+      y: 0,
+      w: (z.x - view.x) / view.w,
+      h: (z.h - view.y) / view.h,
+      top: true,
+    };
   return {
     x: ((view.x + z.x + z.w) / 2 - view.x) / view.w,
     y: ((z.y + z.h + view.y + view.h) / 2 - view.y) / view.h,
+    w: (z.x + z.w - view.x) / view.w,
+    h: (view.y + view.h - (z.y + z.h)) / view.h,
     top: false,
   };
 }
 
 /** Largest height (px) the board may take so the whole table stays on screen: the viewport below
  *  the board's top, less room for the host's sticky status line. Null until measured. */
-function useFitHeight(ref: { current: HTMLElement | null }, orientation: string): number | null {
+function useFitHeight(
+  ref: { current: HTMLElement | null },
+  orientation: string,
+  ratio: number,
+): number | null {
   const [h, setH] = useState<number | null>(null);
   useLayoutEffect(() => {
     const measure = () => {
@@ -354,7 +383,11 @@ function useFitHeight(ref: { current: HTMLElement | null }, orientation: string)
       if (!el) return;
       const top = el.getBoundingClientRect().top + window.scrollY;
       const reserve = orientation === 'portrait' ? 76 : 52;
-      setH(Math.max(160, Math.floor(window.innerHeight - top - reserve)));
+      // The floor is width-aware: a very tall host (little room below the board's top) may not
+      // shrink the board below ~280 px wide, or 160 px tall, whichever is the larger height.
+      const avail = el.parentElement?.clientWidth || el.clientWidth || 280;
+      const floor = Math.max(160, Math.ceil(Math.min(avail, MIN_BOARD_W) / ratio));
+      setH(Math.max(floor, Math.floor(window.innerHeight - top - reserve)));
     };
     measure();
     const timers = [60, 250, 800].map((ms) => setTimeout(measure, ms));
@@ -366,7 +399,7 @@ function useFitHeight(ref: { current: HTMLElement | null }, orientation: string)
       window.removeEventListener('resize', measure);
       ro?.disconnect();
     };
-  }, [ref, orientation]);
+  }, [ref, orientation, ratio]);
   return h;
 }
 

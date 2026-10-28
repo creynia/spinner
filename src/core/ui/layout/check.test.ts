@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { coin, COIN_BET } from '../../testing';
-import { checkAtTable } from './check';
+import { checkAtTable, minimumHint } from './check';
 import { defaultDenom } from './denoms';
 
 const rules = coin.rules.resolve();
@@ -69,5 +69,32 @@ describe('defaultDenom (coin plugin)', () => {
   it('returns the smallest, flagged, when none qualifies', () => {
     const d = defaultDenom(coin, rules, [{ bet: COIN_BET, chips: 1 }], [1, 2]);
     expect(d).toEqual({ denom: 1, ok: false });
+  });
+});
+
+describe('minimumHint', () => {
+  const hint = (rows: { bet: string; cents: number }[], bankroll = 1_000_000) =>
+    minimumHint(coin, rules, rows, checkAtTable(coin, rules, rows, bankroll), bankroll, (b) => b);
+
+  it('says how much to add when only a minimum is short', () => {
+    expect(hint([{ bet: COIN_BET, cents: lim.min - 1 }])).toBe(
+      `Add $1 more on ${COIN_BET} to reach the table minimum`,
+    );
+  });
+
+  it('is null when everything is placed', () => {
+    expect(hint([{ bet: COIN_BET, cents: lim.min }])).toBeNull();
+  });
+
+  it('is null when anything besides a minimum is wrong', () => {
+    expect(hint([{ bet: 'nope', cents: lim.min }])).toBeNull();
+    expect(hint([{ bet: COIN_BET, cents: lim.max * 2 }], lim.max * 4)).toBeNull();
+    expect(hint([{ bet: COIN_BET, cents: lim.min }], 1)).toBeNull();
+  });
+
+  it('falls back to a generic line when no addition would help', () => {
+    expect(hint([{ bet: COIN_BET, cents: 1 }], 50)).toBe(
+      'Add more chips to reach the table minimum',
+    );
   });
 });

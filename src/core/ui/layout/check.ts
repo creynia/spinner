@@ -2,6 +2,7 @@
 // generically. Rows are already resolved to cents at one chip level.
 import type { Cents, GamePlugin, LayoutEntry } from '../../contracts/game';
 import { sessionRng } from '../../rng';
+import { money } from './adjust';
 import type { CheckRow, TableCheck, TableCheckSpot } from './types';
 
 const MESSAGES: Record<string, string> = {
@@ -89,4 +90,55 @@ export function checkAtTable<S, A, R, V>(
     perSpot,
     affordable: rec.affordable,
   };
+}
+
+/** Reconcile codes that only mean "not enough yet": the layout is simply still being built. */
+const MINIMUM_CODES = ['below-min', 'inside-min-total'];
+
+/**
+ * A neutral hint when the ONLY problems at the table are minimums (`below-min`, `inside-min-total`),
+ * as on the first tap of an empty layout; otherwise null (a real problem stays a failure). Where
+ * the plugin allows it, the hint says how much to add, found by asking `reconcile` itself how much
+ * more the first short spot needs (game-agnostic: no knowledge of the table's limits here).
+ */
+export function minimumHint<S, A, R, V>(
+  plugin: GamePlugin<S, A, R, V>,
+  rules: R,
+  rows: readonly CheckRow[],
+  check: TableCheck,
+  bankroll: Cents,
+  label: (bet: string) => string,
+): string | null {
+  const problems = check.perSpot.filter((p) => p.status !== 'ok');
+  if (problems.length === 0) return null;
+  if (!problems.every((p) => p.status === 'rejected' && MINIMUM_CODES.includes(p.code ?? '')))
+    return null;
+  const first = problems[0]!;
+  const at = rows.findIndex((r) => r.bet === first.bet);
+  const generic = 'Add more chips to reach the table minimum';
+  if (at < 0) return generic;
+  const clears = (extra: number): boolean => {
+    const next = rows.map((r, i) => (i === at ? { ...r, cents: r.cents + extra } : r));
+    return checkAtTable(plugin, rules, next, bankroll).perSpot.every((p) => p.status === 'ok');
+  };
+  // Smallest whole-dollar addition that clears everything (doubling, then bisection).
+  let hi = 100;
+  while (!clears(hi)) {
+    hi *= 2;
+    if (hi > bankroll || hi > 100_000_000) return generic;
+  }
+  let lo = 0;
+  while (hi - lo > 100) {
+    const mid = lo + Math.ceil((hi - lo) / 200) * 100;
+    if (clears(mid)) hi = mid;
+    else lo = mid;
+  }
+  const inside = rows.reduce(
+    (n, r, i) => (check.perSpot[i]?.status === 'rejected' ? n + r.cents : n),
+    0,
+  );
+  const total = inside + hi;
+  return first.code === 'inside-min-total'
+    ? `Add ${money(hi)} more inside to reach the ${money(total)} table minimum`
+    : `Add ${money(hi)} more on ${label(first.bet)} to reach the table minimum`;
 }

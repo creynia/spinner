@@ -189,11 +189,39 @@ describe('LayoutEditor: tools, history and the live region', () => {
 describe('LayoutEditor: table check, save and guard', () => {
   it('flags spots that fail the table check and shows money in the status', () => {
     const { container } = render(
-      editor({ initialSpots: [{ bet: COIN_BET, chips: 1 }], chipValue: 1 }),
+      editor({ initialSpots: [{ bet: COIN_BET, chips: 1 }], chipValue: 200_000 }),
     );
-    expect(boardProps!.chipValue).toBe(1);
+    expect(boardProps!.chipValue).toBe(200_000);
     expect([...boardProps!.flagged!.keys()]).toEqual([COIN_BET]);
     expect(container.querySelector('.le-problems')!.getAttribute('role')).toBe('status');
+    expect(container.querySelector('.le-summary')!.textContent).toContain('!');
+  });
+
+  it('shows a neutral hint, not a failure, when only the table minimum is short', () => {
+    const { container } = render(
+      editor({ initialSpots: [{ bet: COIN_BET, chips: 1 }], chipValue: 50 }),
+    );
+    expect(container.querySelector('.le-problems')).toBeNull();
+    const text = container.querySelector('.le-summary')!.textContent;
+    expect(text).toContain('Add $1 more');
+    expect(text).toContain('table minimum');
+    expect(text).not.toContain('!');
+    expect(text).not.toContain('spots placed');
+    // The spot is still marked on the board and in the List.
+    expect([...boardProps!.flagged!.keys()]).toEqual([COIN_BET]);
+  });
+
+  it('keeps the red failure when a minimum is short alongside a real problem', () => {
+    const { container } = render(
+      editor({
+        initialSpots: [
+          { bet: COIN_BET, chips: 1 },
+          { bet: 'nope', chips: 1 },
+        ],
+        chipValue: 50,
+      }),
+    );
+    expect(container.querySelector('.le-problems')).not.toBeNull();
     expect(container.querySelector('.le-summary')!.textContent).toContain('!');
   });
 
