@@ -1,0 +1,284 @@
+/* Kit components (src/core/ui/kit). Tokens only; every control is at least var(--tap) tall. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.btn-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.empty {
+  padding: 8px 0;
+}
+.empty-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+.tablist {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  flex: 0 0 auto;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.tab[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  font-weight: 700;
+}
+.tabpanel {
+  padding-top: 12px;
+}
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.5);
+}
+.sheet {
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--gutter);
+  padding-bottom: calc(var(--gutter) + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  color: var(--text);
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sheet-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+@media (min-width: 768px) {
+  .sheet-backdrop {
+    align-items: center;
+  }
+  .sheet {
+    width: min(560px, 90vw);
+    border-radius: 16px;
+  }
+}
+.field {
+  margin-bottom: 12px;
+}
+.field label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.input {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+.hint {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.error {
+  margin: 4px 0 0;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+.money {
+  position: relative;
+}
+.money-sign {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+.money-input {
+  padding-left: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.toggle-track {
+  display: inline-block;
+  width: 44px;
+  height: 26px;
+  border: 2px solid var(--muted);
+  border-radius: 999px;
+  padding: 2px;
+}
+.toggle-thumb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s;
+}
+.toggle[aria-checked='true'] .toggle-track {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.toggle[aria-checked='true'] .toggle-thumb {
+  background: var(--on-accent);
+  transform: translateX(18px);
+}
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.seg {
+  flex: 1 1 auto;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.seg[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+.stat {
+  padding: 8px 0;
+}
+.stat-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.stat-ci,
+.stat-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.toasts {
+  position: fixed;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: calc(var(--tap) + 24px + env(safe-area-inset-bottom));
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--bg);
+  pointer-events: auto;
+}
+.toast .btn-ghost {
+  color: inherit;
+  text-decoration: underline;
+}
+.toast-error {
+  outline: 2px solid var(--danger);
+}
+@media (min-width: 768px) {
+  .toasts {
+    left: auto;
+    right: var(--gutter);
+    bottom: var(--gutter);
+    max-width: 420px;
+  }
+}
