@@ -81,7 +81,7 @@ test('Define: validation panel lists JSON-pointer errors and blocks Run', async 
   await area.fill(JSON.stringify(doc, null, 2));
   await expect(page.getByRole('button', { name: /Validation: 1 error/ })).toBeVisible();
   await expect(actions(page).getByRole('button', { name: 'Run', exact: true })).toBeDisabled();
-  if (info.project.name === 'desktop') {
+  if ((page.viewportSize()?.width ?? 0) >= 768) {
     await expect(page.locator('.define-diags')).toContainText('/stages/0/layout/0/bet');
   } else {
     await page.getByRole('button', { name: /Validation: 1 error/ }).click();

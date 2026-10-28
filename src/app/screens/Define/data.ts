@@ -179,11 +179,27 @@ export function installQuickCheck(): void {
 
 // ------------------------------------------------------------------ dry run
 
+/** Dry runs are transient: tagged, one slot (the previous dry run is deleted), hidden in the Library. */
+export const DRY_RUN_TAG = 'dry-run';
+export const isDryRun = (d: { tags?: string[] }): boolean => d.tags?.includes(DRY_RUN_TAG) === true;
+
+export async function purgeDryRuns(): Promise<void> {
+  const repo = await libraryRepo();
+  for (const rec of await repo.listDefinitions()) {
+    if (!isDryRun(rec.definition)) continue;
+    for (const r of await repo.listRunsOfDefinition(rec.id)) await repo.deleteRun(r.runId);
+    await repo.backend.tx(['definitions'], 'readwrite', (t) => t.delete('definitions', rec.id));
+  }
+  touch();
+}
+
 /** A one-session run of the same definition and seed; resolves with its run id once it has finished. */
 export async function startDryRun(d: NormalizedDefinition): Promise<string> {
+  await purgeDryRuns();
   const dry: NormalizedDefinition = {
     ...d,
     name: `Dry run: ${d.name}`,
+    tags: [...new Set([...(d.tags ?? []), DRY_RUN_TAG])].sort(),
     run: { ...d.run, sessions: 1, sampleSessions: 1 },
   };
   await saveDefinition(dry, { derivedFrom: await definitionId(d) });

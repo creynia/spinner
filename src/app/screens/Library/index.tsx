@@ -12,6 +12,7 @@ import type { ScreenProps } from '../types';
 import {
   deleteDefinition,
   deleteStrategy,
+  isDryRun,
   libraryRepo,
   libraryVersion,
   saveDefinition,
@@ -60,8 +61,9 @@ export function Library({ query }: ScreenProps) {
         ]);
         if (!live) return;
         setStrategies(s);
-        setDefinitions(d);
-        setRuns(r);
+        const dryIds = new Set(d.filter((x) => isDryRun(x.definition)).map((x) => x.id));
+        setDefinitions(d.filter((x) => !dryIds.has(x.id)));
+        setRuns(r.filter((x) => !dryIds.has(x.definitionId)));
       } catch {
         if (live) {
           setStrategies([]);
