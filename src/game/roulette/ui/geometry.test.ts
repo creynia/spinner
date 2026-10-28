@@ -299,3 +299,51 @@ describe('zoneSizes', () => {
     expect(z.auto.straight.h).toBeGreaterThanOrEqual(24);
   });
 });
+
+describe('tap feel (L3a2)', () => {
+  it('the basket core beats the dozen box in landscape', () => {
+    for (const w of WHEELS) {
+      const b = buildBoard(w, 'landscape');
+      expect(betAt(b, { x: b.basket.x + 3, y: b.basket.y + 3 })).toBe('basket');
+      expect(betAt(b, { x: b.basket.x + 5, y: b.basket.y })).toBe('basket');
+      expect(betAt(b, { x: b.basket.x + 30, y: b.basket.y + 3 })).toBe('street:1-2-3');
+      expect(betAt(b, { x: b.basket.x + 30, y: b.basket.y + 14 })).toBe('dozen:1');
+    }
+  });
+  it('the lower half of a landscape street or six line chip hits it', () => {
+    const b = buildBoard('european', 'landscape');
+    const y = b.edge + 8;
+    expect(betAt(b, { x: 125, y })).toBe('street:4-5-6');
+    expect(betAt(b, { x: 100, y })).toBe('sixline:1-2-3-4-5-6');
+    expect(betAt(b, { x: 125, y: b.edge + 12 })).toBe('dozen:1');
+    expect(betAt(b, { x: 125, y: b.edge + 8 })).toBe(betAt(b, { x: 125, y: b.edge - 3 }));
+    // Portrait is unchanged (its dozen boxes are on the far side).
+    const p = buildBoard('european', 'portrait');
+    expect(betAt(p, { x: 80, y: 100 })).toBe('dozen:1');
+  });
+  it('triple zero: the top of the zero cells is the trio, away from the splits', () => {
+    const p = buildBoard('triple-zero', 'portrait');
+    for (const x of [150, 234, 318]) expect(betAt(p, { x, y: 3 })).toBe('trio:0-00-000');
+    expect(betAt(p, { x: 234, y: 8 })).toBe('straight:000');
+    expect(betAt(p, { x: 192, y: 3 })).toBe('split:0-000');
+    expect(betAt(p, { x: 276, y: 3 })).toBe('split:00-000');
+    const l = buildBoard('triple-zero', 'landscape');
+    expect(betAt(l, { x: 3, y: 84 })).toBe('trio:0-00-000');
+    expect(betAt(l, { x: 3, y: 140 })).toBe('trio:0-00-000');
+    expect(betAt(l, { x: 3, y: 112 })).toBe('split:0-000');
+    expect(betAt(l, { x: 8, y: 84 })).toBe('straight:000');
+    // Other wheels have no such trio.
+    expect(betAt(buildBoard('american', 'portrait'), { x: 150, y: 3 })).toBe('straight:0');
+  });
+  it('lock Corner: far side of number 1 gives the true corner, the zero side the basket', () => {
+    for (const w of WHEELS) {
+      const p = buildBoard(w, 'portrait');
+      expect(betNearest(p, { x: 116, y: 85 }, 'corner')).toBe('corner:1-2-4-5');
+      expect(betNearest(p, { x: 125, y: 82 }, 'corner')).toBe('corner:1-2-4-5');
+      expect(betNearest(p, { x: 125, y: 56 }, 'corner')).toBe('basket');
+      const l = buildBoard(w, 'landscape');
+      expect(betNearest(l, { x: 90, y: 160 }, 'corner')).toBe('corner:1-2-4-5');
+      expect(betNearest(l, { x: 60, y: 154 }, 'corner')).toBe('basket');
+    }
+  });
+});

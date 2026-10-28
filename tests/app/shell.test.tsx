@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STORE_NAMES, type Backend } from '@core';
+import { STORE_DEFS, STORE_NAMES, type Backend } from '@core';
+import type { LayoutRecord } from '@core/contracts/layout';
 import { clearToasts } from '@core/ui';
 import { isCurrent } from '@app/components/Nav';
 import { goBack, parentOf } from '@app/router';
@@ -133,8 +134,97 @@ describe('export / import (definitions only)', () => {
     expect(exported).not.toHaveProperty('runs');
     const text = JSON.stringify(exported);
     const b = createMemoryRepo();
-    expect(await b.importDefinitions(parseAllData(text))).toEqual({ definitions: 1 });
-    expect(await b.importDefinitions(parseAllData(text))).toEqual({ definitions: 0 });
+    expect(await b.importDefinitions(parseAllData(text))).toEqual({ definitions: 1, layouts: 0 });
+    expect(await b.importDefinitions(parseAllData(text))).toEqual({ definitions: 0, layouts: 0 });
+  });
+  it.each([
+    ['memory', () => createMemoryRepo({ layouts: [lay('a'), lay('b')] })],
+    ['backend', () => seededBackendRepo()],
+  ] as const)('carries layouts additively (%s repo)', async (_n, make) => {
+    const a = make();
+    const exported = await a.exportDefinitions();
+    expect(exported.layouts?.map((l) => l.id).sort()).toEqual(['a', 'b']);
+    expect(exported.v).toBe(1);
+    const text = JSON.stringify(exported);
+    const parsed = parseAllData(text);
+    expect(parsed.layouts).toHaveLength(2);
+    const b =
+      _n === 'memory'
+        ? createMemoryRepo({ layouts: [lay('a')] })
+        : createBackendRepo(strictBackend());
+    const first = await b.importDefinitions(parsed);
+    expect(first.layouts).toBe(_n === 'memory' ? 1 : 2);
+    expect(await b.importDefinitions(parsed)).toEqual({ definitions: 0, layouts: 0 });
+    await b.deleteAll();
+    expect((await b.exportDefinitions()).layouts).toEqual([]);
+  });
+  it('imports an old export with no layouts field', async () => {
+    const old = JSON.stringify({
+      format: 'spinner-definitions',
+      v: 1,
+      exportedAt: '2025-01-01T00:00:00Z',
+      settings: {},
+      definitions: [def('x', 'X', '2026-01-01')],
+    });
+    const parsed = parseAllData(old);
+    expect(parsed.layouts).toEqual([]);
+    expect(await createMemoryRepo().importDefinitions(parsed)).toEqual({
+      definitions: 1,
+      layouts: 0,
+    });
+    expect(await createBackendRepo(strictBackend()).importDefinitions(parsed)).toEqual({
+      definitions: 1,
+      layouts: 0,
+    });
+  });
+  it('dedupes repeated ids inside one file (memory and backend)', async () => {
+    const d = def('x', 'X', '2026-01-01');
+    const file = parseAllData(
+      JSON.stringify({
+        format: 'spinner-definitions',
+        v: 1,
+        definitions: [d, d],
+        layouts: [lay('a'), lay('a'), lay('b')],
+      }),
+    );
+    for (const repo of [createMemoryRepo(), createBackendRepo(strictBackend())]) {
+      expect(await repo.importDefinitions(file)).toEqual({ definitions: 1, layouts: 2 });
+      const out = await repo.exportDefinitions();
+      expect(out.definitions).toHaveLength(1);
+      expect(out.layouts).toHaveLength(2);
+    }
+  });
+  it('skips entries that are not objects with a string id', async () => {
+    const parsed = parseAllData(
+      JSON.stringify({
+        format: 'spinner-definitions',
+        v: 1,
+        definitions: [null, 5, 'x', {}, { id: 3 }, def('ok', 'Ok', '2026-01-01')],
+        layouts: [null, [], { id: null }, lay('good')],
+      }),
+    );
+    expect(parsed.definitions.map((x) => x.id)).toEqual(['ok']);
+    expect(parsed.layouts?.map((x) => x.id)).toEqual(['good']);
+    expect(await createBackendRepo(strictBackend()).importDefinitions(parsed)).toEqual({
+      definitions: 1,
+      layouts: 1,
+    });
+  });
+  it('ignores a non-array layouts field', () => {
+    const t = '{"format":"spinner-definitions","v":1,"layouts":{"a":1}}';
+    expect(parseAllData(t).layouts).toEqual([]);
+  });
+  it('derives keyOf from STORE_DEFS for every store', () => {
+    const rec = { id: 'i', runId: 'r', firstChunk: 3, key: 'k' };
+    for (const name of STORE_NAMES) {
+      const kp = STORE_DEFS[name].keyPath;
+      const want = Array.isArray(kp)
+        ? kp.map((k) => (rec as Record<string, unknown>)[k])
+        : (rec as Record<string, unknown>)[kp];
+      expect(keyOf(name, rec)).toEqual(want);
+    }
+    expect(keyOf('layouts', rec)).toBe('i');
+    expect(keyOf('runParts', rec)).toEqual(['r', 3]);
   });
   it('rejects foreign files with readable errors', () => {
     expect(() => parseAllData('nope')).toThrow(ImportError);
@@ -142,6 +232,34 @@ describe('export / import (definitions only)', () => {
     expect(() => parseAllData('{"format":"spinner-definitions","v":2}')).toThrow(/newer/);
   });
 });
+
+function lay(id: string): LayoutRecord {
+  return {
+    v: 1,
+    id,
+    layout: {
+      schema: 1,
+      id,
+      name: id,
+      game: 'roulette',
+      variant: 'european',
+      spots: [{ bet: 'red', chips: 1 }],
+    },
+    hash: 'h',
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+    origin: 'user',
+  };
+}
+
+function seededBackendRepo() {
+  const be = strictBackend();
+  void be.tx(['layouts'], 'readwrite', (t) => {
+    t.put('layouts', lay('a'));
+    t.put('layouts', lay('b'));
+  });
+  return createBackendRepo(be);
+}
 
 /** A backend like core/store's that enforces each store's keyPath, as IndexedDB does. */
 function strictBackend(): Backend & { dump(): Record<string, unknown[]> } {
@@ -202,6 +320,7 @@ describe('backend repo', () => {
       t.put('samples', { runId: 'r' });
       t.put('groups', { id: 'g' });
       t.put('settings', { key: 'theme', value: 'dark' });
+      t.put('layouts', { id: 'l' });
     });
     await createBackendRepo(be).deleteAll();
     for (const [store, recs] of Object.entries(be.dump())) expect(recs, store).toEqual([]);

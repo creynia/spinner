@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "id": "james-bond",
+  "name": "James Bond",
+  "game": "roulette",
+  "variant": "european",
+  "spots": [
+    { "bet": "high", "chips": 14 },
+    { "bet": "sixline:13-14-15-16-17-18", "chips": 5 },
+    { "bet": "straight:0", "chips": 1 }
+  ]
+}

@@ -93,6 +93,20 @@ describe('Sheet', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();
   });
+  it('only the topmost of nested sheets handles Escape', () => {
+    const outer = vi.fn();
+    const inner = vi.fn();
+    render(
+      <Sheet open title="Outer" onClose={outer}>
+        <Sheet open title="Inner" onClose={inner}>
+          <button type="button">deep</button>
+        </Sheet>
+      </Sheet>,
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(outer).not.toHaveBeenCalled();
+  });
   it('renders nothing when closed', () => {
     const { container } = render(<Sheet open={false} title="x" onClose={() => {}} />);
     expect(container.querySelector('[role=dialog]')).toBeNull();

@@ -1,5 +1,6 @@
 // Library and run records over a `Backend` (harness-data-analysis.md §9.1, §10.2 step 7).
 import type { DefinitionRecord, ExperimentGroup, StrategyRecord } from '../contracts/experiment';
+import type { LayoutRecord } from '../contracts/layout';
 import type { RunData, RunMeta } from '../contracts/run';
 import { newRunId } from '../experiment';
 import type { Backend } from './backend';
@@ -35,6 +36,11 @@ export interface Repo {
   deleteRun(runId: string): Promise<void>;
   /** §10.2 step 7. Same runId and digest: `exists`; same runId, other digest: a new suffix. */
   importRun(data: RunData, opts?: { origin?: DefinitionRecord['origin'] }): Promise<ImportResult>;
+  /** Newest first (`byUpdated`). */
+  listLayouts(): Promise<LayoutRecord[]>;
+  getLayout(id: string): Promise<LayoutRecord | undefined>;
+  putLayout(rec: LayoutRecord): Promise<void>;
+  deleteLayout(id: string): Promise<void>;
   getSetting<T>(key: string): Promise<T | undefined>;
   setSetting(key: string, value: unknown): Promise<void>;
 }
@@ -62,6 +68,10 @@ export function createRepo(backend: Backend): Repo {
       (await backend.getAll<ExperimentGroup>('groups', 'byUpdated')).reverse(),
     putGroup: (g) => putOne('groups', g),
     deleteGroup: (id) => delOne('groups', id),
+    listLayouts: async () => (await backend.getAll<LayoutRecord>('layouts', 'byUpdated')).reverse(),
+    getLayout: (id) => backend.get('layouts', id),
+    putLayout: (rec) => putOne('layouts', rec),
+    deleteLayout: (id) => delOne('layouts', id),
     listRuns: async () => (await backend.getAll<RunMeta>('runs')).sort(newestFirst),
     listRunsOfDefinition: async (definitionId) =>
       (

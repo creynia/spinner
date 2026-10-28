@@ -3,8 +3,9 @@
 // backend; until it lands, or when storage is unavailable, an in-memory repo takes over and
 // `storageStatus` says so (the StorageBanner reads it).
 import type { DefinitionRecord } from '@core/contracts/experiment';
+import type { LayoutRecord } from '@core/contracts/layout';
 import type { RunMeta } from '@core/contracts/run';
-import { openStore, STORE_NAMES, type Backend, type StoreName } from '@core';
+import { openStore, STORE_DEFS, STORE_NAMES, type Backend, type StoreName } from '@core';
 import { createStore } from '../state/store';
 
 export interface StorageUsage {
@@ -24,6 +25,8 @@ export interface AllData {
   exportedAt: string;
   settings: Record<string, unknown>;
   definitions: DefinitionRecord[];
+  /** Optional and additive (layouts.md §8): old files have none, older builds ignore it. */
+  layouts?: LayoutRecord[];
 }
 
 /** Settings are one `{ key, value }` record per setting (core/store `settings`, keyPath `key`). */
@@ -35,8 +38,8 @@ export interface Repo {
   getSetting(key: string): Promise<unknown>;
   setSetting(key: string, value: unknown): Promise<void>;
   exportDefinitions(): Promise<AllData>;
-  importDefinitions(data: AllData): Promise<{ definitions: number }>;
-  /** Clears every store: definitions, strategies, runs and their parts, groups, settings. */
+  importDefinitions(data: AllData): Promise<{ definitions: number; layouts: number }>;
+  /** Clears every store: definitions, layouts, strategies, runs and their parts, groups, settings. */
   deleteAll(): Promise<void>;
 }
 
@@ -54,6 +57,18 @@ export function setStorageState(state: StorageStatus['state']): void {
 export function dismissStorageBanner(): void {
   storageStatus.update((s) => ({ ...s, dismissed: true }));
 }
+
+/** Records whose id is not yet in `seen`; the first of a repeated id wins. Mutates `seen`. */
+function freshById<T extends { id: string }>(recs: readonly T[], seen: Set<string>): T[] {
+  return recs.filter((x) => {
+    if (seen.has(x.id)) return false;
+    seen.add(x.id);
+    return true;
+  });
+}
+
+const hasStringId = (x: unknown): boolean =>
+  !!x && typeof x === 'object' && typeof (x as { id?: unknown }).id === 'string';
 
 export class ImportError extends Error {}
 
@@ -75,7 +90,8 @@ export function parseAllData(text: string): AllData {
     v: 1,
     exportedAt: typeof o.exportedAt === 'string' ? o.exportedAt : '',
     settings: o.settings && typeof o.settings === 'object' ? o.settings : {},
-    definitions: Array.isArray(o.definitions) ? o.definitions : [],
+    definitions: Array.isArray(o.definitions) ? o.definitions.filter(hasStringId) : [],
+    layouts: Array.isArray(o.layouts) ? o.layouts.filter(hasStringId) : [],
   };
 }
 
@@ -86,10 +102,12 @@ const newestFirst = (a: RunMeta, b: RunMeta): number =>
 export function createMemoryRepo(seed?: {
   definitions?: DefinitionRecord[];
   runs?: RunMeta[];
+  layouts?: LayoutRecord[];
 }): Repo {
   const settings = new Map<string, unknown>();
   let definitions = [...(seed?.definitions ?? [])];
   let runs = [...(seed?.runs ?? [])];
+  let layouts = [...(seed?.layouts ?? [])];
   return {
     kind: 'memory',
     listRuns: () => Promise.resolve([...runs].sort(newestFirst)),
@@ -106,15 +124,20 @@ export function createMemoryRepo(seed?: {
         exportedAt: new Date().toISOString(),
         settings: Object.fromEntries(settings),
         definitions: [...definitions],
+        layouts: [...layouts],
       }),
     importDefinitions: (d) => {
       const have = new Set(definitions.map((x) => x.id));
-      const fresh = d.definitions.filter((x) => !have.has(x.id));
+      const fresh = freshById(d.definitions, have);
       definitions = [...definitions, ...fresh];
-      return Promise.resolve({ definitions: fresh.length });
+      const haveL = new Set(layouts.map((x) => x.id));
+      const freshL = freshById(d.layouts ?? [], haveL);
+      layouts = [...layouts, ...freshL];
+      return Promise.resolve({ definitions: fresh.length, layouts: freshL.length });
     },
     deleteAll: () => {
       definitions = [];
+      layouts = [];
       runs = [];
       settings.clear();
       return Promise.resolve();
@@ -122,20 +145,10 @@ export function createMemoryRepo(seed?: {
   };
 }
 
-/** Key of a record in each store (mirrors core/store `STORE_DEFS` keyPaths). */
+/** Key of a record in each store, derived from core/store `STORE_DEFS` keyPaths. */
 export function keyOf(store: StoreName, rec: Record<string, unknown>): IDBValidKey {
-  switch (store) {
-    case 'runParts':
-      return [rec.runId as string, rec.firstChunk as number];
-    case 'settings':
-      return rec.key as string;
-    case 'definitions':
-    case 'strategies':
-    case 'groups':
-      return rec.id as string;
-    default:
-      return rec.runId as string;
-  }
+  const kp = STORE_DEFS[store].keyPath;
+  return (Array.isArray(kp) ? kp.map((k) => rec[k]) : rec[kp]) as IDBValidKey;
 }
 
 /** Repo over a `core/store` backend (IndexedDB, or its own memory fallback). */
@@ -162,17 +175,21 @@ export function createBackendRepo(backend: Backend): Repo {
         exportedAt: new Date().toISOString(),
         settings,
         definitions: await backend.getAll<DefinitionRecord>('definitions'),
+        layouts: await backend.getAll<LayoutRecord>('layouts'),
       };
     },
     async importDefinitions(d) {
       const have = new Set(
         (await backend.getAll<DefinitionRecord>('definitions')).map((x) => x.id),
       );
-      const fresh = d.definitions.filter((x) => !have.has(x.id));
-      await backend.tx(['definitions'], 'readwrite', (t) => {
+      const fresh = freshById(d.definitions, have);
+      const haveL = new Set((await backend.getAll<LayoutRecord>('layouts')).map((x) => x.id));
+      const freshL = freshById(d.layouts ?? [], haveL);
+      await backend.tx(['definitions', 'layouts'], 'readwrite', (t) => {
         fresh.forEach((x) => t.put('definitions', x));
+        freshL.forEach((x) => t.put('layouts', x));
       });
-      return { definitions: fresh.length };
+      return { definitions: fresh.length, layouts: freshL.length };
     },
     async deleteAll() {
       const all = await Promise.all(
