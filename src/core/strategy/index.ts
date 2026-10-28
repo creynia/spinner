@@ -62,10 +62,7 @@ export const CORE_EVENT_NAMES = [
   'prog-done',
 ] as const;
 
-/** `ctx` null = structural checks only; with `ctx` = full checks (strategy.md §9). */
-export function validateStrategy(_def: unknown, _ctx: CompileContext | null): Diagnostic[] {
-  throw new Error('TODO(core-strategy)');
-}
+export { validateStrategy, noExitWarning, type ValidationContext } from './validate';
 
 /** Throws `StrategyCompileError` if `validateStrategy` reports any error. */
 export function compileStrategy(_def: StrategyDefinition, _ctx: CompileContext): StrategyRuntime {

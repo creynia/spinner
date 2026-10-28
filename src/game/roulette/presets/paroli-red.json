@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "paroli-red",
+  "name": "Paroli: red",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "Reverse Martingale: double after a win, take the profit after three wins in a row, reset after a loss.",
+  "progressions": {
+    "p": {
+      "kind": "paroli",
+      "base": {
+        "units": 1
+      },
+      "maxSteps": 3,
+      "onCap": "reset",
+      "track": "red"
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "prog": "p"
+          }
+        }
+      ],
+      "rules": []
+    }
+  ]
+}

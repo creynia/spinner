@@ -90,21 +90,34 @@ export interface PlacedBet {
   chips: readonly SpotChip[];
 }
 
-export interface TargetCounters {
+/** A running hit count over the last `n` spins, registered lazily by `count:<n>:<target>`. */
+export interface WindowCounter {
+  /** Canonical target (`red`, `zero`, `split:17-20`, ...). */
   target: string;
+  n: number;
+  /** 1 for every pocket the target covers, by PocketIndex. */
   mask: Uint8Array;
-  lastHit: number;
-  streak: number;
-  hits: number;
-  windows: { n: number; count: number }[];
+  count: number;
 }
+/**
+ * Spin history (game.md §9.2). Everything is exact: per-pocket hit counts and last-seen indices
+ * answer `hits`/`spinsSince`/`zeroCount` for any target; the 1024 ring answers `streak` and
+ * backfills `count` windows; only windows need registering.
+ */
 export interface SpinHistory {
-  /** Last 1024 pocket indices. */
+  /** Last 1024 pocket indices (slot = spin number mod 1024). */
   ring: Uint8Array;
   /** Spins recorded (may exceed the ring length). */
   len: number;
-  /** Registered at compile time. */
-  targets: TargetCounters[];
+  /** Hits per pocket this session. */
+  hitsByPocket: Int32Array;
+  /** Spin number (0-based) of each pocket's last hit, -1 if never. */
+  lastSeen: Int32Array;
+  /** Length of the current run of equal colour (zeros are green); 0 before the first spin. */
+  colorRun: number;
+  /** Colour code of the last spin (0 green, 1 red, 2 black). */
+  lastColor: number;
+  windows: WindowCounter[];
 }
 
 export interface RouletteState {

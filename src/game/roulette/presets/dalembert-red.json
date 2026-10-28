@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "dalembert-red",
+  "name": "d'Alembert: red",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "One unit more after a loss, one less after a win (never below one); capped at 20 units.",
+  "progressions": {
+    "d": {
+      "kind": "dalembert",
+      "base": {
+        "units": 1
+      },
+      "maxSteps": 20,
+      "onCap": "stay",
+      "track": "red"
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "prog": "d"
+          }
+        }
+      ],
+      "rules": []
+    }
+  ]
+}

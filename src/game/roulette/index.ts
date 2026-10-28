@@ -14,7 +14,7 @@ import {
   visible,
 } from './engine';
 import { betEdge, expectedLossPerRound, layoutMoments, variancePerRound } from './ev';
-import { compileFact, rouletteFacts } from './facts';
+import { compileFact, compileHistory, rouletteFacts } from './facts';
 import { catalog, parseBet } from './bets';
 import { limits } from './limits';
 import { pace } from './pace';
@@ -52,6 +52,7 @@ export const roulette: GamePlugin<
   ev: { expectedLossPerRound, variancePerRound, layoutMoments, betEdge },
   facts: rouletteFacts,
   compileFact,
+  compileHistory,
   force,
   serialize,
   deserialize,
@@ -77,9 +78,10 @@ export {
   RULE_PRESET_IDS,
   DEFAULT_RULE_PRESET,
   ROULETTE_PRESETS,
+  RulesError,
   resolveRules,
 } from './rules';
 export { RED_NUMBERS, SECTORS, WHEEL_ORDER, pocketLabels, wheelSpec } from './pockets';
-export { rouletteFacts } from './facts';
+export { rouletteFacts, historyTarget } from './facts';
 export { STRATEGY_PRESETS, STRATEGY_PRESET_IDS, type StrategyPresetId } from './presets';
 export { netVector } from './engine';
