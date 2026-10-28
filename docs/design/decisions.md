@@ -1,0 +1,72 @@
+# Decisions (authoritative)
+
+This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. When a design doc disagrees with this file, this file wins. Changes are made only by the orchestrator.
+
+## Kickoff answers (2026-10-28)
+
+| # | Topic | Decision |
+|---|---|---|
+| 1 | Pool size | **10** Sonnet agents at once (raised from 4 by the user on 2026-10-28; implementers, reviewers, debuggers share it). The VM (4 cores, 16 GB, no swap) is guarded by a **resource baton**: `/home/user/bin/res cpu|browser <agent> -- <cmd>` (2 cpu slots, 1 browser slot, ≥ 3 GB free memory to start). Vitest and Playwright run with at most 2 workers. |
+| 2 | Game rules | **European single-zero is the default.** Presets: `european` (default), `american` (double zero), `triple-zero` (0, 00, 000). Rule flags: `laPartage` and `enPrison` (even-money bets only, single-zero wheels; mutually exclusive). **All bet families are simulated:** inside (straight, split, street, corner, six-line, basket/top-line per wheel), outside (red/black, odd/even, low/high, dozens, columns), and **call/neighbour bets** (voisins du zéro, tiers du cylindre, orphelins, jeu zéro, neighbours `n±k`) on single-zero wheels, expanded into their component chips. |
+| 3 | Table limits | **High-limit table:** $25 minimum, $5,000 maximum. Classes: *outside* min $25 / max $5,000 per bet; *inside* min $25 total across inside bets per spin, min $1 per inside chip, max $500 per straight-up, with per-bet maxima scaled so the max payout does not exceed 35 × $500 = $17,500 (split $1,000, street $1,500, corner $2,000, six-line $3,000, basket by its payout); *call* bets are limited by their component chips. Limits are rule fields so users can override them. |
+| 4 | Pace | Default **40 spins/hour** (live wheel). Pace preset `electronic` at **100 spins/hour**. Definitions may override. |
+| 5 | Default run | **10,000 sessions × 500 spins.** Perf budget device: **mid-range Android** (Pixel 6a class): < 90 s; 4-core laptop < 20 s; CI uses a generous bound. |
+| 6 | Merge | The orchestrator **may merge** PRs into `main` once reviewed by a pool reviewer (not the author) and CI is green on the latest head. |
+| 7 | Repo | Public, **MIT**. Default branch `main` and Pages source "GitHub Actions" (both set by the user); all work happens on `claude/spinner-*` branches and lands through PRs into `main`. |
+| 8 | Gallery | **Yes.** Curated result bundles committed under `gallery/`, listed by a build-time `gallery/index.json`, openable read-only at `#/gallery`. ≤ 2 MB per bundle, ≤ 20 MB folder, enforced in CI. |
+| 9 | Single-file build | **No** in v1 (chip). |
+| 10 | Presets day one | Full classic set: flat, Martingale, Grand Martingale, Fibonacci, d'Alembert, Labouchere, Paroli, 1-3-2-6, Oscar's Grind, James Bond, dozens progression (two dozens, Martingale-style), and the §3.6 example `red-mart-then-flat`. |
+| 11 | Disclaimer | **Settings/About only** (and the README). No line on Home, none on Analyze verdicts. Wording: "Every roulette bet has a house edge; no betting system changes it. This is a simulation for understanding risk, not advice. If gambling is a problem for you, seek help (e.g. a national gambling helpline)." |
+
+## Process decisions
+
+- Prior art: creynia/crappy, creynia/baccaratton and creynia/holdumb are cloned read-only at `/home/user/creynia/<repo>`. They share one stack (preact ^10.29.8, vite ^8.3.4, typescript ~6.0.3, vitest ^5.0.4, @playwright/test 1.56.1, eslint ^10); spinner matches it unless a design doc gives a reason.
+- A fifth spike, the **shared-pieces audit** (`docs/design/shared-core.md`), runs now rather than when the next app starts, because all three sibling apps already exist.
+- Spikes: game, strategy, harness-data-analysis, architecture (PLAYBOOK §13.2), output under `docs/design/`.
+- Money is integer cents; `unit` defaults to 2500 ($25) to match the table minimum.
+
+## Later user decisions
+
+- **Shared core stays in this repo** as the `src/core` module (2026-10-28). Moving it to an external `casino-lab-core` repo and refactoring crappy, baccaratton and holdumb onto it is a **chip**, done only when the user asks. `src/core` is still kept extractable (no imports from outside itself, own README and barrel), per `shared-core.md`. Configs and build tooling stay where `architecture.md` puts them; moving them into `src/core/tooling/` is part of that chip.
+- **Gallery bundles stay at ≤ 2 MB each, ≤ 20 MB for the folder.** Bundles reach that size with the gallery trim in `harness-data-analysis.md` (all summary rows, 48 checkpoints, ≤ 6 samples).
+
+## Reconciliation (2026-10-28)
+
+`docs/design/reconciliation.md` is the Phase 2 review: 50 contradictions (23 blocking, 27 minor) and the independent exact-fraction re-derivation (575 numbers, 570 matched; the 5 mismatches are fixed in game.md §3.3 and harness-data-analysis.md §4). **Every "Recommended resolution" in its §1 tables is adopted** and overrides the design docs, with the clarifications below. Where a design doc still says otherwise, the resolution wins; WP0 copies contracts with the resolutions applied.
+
+### Contract set (WP0 freezes these)
+
+`src/core/contracts/{game,facts,strategy,strategy-trace,experiment,run,protocol,analysis,version}.ts` plus `src/core/ui/game-ui.ts`. `contracts/*` import nothing outside `contracts/`. `src/core/version.ts` does not exist; `CORE_VERSION` lives in `contracts/version.ts` (R5).
+
+### `contracts/game.ts` (key points)
+
+- `createState({ rules, rng, bankroll })`; the harness owns seeding and hands the plugin a ready `Rng` (G1). Roulette draws exactly one `rng.below(pockets)` per round, bets or not.
+- `Rng` (`next, below, float53, snapshot`) and a structural `Fraction { num: bigint; den: bigint }` are declared in contracts; `core/rng` and `core/money` implement them (G2, G14).
+- The strategy reads the game through `visible(state)` and `compileFact(ref, rules)` (+ optional `compileHistory`); no `observe()`/`GameFacts` in the contract (G3).
+- `limits(betOrClass, rules, view?)`, `pace(rules)`, `ev.{expectedLossPerRound(view), variancePerRound(view), layoutMoments(layout, rules), betEdge(bet, rules)}` with **expected loss positive in cents** and `edge` a negative EV fraction (G4, G8, G9). `NormalizeContext.plugin` is the full `GamePlugin`.
+- No `ui` on the plugin; `GameUi` lives in `core/ui/game-ui.ts`: `TableView({rules, layout, pending?, lastOutcome, highlight})`, `BetPicker({rules, value, onPick})`, `OutcomeGlyph({outcome})` (G5).
+- `BetCatalogEntry.limitClass` (`'inside'|'outside'|'call'|string`) and `category` = family (G6). `Reconciliation.adjusted: {entry, to, reason}[]` is in v1, counted in the summary and shown in the trace (G7).
+- Optional `force?(state, script)` for tests (G12). In-round decision policies (UTH), `setPolicy`, `exposure()`, counters, `'moves'`, `commission`: **not in v1**; additive later (G10, G11). strategy.md's `act` effect stays.
+
+### Facts and events
+
+- `bet-won` / `bet-lost` / `bet-push` are derived by the core from resolutions (profit sign); the roulette plugin does not emit them (F1). Roulette events: `spin`, `zero`, `partage`, `imprisoned`, `released`, `prison-lost`.
+- Fact ref grammar: greedy parameter last, `count:<n>:<target>`, with `FactParam.type: 'target'` (bet id or declared extras `zero`, `green`) (F2). strategy.md's `{fact: …}` streak form (F3).
+
+### Strategy and presets
+
+- The day-one preset set is game.md §11 (decisions #10), with `one-three-two-six-red` (S1). strategy.md's roulette strategies are golden fixtures under `tests/fixtures/strategy/roulette/`, prefixed `golden-` where an id collides; its literal $5 `red-mart-then-flat` is a fixture only (S2). Golden convention: seed 20261028, session 0, bankroll $5,000; traces in `src/game/roulette/__fixtures__`.
+- `stopReasons` sorted (S3). Reserved stop reasons `stop-win`, `stop-loss`, `bust`, `rounds`, `error` → `E_RESERVED_REASON` (S8). Names `Diagnostic`, `TraceWindow`, `SessionTrace = TraceWindow[]` (S4). R19/R23 amounts fixed per S5.
+
+### Experiment, run, store
+
+- `game.rules` is `string | RulesRef { preset, overrides }`, normalized (E1); `normalizeDefinition` calls `normalizeStrategy` and the definitionId vector is re-pinned by core-store (E2, E3).
+- Worker protocol in `contracts/protocol.ts` (R1); the harness writes through a `RunSink` in `contracts/run.ts` and never imports the store (R2); `resultsDigest` and the bundle codec live in `core/store` (R3).
+- Summary columns: the harness doc's names plus `adjusted` (u16) and `anomalies` (u16); the playbook's `endedRound` is `roundsPlayed` (R4). Ten IndexedDB stores (R6).
+
+### Analysis, gallery, tooling
+
+- Quantiles: type 7 (linear interpolation) everywhere; the "median session" for Watch is rank `floor((N−1)/2)` and docs/metrics.md says so (A1).
+- Gallery: harness-data-analysis.md's `GalleryIndexV1` with architecture.md's file naming and checks; infra owns the plugin (P1). Bundle size is measured in core-store with 12 bet categories; trim further if needed to stay ≤ 2 MB (A2).
+- Version pins: architecture.md §1.1 (exact pins; Playwright 1.63.0 because it matches the preinstalled Chromium 1243) (P8). Perf env `PERF_BUDGET_MS`; full Monte Carlo flag `FULL=1` (P6, P7). WP ownership per architecture.md §12.2 (P3). WP0 includes real `money`, `rng` and `coin` (P4).
+- WP0 also makes Vitest and Playwright worker counts settable from env (`VITEST_MAX_WORKERS`, `PW_WORKERS`, default 2) for the resource baton.
