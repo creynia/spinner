@@ -242,7 +242,7 @@ export function parseBet(input: string): BetId | null {
   if (typeof input !== 'string') return null;
   let s = input.trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
   if (s.length === 0 || s.length > 80) return null;
-  s = ALIASES[s] ?? s;
+  if (Object.hasOwn(ALIASES, s)) s = ALIASES[s]!;
   if (isPocketLabel(s)) return `straight:${s}`;
   if (KNOWN.has(s)) return s;
   const parts = s.split(':');

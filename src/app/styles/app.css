@@ -1,4 +1,4 @@
-@import './kit.css';
+@import '../../core/ui/kit/kit.css';
 /* App shell layout (architecture.md §6.1): TopBar + bottom TabBar under 768px, NavRail from 768px. */
 *,
 *::before,
@@ -187,6 +187,14 @@ a {
   color: var(--muted);
 }
 
+.nav-link svg {
+  flex: 0 0 auto;
+}
+@media (max-width: 767px) {
+  .topbar-brand.off-root {
+    display: none;
+  }
+}
 .nav-link {
   display: flex;
   flex-direction: column;

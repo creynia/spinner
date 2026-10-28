@@ -125,8 +125,10 @@ export function reconcile(
     }
     // Step 5: maximum per spot.
     let cap: number;
-    if (w.outside) cap = lim.outside.max;
-    else {
+    if (w.outside) {
+      // amounts already on this id in the window count against the maximum (as inside spots do)
+      cap = lim.outside.max - (state.layout.find((b) => b.bet === w.id)?.amount ?? 0);
+    } else {
       let piece = Infinity;
       for (const [spot, weight] of w.comps) {
         const max = lim.inside.max[familyOf(spot) as InsideSpot];

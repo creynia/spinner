@@ -137,6 +137,14 @@ describe('reconcile examples (game.md §8.1)', () => {
     for (const a of r.actions) expect(roulette.apply(s, a).ok).toBe(true);
     expect(roulette.layoutOf(s).map((x) => x.bet)).toEqual(['prison:red', 'red', 'black']);
   });
+  it('a pre-filled window counts against the outside maximum', () => {
+    const s = mk(EU, 2_000_000);
+    roulette.apply(s, place('red', 400_000));
+    const r = roulette.reconcile(s, [e('red', 500_000)]);
+    expect(r.actions).toEqual([place('red', 100_000), confirm]);
+    expect(r.adjusted.map((x) => x.reason)).toEqual(['clamped']);
+    for (const a of r.actions) expect(roulette.apply(s, a).ok).toBe(true);
+  });
   it('rejects unknown, prison and invalid entries; zero is skipped', () => {
     const bad = [e('nope', 2500), e('prison:red', 2500), e('red', Number.NaN), e('black', -1)];
     const zero = e('odd', 0);
@@ -217,6 +225,16 @@ describe('reconcile property: never emits an action apply rejects', () => {
         return { bet, amount };
       });
       const s = mk(rules, bankroll);
+      let prefilled = 0;
+      if (rng.below(4) === 0) {
+        // a pre-filled window: some legal entries are already placed
+        for (const pre of roulette.reconcile(s, desired.slice(0, 2)).actions) {
+          if (pre.type === 'place' && rng.below(2)) {
+            roulette.apply(s, pre);
+            prefilled += pre.amount;
+          }
+        }
+      }
       const r = roulette.reconcile(s, desired);
       // placed amounts never exceed what was asked for that id (duplicates add up)
       const asked = new Map<string, number>();
@@ -236,7 +254,8 @@ describe('reconcile property: never emits an action apply rejects', () => {
         }
       }
       expect(s.confirmed).toBe(true);
-      expect(s.bankroll).toBe(bankroll - spent);
+      expect(s.bankroll).toBe(bankroll - spent - prefilled);
+      if (prefilled > 0) continue; // idempotence is about a fresh window
       // idempotent on its own output
       const again = roulette.reconcile(
         mk(rules, bankroll),

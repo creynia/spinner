@@ -392,3 +392,43 @@ describe('feeding and arming (strategy.md §7.1, §7.2)', () => {
     expect(r.trace.prog.p!.events).toEqual(['cap']);
   });
 });
+
+describe('manual feeds are even money (strategy.md §7.4)', () => {
+  const manual = (spec: Record<string, unknown>, cmds: ('win' | 'loss' | 'push')[]): number[] => {
+    const d = new Driver({
+      ...def({ track: 'manual', ...spec }),
+      vars: { c: 0 },
+      stages: [
+        {
+          id: 's',
+          layout: [{ bet: 'a', amount: { prog: 'p' } }],
+          rules: [
+            { when: { cmp: [{ var: 'c' }, '==', 1] }, then: [{ prog: 'p', do: 'win' }] },
+            { when: { cmp: [{ var: 'c' }, '==', 2] }, then: [{ prog: 'p', do: 'loss' }] },
+            { when: { cmp: [{ var: 'c' }, '==', 3] }, then: [{ prog: 'p', do: 'push' }] },
+            { when: { always: true }, then: [{ set: 'c', to: 0 }] },
+          ],
+        },
+      ],
+    });
+    const out: number[] = [];
+    for (const c of cmds) {
+      (d.mem as unknown as { vars: Float64Array }).vars[0] = { win: 1, loss: 2, push: 3 }[c];
+      out.push(d.step().want[0]![1] / U);
+    }
+    return out;
+  };
+  it("a manual loss on oscar's grind is a loss, not a win", () => {
+    // loss: cycle -1 (u stays 1); win at u=1: cycle 0, need 1 -> u stays 1; loss then win then win...
+    expect(manual({ kind: 'oscars-grind' }, ['loss', 'loss', 'win', 'win', 'win'])).toEqual([
+      1, 1, 2, 1, 1,
+    ]);
+    expect(manual({ kind: 'oscars-grind' }, ['push', 'push'])).toEqual([1, 1]);
+  });
+  it('labouchere manual loss appends and win removes', () => {
+    // [1,2,3] -> loss appends 4 -> win [2,3] -> win empties and resets
+    expect(manual({ kind: 'labouchere', line: [1, 2, 3] }, ['loss', 'win', 'win'])).toEqual([
+      5, 5, 4,
+    ]);
+  });
+});

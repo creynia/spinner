@@ -52,6 +52,8 @@ export async function decodeShareLink(
 ): Promise<{ definition: ExperimentDefinition; checksumOk: boolean | null }> {
   const payload = hashParams.get('d');
   if (!payload) throw new DefinitionFormatError('link has no definition');
+  if (!/^[A-Za-z0-9_-]+$/.test(payload))
+    throw new DefinitionFormatError('link damaged: not base64url');
   const kind = payload[0];
   let bytes: Uint8Array;
   try {
@@ -80,7 +82,9 @@ export async function decodeShareLink(
   const h = hashParams.get('h');
   let checksumOk: boolean | null = null;
   if (h && (raw as { schema?: unknown }).schema === DEFINITION_SCHEMA) {
-    checksumOk = (await sha256Hex(canonicalJson(raw as Json))).startsWith(h.toLowerCase());
+    checksumOk = /^[0-9a-f]{12}$/.test(h)
+      ? (await sha256Hex(canonicalJson(raw as Json))).startsWith(h)
+      : false;
   }
   return { definition, checksumOk };
 }
