@@ -1,5 +1,6 @@
-// Sim worker entry (harness-data-analysis.md §5.1). WP0: answers `ping` with `pong` through the
-// harness handler; the batch protocol arrives with core-harness. Owner: core-harness.
+// Sim worker entry (harness-data-analysis.md §5.1): the whole batch protocol (ping, init, batch,
+// simulate, dispose) is `createWorkerHandler` from the harness; results are posted with their
+// buffers transferred, never cloned. Owner: core-harness.
 import type { FromSim, ToSim } from '@core/contracts/protocol';
 import { createWorkerHandler } from '@core/harness';
 import { roulette } from '@game/roulette';
