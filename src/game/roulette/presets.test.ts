@@ -20,7 +20,6 @@ const ctxFor = (wheel: WheelKind): ValidationContext => {
     rules,
     limits: (b, r, v) => roulette.limits(b, r as typeof rules, v as never),
     compileFact: (ref, r) => roulette.compileFact(ref, r as typeof rules),
-    compileHistory: (pr, r) => roulette.compileHistory!(pr, r as typeof rules),
   };
 };
 

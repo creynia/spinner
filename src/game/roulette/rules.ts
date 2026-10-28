@@ -163,7 +163,9 @@ export function resolveRules(p?: string | RulesRef): RouletteRules {
     throw new RulesError('rules/unknown-key', 'wheel (choose a preset instead)');
   const pace = o.pace;
   if (typeof pace === 'string') {
-    const named = (PACE_PRESETS as Record<string, { roundsPerHour: number; label: string }>)[pace];
+    const named = Object.hasOwn(PACE_PRESETS, pace)
+      ? (PACE_PRESETS as Record<string, { roundsPerHour: number; label: string }>)[pace]
+      : undefined;
     if (!named) throw new RulesError('rules/pace', `unknown pace "${pace}"`);
     o.pace = { roundsPerHour: named.roundsPerHour, label: named.label };
   } else if (isObj(pace) && pace.roundsPerHour !== undefined && pace.label === undefined) {
