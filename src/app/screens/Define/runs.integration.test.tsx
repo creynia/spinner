@@ -59,6 +59,9 @@ describe('runs started from Define', () => {
     expect(recent.textContent).toContain('Integration exp');
     expect(recent.textContent).not.toContain('Dry run');
     expect(recent.textContent).not.toContain('Untitled experiment');
+    const defs = screen.getByRole('heading', { name: 'Recent definitions' }).closest('section')!;
+    expect(defs.textContent).toContain('Integration exp');
+    expect(defs.textContent).not.toContain('Dry run');
     home.unmount();
 
     const lib = render(<Library params={{}} query={new URLSearchParams('tab=definitions')} />);
