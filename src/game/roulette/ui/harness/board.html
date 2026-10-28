@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Roulette ChipBoard harness</title>
+    <link rel="stylesheet" href="/src/app/styles/tokens.css" />
+    <link rel="stylesheet" href="/src/app/styles/app.css" />
+    <style>
+      main {
+        padding: 0 var(--gutter);
+        max-width: 1100px;
+        margin-inline: auto;
+      }
+      .wrap {
+        display: grid;
+        gap: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./board-harness.tsx"></script>
+  </body>
+</html>

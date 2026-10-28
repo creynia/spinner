@@ -29,3 +29,8 @@ export function chipsOf(layout: Layout, pending: Layout, wheel: WheelKind): Chip
   walk(pending, true);
   return [...sums.values()];
 }
+
+/** Chips one tap adds or removes: a call bet's or neighbours' pieces, otherwise 1 (layouts.md §4.3). */
+export function stepOf(bet: string): number {
+  return betDef(bet, 'european')?.pieces ?? 1;
+}

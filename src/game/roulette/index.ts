@@ -84,3 +84,4 @@ export { RED_NUMBERS, SECTORS, WHEEL_ORDER, pocketLabels, wheelSpec } from './po
 export { rouletteFacts } from './facts';
 export { STRATEGY_PRESETS, STRATEGY_PRESET_IDS, type StrategyPresetId } from './presets';
 export { netVector } from './engine';
+export { BUILTIN_LAYOUTS } from './layouts';
