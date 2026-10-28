@@ -78,6 +78,7 @@ export {
   RULE_PRESET_IDS,
   DEFAULT_RULE_PRESET,
   ROULETTE_PRESETS,
+  RulesError,
   resolveRules,
 } from './rules';
 export { RED_NUMBERS, SECTORS, WHEEL_ORDER, pocketLabels, wheelSpec } from './pockets';

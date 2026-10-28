@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "labouchere-red",
+  "name": "Labouchere 1-2-3-4: red",
+  "game": "roulette",
+  "unit": 2500,
+  "notes": "Bet first + last of the line; cross both off on a win, append the bet on a loss; a new line when it empties.",
+  "progressions": {
+    "l": {
+      "kind": "labouchere",
+      "line": [1, 2, 3, 4],
+      "base": {
+        "units": 1
+      },
+      "onEmpty": "reset",
+      "track": "red"
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "red",
+          "amount": {
+            "prog": "l"
+          }
+        }
+      ],
+      "rules": []
+    }
+  ]
+}

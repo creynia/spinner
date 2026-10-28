@@ -1,24 +1,5 @@
 // core/strategy: schema, validate, compile, interpret, progressions, trace (owner: core-strategy).
 // WP0 ships throwing stubs with the frozen signatures of strategy.md §2, plus small real data.
-import type {
-  CompileContext,
-  Diagnostic,
-  Observation,
-  StepOutput,
-  StrategyDefinition,
-  StrategyMemory,
-  StrategyRuntime,
-} from '../contracts/strategy';
-import type { TraceWindow } from '../contracts/strategy-trace';
-
-/** Thrown by `compileStrategy` when `validateStrategy` reports any error (strategy.md §2). */
-export class StrategyCompileError extends Error {
-  constructor(readonly diagnostics: readonly Diagnostic[]) {
-    super(`strategy has ${diagnostics.length} diagnostic(s)`);
-    this.name = 'StrategyCompileError';
-  }
-}
-
 /** Progression kinds of the library (strategy.md §7.4), for pickers. */
 export const PROGRESSION_KINDS = [
   'flat',
@@ -62,26 +43,7 @@ export const CORE_EVENT_NAMES = [
   'prog-done',
 ] as const;
 
-/** `ctx` null = structural checks only; with `ctx` = full checks (strategy.md §9). */
-export function validateStrategy(_def: unknown, _ctx: CompileContext | null): Diagnostic[] {
-  throw new Error('TODO(core-strategy)');
-}
-
-/** Throws `StrategyCompileError` if `validateStrategy` reports any error. */
-export function compileStrategy(_def: StrategyDefinition, _ctx: CompileContext): StrategyRuntime {
-  throw new Error('TODO(core-strategy)');
-}
-
-/** Clones memory first; for tests (strategy.md §11.3). */
-export function stepPure(
-  _rt: StrategyRuntime,
-  _mem: StrategyMemory,
-  _obs: Observation,
-): { mem: StrategyMemory; out: StepOutput; trace: TraceWindow | null } {
-  throw new Error('TODO(core-strategy)');
-}
-
-/** Canonical form used by the builder round trip (strategy.md §13.4). */
-export function normalizeStrategy(_def: StrategyDefinition): StrategyDefinition {
-  throw new Error('TODO(core-strategy)');
-}
+export { validateStrategy, noExitWarning, type ValidationContext } from './validate';
+export { compileStrategy, stepPure, strategyAnomalies } from './compile';
+export { normalizeStrategy } from './normalize';
+export { StrategyCompileError } from './errors';

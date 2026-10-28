@@ -72,3 +72,52 @@ export function useRoute(): ParsedHash & { hash: string } {
   }, []);
   return { ...parseHash(hash), hash };
 }
+
+// ---- Back navigation (architecture.md §6.1) ---------------------------------------------------
+
+const TAB_ROOTS = new Set(['/', '/define', '/library', '/more']);
+
+/** Explicit parent of a non-tab route, or null on a tab root (no Back button there). */
+export function parentOf(path: string): string | null {
+  if (TAB_ROOTS.has(path)) return null;
+  const first = path.split('/').filter(Boolean)[0];
+  switch (first) {
+    case 'settings':
+      return path === '/settings' ? '/more' : '/settings';
+    case 'gallery':
+      return path === '/gallery' ? '/more' : '/gallery';
+    case 'import':
+      return '/more';
+    case 'define':
+      return '/library';
+    case 'run':
+    case 'analyze':
+    case 'watch':
+    case 'compare':
+    case 'sweep':
+      return '/';
+    default:
+      return '/';
+  }
+}
+
+/** In-app hash history seen by this page load; back/forward moves along it. */
+const seen: string[] = typeof location === 'undefined' ? [] : [location.hash || '#/'];
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', () => {
+    const h = location.hash || '#/';
+    if (seen.length >= 2 && seen[seen.length - 2] === h) seen.pop();
+    else seen.push(h);
+  });
+}
+
+/** True when the previous history entry is a page of this app (not another site). */
+export function hasInAppHistory(): boolean {
+  return seen.length > 1;
+}
+
+/** Back: history.back() when the previous entry is in-app, else go to the explicit parent. */
+export function goBack(path: string): void {
+  if (hasInAppHistory()) history.back();
+  else navigate(parentOf(path) ?? '/');
+}
