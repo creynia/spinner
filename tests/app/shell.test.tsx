@@ -1,11 +1,17 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/preact';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { STORE_NAMES, type Backend } from '@core';
+import { clearToasts } from '@core/ui';
+import { isCurrent } from '@app/components/Nav';
+import { goBack, parentOf } from '@app/router';
 import type { DefinitionRecord } from '@core/contracts/experiment';
 import type { RunMeta } from '@core/contracts/run';
 import { App } from '@app/App';
 import { createStore, useStore } from '@app/state/store';
 import {
+  createBackendRepo,
   createMemoryRepo,
+  keyOf,
   parseAllData,
   setRepoForTests,
   storageStatus,
@@ -108,28 +114,105 @@ describe('settings service', () => {
     updateSettings({ theme: 'dark', framing: 'per100' });
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(localStorage.getItem('spinner:theme')).toBe('dark');
-    await waitFor(() => expect(repo.getSettings()).resolves.toMatchObject({ framing: 'per100' }));
+    await waitFor(() => expect(repo.getSetting('framing')).resolves.toBe('per100'));
     updateSettings({ theme: 'system' });
     expect(document.documentElement.dataset.theme).toBeUndefined();
     expect(localStorage.getItem('spinner:theme')).toBeNull();
   });
 });
 
-describe('export / import', () => {
-  it('round-trips and skips what is already there', async () => {
+describe('export / import (definitions only)', () => {
+  it('round-trips definitions and skips what is already there', async () => {
     const a = createMemoryRepo({
       definitions: [def('x', 'X', '2026-01-01')],
       runs: [run('r', 'done', '2026-01-01')],
     });
-    const text = JSON.stringify(await a.exportAll());
+    await a.setSetting('theme', 'dark');
+    const exported = await a.exportDefinitions();
+    expect(exported.format).toBe('spinner-definitions');
+    expect(exported).not.toHaveProperty('runs');
+    const text = JSON.stringify(exported);
     const b = createMemoryRepo();
-    expect(await b.importAll(parseAllData(text))).toEqual({ definitions: 1, runs: 1 });
-    expect(await b.importAll(parseAllData(text))).toEqual({ definitions: 0, runs: 0 });
+    expect(await b.importDefinitions(parseAllData(text))).toEqual({ definitions: 1 });
+    expect(await b.importDefinitions(parseAllData(text))).toEqual({ definitions: 0 });
   });
   it('rejects foreign files with readable errors', () => {
     expect(() => parseAllData('nope')).toThrow(ImportError);
-    expect(() => parseAllData('{"format":"x"}')).toThrow(/not a spinner export/);
-    expect(() => parseAllData('{"format":"spinner-all","v":2}')).toThrow(/newer/);
+    expect(() => parseAllData('{"format":"x"}')).toThrow(/not a spinner definitions export/);
+    expect(() => parseAllData('{"format":"spinner-definitions","v":2}')).toThrow(/newer/);
+  });
+});
+
+/** A backend like core/store's that enforces each store's keyPath, as IndexedDB does. */
+function strictBackend(): Backend & { dump(): Record<string, unknown[]> } {
+  const data = new Map<string, Map<string, unknown>>(STORE_NAMES.map((n) => [n, new Map()]));
+  const id = (k: IDBValidKey) => JSON.stringify(k);
+  return {
+    kind: 'memory',
+    get: (st, key) => Promise.resolve(data.get(st)!.get(id(key)) as never),
+    getAll: (st) => Promise.resolve([...data.get(st)!.values()] as never),
+    tx(stores, _mode, fn) {
+      const ops: (() => void)[] = [];
+      fn({
+        put(st, value) {
+          const key = keyOf(st, value as Record<string, unknown>);
+          if ([key].flat().some((k) => k === undefined))
+            throw new Error(`${st}: record lacks its keyPath`);
+          ops.push(() => data.get(st)!.set(id(key), value));
+        },
+        delete: (st, key) => void ops.push(() => data.get(st)!.delete(id(key))),
+      });
+      ops.forEach((o) => o());
+      void stores;
+      return Promise.resolve();
+    },
+    dump: () => Object.fromEntries([...data].map(([k, v]) => [k, [...v.values()]])),
+  };
+}
+
+describe('backend repo', () => {
+  it('stores one { key, value } record per setting', async () => {
+    const be = strictBackend();
+    const repo = createBackendRepo(be);
+    await repo.setSetting('theme', 'dark');
+    expect(be.dump().settings).toEqual([{ key: 'theme', value: 'dark' }]);
+    expect(await repo.getSetting('theme')).toBe('dark');
+    expect(await repo.getSetting('framing')).toBeUndefined();
+  });
+  it('lists runs newest first', async () => {
+    const be = strictBackend();
+    await be.tx(['runs'], 'readwrite', (t) => {
+      t.put('runs', run('a', 'done', '2026-01-01'));
+      t.put('runs', run('b', 'done', '2026-03-01'));
+    });
+    expect((await createBackendRepo(be).listRuns()).map((r) => r.runId)).toEqual(['b', 'a']);
+  });
+  it('deleteAll clears every store, parts and settings included', async () => {
+    const be = strictBackend();
+    await be.tx([...STORE_NAMES], 'readwrite', (t) => {
+      t.put('definitions', { id: 'd' });
+      t.put('strategies', { id: 's' });
+      t.put('runs', { runId: 'r' });
+      t.put('runParts', { runId: 'r', firstChunk: 0 });
+      t.put('summaries', { runId: 'r' });
+      t.put('checkpoints', { runId: 'r' });
+      t.put('breakdowns', { runId: 'r' });
+      t.put('samples', { runId: 'r' });
+      t.put('groups', { id: 'g' });
+      t.put('settings', { key: 'theme', value: 'dark' });
+    });
+    await createBackendRepo(be).deleteAll();
+    for (const [store, recs] of Object.entries(be.dump())) expect(recs, store).toEqual([]);
+  });
+  it('a failing put is reported, not swallowed', async () => {
+    const repo = createMemoryRepo();
+    repo.setSetting = () => Promise.reject(new Error('quota'));
+    await loadSettings(repo);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    updateSettings({ framing: 'hour' });
+    await waitFor(() => expect(err).toHaveBeenCalled());
+    err.mockRestore();
+    clearToasts();
   });
 });
 
@@ -243,8 +326,8 @@ describe('Settings', () => {
     const { container, getByText } = render(<App />);
     for (const t of [
       'Request persistent storage',
-      'Export all',
-      'Import all',
+      'Export definitions',
+      'Import definitions',
       'Delete all data',
       'Check for updates',
     ])
@@ -279,5 +362,37 @@ describe('settings survive a memory-only repo', () => {
     settingsStore.set(DEFAULT_SETTINGS);
     await loadSettings(createMemoryRepo());
     expect(settingsStore.get()).toMatchObject({ framing: 'hour', theme: 'dark' });
+  });
+});
+
+describe('back navigation', () => {
+  it('has explicit parents, none on tab roots', () => {
+    for (const root of ['/', '/define', '/library', '/more']) expect(parentOf(root)).toBeNull();
+    expect(parentOf('/settings')).toBe('/more');
+    expect(parentOf('/gallery')).toBe('/more');
+    expect(parentOf('/import')).toBe('/more');
+    expect(parentOf('/run/r1')).toBe('/');
+    expect(parentOf('/analyze/r1')).toBe('/');
+    expect(parentOf('/define/abc')).toBe('/library');
+  });
+  it('shows Back only off the tab roots and goes to the parent without in-app history', () => {
+    window.location.hash = '#/more';
+    const { container, unmount } = render(<App />);
+    expect(container.querySelector('.topbar-back')).toBeNull();
+    unmount();
+    window.location.hash = '#/import';
+    const r = render(<App />);
+    expect(r.container.querySelector('.topbar-back')).not.toBeNull();
+    goBack('/import');
+  });
+});
+
+describe('nav current page', () => {
+  it('maps More children to More', () => {
+    const more = { path: '/more', also: ['/settings', '/gallery', '/import'] };
+    expect(isCurrent(more, '/settings')).toBe(true);
+    expect(isCurrent(more, '/gallery/b1')).toBe(true);
+    expect(isCurrent(more, '/library')).toBe(false);
+    expect(isCurrent({ path: '/' }, '/settings')).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   MoneyInput,
+  Segmented,
   Sheet,
   Stat,
   Tabs,
@@ -28,6 +29,10 @@ describe('money parsing', () => {
     expect(parseMoney('.5')).toBeNull();
     expect(parseMoney('1.234')).toBeNull();
     expect(parseMoney('abc')).toBeNull();
+    expect(parseMoney('1,2,3')).toBeNull();
+    expect(parseMoney('1,25')).toBeNull();
+    expect(parseMoney('12,34,567')).toBeNull();
+    expect(parseMoney('1,234,567.8')).toBe(123456780);
     expect(parseMoney('')).toBeNull();
   });
   it('round-trips', () => {
@@ -133,5 +138,60 @@ describe('Toasts', () => {
       await new Promise((r) => setTimeout(r, 0));
       expect(container.querySelectorAll('.toast')).toHaveLength(0);
     });
+  });
+});
+
+describe('MoneyInput errors', () => {
+  it('shows a described error and reverts on blur', () => {
+    const { container } = render(<MoneyInput id="m" value={2500} onChange={() => {}} />);
+    const input = container.querySelector('input')!;
+    fireEvent.input(input, { target: { value: '1,2,3' } });
+    const err = container.querySelector('.error')!;
+    expect(input.getAttribute('aria-describedby')).toContain(err.id);
+    fireEvent.blur(input);
+    expect(input.value).toBe('25');
+  });
+});
+
+describe('Segmented', () => {
+  it('has one tab stop and arrows select', () => {
+    const onChange = vi.fn();
+    const opts = [
+      { value: 'a', label: 'A' },
+      { value: 'b', label: 'B' },
+    ] as const;
+    const { container } = render(
+      <Segmented label="L" value="a" options={opts} onChange={onChange} />,
+    );
+    const radios = container.querySelectorAll('[role=radio]');
+    expect([...radios].map((r) => r.getAttribute('tabindex'))).toEqual(['0', '-1']);
+    fireEvent.keyDown(radios[0]!, { key: 'ArrowRight' });
+    expect(onChange).toHaveBeenCalledWith('b');
+    fireEvent.keyDown(radios[0]!, { key: 'End' });
+    expect(onChange).toHaveBeenLastCalledWith('b');
+  });
+});
+
+describe('Sheet isolation', () => {
+  it('makes the rest inert, locks scroll and restores both; focuses data-autofocus', () => {
+    const { container, rerender } = render(
+      <div>
+        <p id="bg">background</p>
+        <Sheet open title="T" onClose={() => {}}>
+          <Button autoFocus>Cancel</Button>
+        </Sheet>
+      </div>,
+    );
+    expect((container.querySelector('#bg') as HTMLElement).inert).toBe(true);
+    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.activeElement?.textContent).toBe('Cancel');
+    rerender(
+      <div>
+        <p id="bg">background</p>
+        <Sheet open={false} title="T" onClose={() => {}} />
+      </div>,
+    );
+    expect((container.querySelector('#bg') as HTMLElement).inert).toBe(false);
+    expect(document.body.style.overflow).toBe('');
   });
 });

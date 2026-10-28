@@ -4,7 +4,7 @@
 // `storageStatus` says so (the StorageBanner reads it).
 import type { DefinitionRecord } from '@core/contracts/experiment';
 import type { RunMeta } from '@core/contracts/run';
-import { openStore, type Backend } from '@core';
+import { openStore, STORE_NAMES, type Backend, type StoreName } from '@core';
 import { createStore } from '../state/store';
 
 export interface StorageUsage {
@@ -14,23 +14,29 @@ export interface StorageUsage {
   persisted: boolean | null;
 }
 
+/**
+ * What "Export definitions" writes. Definitions and settings only for now: the full per-run bundle
+ * export lands with ui-results (core/store `encodeRunBundle`), so runs are not in this file.
+ */
 export interface AllData {
-  format: 'spinner-all';
+  format: 'spinner-definitions';
   v: 1;
   exportedAt: string;
-  settings: Record<string, unknown> | null;
+  settings: Record<string, unknown>;
   definitions: DefinitionRecord[];
-  runs: RunMeta[];
 }
 
+/** Settings are one `{ key, value }` record per setting (core/store `settings`, keyPath `key`). */
 export interface Repo {
   readonly kind: 'idb' | 'memory';
+  /** Newest first. */
   listRuns(): Promise<RunMeta[]>;
   listDefinitions(): Promise<DefinitionRecord[]>;
-  getSettings(): Promise<Record<string, unknown> | null>;
-  putSettings(s: Record<string, unknown>): Promise<void>;
-  exportAll(): Promise<AllData>;
-  importAll(data: AllData): Promise<{ definitions: number; runs: number }>;
+  getSetting(key: string): Promise<unknown>;
+  setSetting(key: string, value: unknown): Promise<void>;
+  exportDefinitions(): Promise<AllData>;
+  importDefinitions(data: AllData): Promise<{ definitions: number }>;
+  /** Clears every store: definitions, strategies, runs and their parts, groups, settings. */
   deleteAll(): Promise<void>;
 }
 
@@ -60,102 +66,122 @@ export function parseAllData(text: string): AllData {
     throw new ImportError('That file is not valid JSON.');
   }
   const o = x as Partial<AllData> | null;
-  if (!o || typeof o !== 'object' || o.format !== 'spinner-all') {
-    throw new ImportError('That file is not a spinner export.');
+  if (!o || typeof o !== 'object' || o.format !== 'spinner-definitions') {
+    throw new ImportError('That file is not a spinner definitions export.');
   }
   if (o.v !== 1) throw new ImportError('That export is from a newer version of spinner.');
   return {
-    format: 'spinner-all',
+    format: 'spinner-definitions',
     v: 1,
     exportedAt: typeof o.exportedAt === 'string' ? o.exportedAt : '',
-    settings: o.settings && typeof o.settings === 'object' ? o.settings : null,
+    settings: o.settings && typeof o.settings === 'object' ? o.settings : {},
     definitions: Array.isArray(o.definitions) ? o.definitions : [],
-    runs: Array.isArray(o.runs) ? o.runs : [],
   };
 }
 
+const newestFirst = (a: RunMeta, b: RunMeta): number =>
+  a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : a.runId < b.runId ? 1 : -1;
+
 /** In-memory repo: the fallback, and the fake used by tests. */
-export function createMemoryRepo(seed?: Partial<Pick<AllData, 'definitions' | 'runs'>>): Repo {
-  let settings: Record<string, unknown> | null = null;
+export function createMemoryRepo(seed?: {
+  definitions?: DefinitionRecord[];
+  runs?: RunMeta[];
+}): Repo {
+  const settings = new Map<string, unknown>();
   let definitions = [...(seed?.definitions ?? [])];
   let runs = [...(seed?.runs ?? [])];
   return {
     kind: 'memory',
-    listRuns: () => Promise.resolve([...runs]),
+    listRuns: () => Promise.resolve([...runs].sort(newestFirst)),
     listDefinitions: () => Promise.resolve([...definitions]),
-    getSettings: () => Promise.resolve(settings),
-    putSettings: (s) => {
-      settings = s;
+    getSetting: (key) => Promise.resolve(settings.get(key)),
+    setSetting: (key, value) => {
+      settings.set(key, value);
       return Promise.resolve();
     },
-    exportAll: () =>
+    exportDefinitions: () =>
       Promise.resolve({
-        format: 'spinner-all',
+        format: 'spinner-definitions',
         v: 1,
         exportedAt: new Date().toISOString(),
-        settings,
+        settings: Object.fromEntries(settings),
         definitions: [...definitions],
-        runs: [...runs],
       }),
-    importAll: (d) => {
-      const dIds = new Set(definitions.map((x) => x.id));
-      const rIds = new Set(runs.map((x) => x.runId));
-      const newDefs = d.definitions.filter((x) => !dIds.has(x.id));
-      const newRuns = d.runs.filter((x) => !rIds.has(x.runId));
-      definitions = [...definitions, ...newDefs];
-      runs = [...runs, ...newRuns];
-      return Promise.resolve({ definitions: newDefs.length, runs: newRuns.length });
+    importDefinitions: (d) => {
+      const have = new Set(definitions.map((x) => x.id));
+      const fresh = d.definitions.filter((x) => !have.has(x.id));
+      definitions = [...definitions, ...fresh];
+      return Promise.resolve({ definitions: fresh.length });
     },
     deleteAll: () => {
       definitions = [];
       runs = [];
-      settings = null;
+      settings.clear();
       return Promise.resolve();
     },
   };
+}
+
+/** Key of a record in each store (mirrors core/store `STORE_DEFS` keyPaths). */
+export function keyOf(store: StoreName, rec: Record<string, unknown>): IDBValidKey {
+  switch (store) {
+    case 'runParts':
+      return [rec.runId as string, rec.firstChunk as number];
+    case 'settings':
+      return rec.key as string;
+    case 'definitions':
+    case 'strategies':
+    case 'groups':
+      return rec.id as string;
+    default:
+      return rec.runId as string;
+  }
 }
 
 /** Repo over a `core/store` backend (IndexedDB, or its own memory fallback). */
 export function createBackendRepo(backend: Backend): Repo {
   return {
     kind: backend.kind,
-    listRuns: () => backend.getAll<RunMeta>('runs'),
-    listDefinitions: () => backend.getAll<DefinitionRecord>('definitions'),
-    getSettings: async () =>
-      (await backend.get<Record<string, unknown>>('settings', 'app')) ?? null,
-    putSettings: (s) => backend.tx(['settings'], 'readwrite', (t) => t.put('settings', s)),
-    async exportAll() {
+    listRuns: async () => (await backend.getAll<RunMeta>('runs')).sort(newestFirst),
+    listDefinitions: async () =>
+      (await backend.getAll<DefinitionRecord>('definitions')).sort((a, b) =>
+        b.updatedAt.localeCompare(a.updatedAt),
+      ),
+    getSetting: async (key) =>
+      (await backend.get<{ key: string; value: unknown }>('settings', key))?.value,
+    setSetting: (key, value) =>
+      backend.tx(['settings'], 'readwrite', (t) => t.put('settings', { key, value })),
+    async exportDefinitions() {
+      const settings: Record<string, unknown> = {};
+      for (const r of await backend.getAll<{ key: string; value: unknown }>('settings')) {
+        settings[r.key] = r.value;
+      }
       return {
-        format: 'spinner-all',
+        format: 'spinner-definitions',
         v: 1,
         exportedAt: new Date().toISOString(),
-        settings: (await backend.get<Record<string, unknown>>('settings', 'app')) ?? null,
+        settings,
         definitions: await backend.getAll<DefinitionRecord>('definitions'),
-        runs: await backend.getAll<RunMeta>('runs'),
       };
     },
-    async importAll(d) {
+    async importDefinitions(d) {
       const have = new Set(
         (await backend.getAll<DefinitionRecord>('definitions')).map((x) => x.id),
       );
-      const haveRuns = new Set((await backend.getAll<RunMeta>('runs')).map((x) => x.runId));
-      const defs = d.definitions.filter((x) => !have.has(x.id));
-      const rs = d.runs.filter((x) => !haveRuns.has(x.runId));
-      await backend.tx(['definitions', 'runs'], 'readwrite', (t) => {
-        defs.forEach((x) => t.put('definitions', x));
-        rs.forEach((x) => t.put('runs', x));
+      const fresh = d.definitions.filter((x) => !have.has(x.id));
+      await backend.tx(['definitions'], 'readwrite', (t) => {
+        fresh.forEach((x) => t.put('definitions', x));
       });
-      return { definitions: defs.length, runs: rs.length };
+      return { definitions: fresh.length };
     },
     async deleteAll() {
-      const stores = ['definitions', 'runs'] as const;
-      const [defs, runs] = [
-        await backend.getAll<DefinitionRecord>('definitions'),
-        await backend.getAll<RunMeta>('runs'),
-      ];
-      await backend.tx([...stores], 'readwrite', (t) => {
-        defs.forEach((x) => t.delete('definitions', x.id));
-        runs.forEach((x) => t.delete('runs', x.runId));
+      const all = await Promise.all(
+        STORE_NAMES.map(
+          async (name) => [name, await backend.getAll<Record<string, unknown>>(name)] as const,
+        ),
+      );
+      await backend.tx([...STORE_NAMES], 'readwrite', (t) => {
+        for (const [name, recs] of all) recs.forEach((r) => t.delete(name, keyOf(name, r)));
       });
     },
   };

@@ -13,6 +13,7 @@ import {
   type StorageUsage,
 } from '../../services/db';
 import {
+  sanitizeSettings,
   settingsStore,
   updateSettings,
   type Framing,
@@ -81,24 +82,24 @@ export function Settings({ query }: ScreenProps) {
     if (query.get('section') === 'about') aboutRef.current?.scrollIntoView?.();
   }, [query]);
 
-  const exportAll = async () => {
+  const exportDefinitions = async () => {
     try {
-      const data = await (await getRepo()).exportAll();
-      download(`spinner-export-${data.exportedAt.slice(0, 10)}.json`, JSON.stringify(data));
-      showToast('Exported everything on this device.');
+      const data = await (await getRepo()).exportDefinitions();
+      download(`spinner-definitions-${data.exportedAt.slice(0, 10)}.json`, JSON.stringify(data));
+      showToast('Exported your definitions and settings. Runs are not included yet.');
     } catch (e) {
       showToast(`Export failed: ${(e as Error).message}`, { tone: 'error' });
     }
   };
-  const importAll = async (file: File) => {
+  const importDefinitions = async (file: File) => {
     try {
       const data = parseAllData(await file.text());
       const repo = await getRepo();
-      const n = await repo.importAll(data);
-      if (data.settings) await repo.putSettings(data.settings);
+      const n = await repo.importDefinitions(data);
+      updateSettings(sanitizeSettings({ ...settingsStore.get(), ...data.settings }));
       void refreshLibrary();
       refreshUsage();
-      showToast(`Imported ${n.definitions} definitions and ${n.runs} runs.`);
+      showToast(`Imported ${n.definitions} definitions.`);
     } catch (e) {
       const msg = e instanceof ImportError ? e.message : `Import failed: ${(e as Error).message}`;
       showToast(msg, { tone: 'error' });
@@ -170,6 +171,10 @@ export function Settings({ query }: ScreenProps) {
       </Card>
 
       <Card title="Storage">
+        <p class="muted">
+          Export and import cover definitions and settings; saving runs as files is done from each
+          run.
+        </p>
         <dl class="facts">
           <dt>Used</dt>
           <dd data-testid="storage-used">{formatBytes(usage?.usage ?? null)}</dd>
@@ -186,8 +191,8 @@ export function Settings({ query }: ScreenProps) {
         </dl>
         <div class="actions">
           <Button onClick={() => void persist()}>Request persistent storage</Button>
-          <Button onClick={() => void exportAll()}>Export all</Button>
-          <Button onClick={() => fileRef.current?.click()}>Import all</Button>
+          <Button onClick={() => void exportDefinitions()}>Export definitions</Button>
+          <Button onClick={() => fileRef.current?.click()}>Import definitions</Button>
           <Button variant="danger" onClick={() => setConfirmDelete(true)}>
             Delete all data
           </Button>
@@ -197,11 +202,11 @@ export function Settings({ query }: ScreenProps) {
           class="visually-hidden"
           type="file"
           accept="application/json,.json"
-          aria-label="Choose an export file to import"
+          aria-label="Choose a definitions export file to import"
           tabIndex={-1}
           onChange={(e) => {
             const f = e.currentTarget.files?.[0];
-            if (f) void importAll(f);
+            if (f) void importDefinitions(f);
             e.currentTarget.value = '';
           }}
         />
@@ -215,7 +220,9 @@ export function Settings({ query }: ScreenProps) {
           {updateMsg}
         </p>
         <p>
-          <a href="#/settings/benchmark">Benchmark this device</a>
+          <a class="link-tap" href="#/settings/benchmark">
+            Benchmark this device
+          </a>
         </p>
       </Card>
 
@@ -249,7 +256,9 @@ export function Settings({ query }: ScreenProps) {
           <Button variant="danger" onClick={() => void deleteAll()}>
             Delete everything
           </Button>
-          <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
+          <Button autoFocus onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </Button>
         </div>
       </Sheet>
     </>
