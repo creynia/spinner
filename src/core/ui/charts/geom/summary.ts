@@ -1,6 +1,6 @@
 /** One-sentence-ish text summaries computed from chart data (screen readers and the caption). */
 import type { Convergence, FanChart, Histogram, Survival } from '../../../contracts/analysis';
-import { formatShare } from './scale';
+import { finiteOr, formatShare, plural } from './scale';
 import { binInfo } from './shapes';
 
 export interface HistLike {
@@ -46,19 +46,34 @@ export function shareBelow(h: HistLike, value: number): number {
 export function histogramSummary(h: Histogram, fmt: MoneyFmt, noun = 'sessions'): string {
   const total = totalCount(h.counts);
   if (total === 0 || h.counts.length === 0) return `No ${noun} to show yet.`;
+  const one = noun.replace(/s$/, '');
   const m = binInfo(h, modalBin(h));
   const med = binInfo(h, histogramQuantileBin(h, 0.5));
+  const xMin = h.lo;
+  const xMax = h.lo + h.counts.length * h.width;
   const parts = [
-    `${total.toLocaleString('en-US')} ${noun} in ${h.counts.length} bins.`,
+    `${plural(total, one, noun)} in ${plural(h.counts.length, 'bin')}.`,
     `The tallest bin runs ${fmt(m.lo)} to ${fmt(m.hi)} (${formatShare(m.count / total)} of ${noun}).`,
-    `The middle ${noun === 'sessions' ? 'session' : 'value'} falls in ${fmt(med.lo)} to ${fmt(med.hi)}.`,
+    `The middle ${one} falls in ${fmt(med.lo)} to ${fmt(med.hi)}.`,
   ];
-  if (h.markers.zero !== undefined)
+  const z = h.markers.zero;
+  if (z !== undefined) {
+    if (z >= xMax)
+      parts.push(`All ${noun} ended below the zero line (${fmt(z)}); it is beyond the right edge.`);
+    else if (z <= xMin)
+      parts.push(`All ${noun} ended above the zero line (${fmt(z)}); it is beyond the left edge.`);
+    else
+      parts.push(
+        `About ${formatShare(shareBelow(h, z))} of ${noun} end below the zero line (${fmt(z)}).`,
+      );
+  }
+  const e = h.markers.expected;
+  if (e !== undefined)
     parts.push(
-      `About ${formatShare(shareBelow(h, h.markers.zero))} of ${noun} end below the zero line (${fmt(h.markers.zero)}).`,
+      e < xMin || e > xMax
+        ? `The expected net line (${fmt(e)}) lies outside the plotted range.`
+        : `The expected net line is at ${fmt(e)}.`,
     );
-  if (h.markers.expected !== undefined)
-    parts.push(`The expected net line is at ${fmt(h.markers.expected)}.`);
   return parts.join(' ');
 }
 
@@ -67,7 +82,7 @@ export function fanSummary(fan: FanChart, fmt: MoneyFmt): string {
   if (n === 0) return 'No checkpoints to show yet.';
   const l = n - 1;
   return (
-    `After ${fan.rounds[l]!.toLocaleString('en-US')} rounds the median session is at ${fmt(fan.p50[l]!)}; ` +
+    `After ${plural(fan.rounds[l]!, 'round')} the median session is at ${fmt(fan.p50[l]!)}; ` +
     `90% of sessions are between ${fmt(fan.p5[l]!)} and ${fmt(fan.p95[l]!)}, and the middle half between ` +
     `${fmt(fan.p25[l]!)} and ${fmt(fan.p75[l]!)}. The expected path ends at ${fmt(fan.expected[l]!)}.`
   );
@@ -110,9 +125,14 @@ export function convergenceSummary(
     bust: [c.pBust, c.pBustLo, c.pBustHi],
     ahead: [c.pAhead, c.pAheadLo, c.pAheadHi],
   }[metric];
-  const f = (v: number): string => (metric === 'mean' ? fmt(v) : formatShare(v));
+  const f = finiteOr((v: number): string => (metric === 'mean' ? fmt(v) : formatShare(v)));
   const name = metric === 'mean' ? 'mean net' : metric === 'bust' ? 'P(bust)' : 'P(ahead)';
-  const half = (pick[2]![l]! - pick[1]![l]!) / 2;
+  const lo = pick[1]![l]!;
+  const hi = pick[2]![l]!;
+  const after = `After ${plural(c.n[l]!, 'session')} the ${name} is ${f(pick[0]![l]!)}`;
+  if (!Number.isFinite(lo) || !Number.isFinite(hi))
+    return `${after}. The interval is not available below 30 sessions.`;
+  const half = (hi - lo) / 2;
   const tail =
     metric === 'mean'
       ? c.bigEnough
@@ -121,8 +141,5 @@ export function convergenceSummary(
       : metric === 'bust' && !c.bigEnough
         ? `About ${c.suggested.forBust.toLocaleString('en-US')} sessions would reach the target precision.`
         : '';
-  return (
-    `After ${c.n[l]!.toLocaleString('en-US')} sessions the ${name} is ${f(pick[0]![l]!)} ` +
-    `(95% interval ${f(pick[1]![l]!)} to ${f(pick[2]![l]!)}, half-width ${f(half)}). ${tail}`.trim()
-  );
+  return `${after} (95% interval ${f(lo)} to ${f(hi)}, half-width ${f(half)}). ${tail}`.trim();
 }

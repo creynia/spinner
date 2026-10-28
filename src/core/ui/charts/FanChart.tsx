@@ -92,11 +92,22 @@ export function FanChart(props: FanChartProps): JSX.Element {
           color: i + 1,
           dash: dashFor(i + 1),
         })),
-        { label: 'Expected', color: 1, dash: '3 4' },
+        { label: 'Expected', color: 0, stroke: 'var(--chart-text)', dash: '3 4' },
       ]
     : [
-        { label: '5th to 95th percentile', color: 0, swatch: 'band' as const, opacity: 0.18 },
-        { label: '25th to 75th percentile', color: 0, swatch: 'band' as const, opacity: 0.42 },
+        {
+          label: '5th to 95th percentile',
+          color: 0,
+          swatch: 'band' as const,
+          fill: 'var(--band-outer)',
+        },
+        {
+          label: '25th to 75th percentile',
+          color: 0,
+          swatch: 'band' as const,
+          under: 'var(--band-outer)',
+          fill: 'var(--band-inner)',
+        },
         { label: 'Median', color: 0 },
         { label: 'Expected (analytic)', color: 1, dash: '3 4' },
       ];
@@ -128,88 +139,112 @@ export function FanChart(props: FanChartProps): JSX.Element {
       tooltip={tooltip}
       class="sp-fan"
     >
-      <ChartSvg width={width} height={height} svgProps={cur.svgProps}>
-        <YAxis box={box} scale={y} ticks={yTicks} />
-        <XAxis box={box} scale={x} ticks={xTicks} label="Rounds" />
-        {y0 < 0 && y1 > 0 ? (
-          <RefLine box={box} orientation="h" at={y(0)} label="break-even" strokeWidth={1} />
-        ) : null}
-        {!compare ? <path class="sp-band-outer" d={paths.outer} fill="var(--band-outer)" /> : null}
-        {!compare ? <path class="sp-band-inner" d={paths.inner} fill="var(--band-inner)" /> : null}
-        <path
-          class="sp-expected"
-          d={paths.expected}
-          fill="none"
-          stroke="var(--line-expected)"
-          stroke-width="2"
-          stroke-dasharray="3 4"
-        />
-        {overlays.map((o, i) => {
-          const oi = downsampleIndices(o.rounds.length, Math.max(8, Math.round(box.width / 2)));
-          return (
-            <path
-              key={o.id}
-              class="sp-overlay-median"
-              data-series={o.id}
-              d={linePath(
-                oi.map((k) => x(o.rounds[k]!)),
-                oi.map((k) => y(o.p50[k]!)),
-              )}
-              fill="none"
-              stroke={seriesColor(i + 1)}
-              stroke-width="2"
-              stroke-dasharray={dashFor(i + 1)}
+      {n === 0 ? null : (
+        <ChartSvg width={width} height={height} svgProps={cur.svgProps}>
+          <YAxis box={box} scale={y} ticks={yTicks} />
+          <XAxis box={box} scale={x} ticks={xTicks} label="Rounds" />
+          {y0 < 0 && y1 > 0 ? (
+            <RefLine
+              box={box}
+              orientation="h"
+              at={y(0)}
+              label={Math.abs(y(0) - y(fan.p50[n - 1] ?? 0)) < 16 ? '' : 'break-even'}
+              strokeWidth={1}
             />
-          );
-        })}
-        <path
-          class="sp-median"
-          d={paths.median}
-          fill="none"
-          stroke="var(--line-median)"
-          stroke-width="2.5"
-        />
-        {last >= 0 && !compare ? (
-          <>
-            <text
-              class="sp-halo"
-              x={paths.xs[last]! - 4}
-              y={y(fan.p50[n - 1]!) - 6}
-              text-anchor="end"
-            >
-              median
-            </text>
-          </>
-        ) : null}
-        {ci !== null && ci < n ? (
-          <g class="sp-cursor">
-            <line
-              x1={pxAll[ci]}
-              x2={pxAll[ci]}
-              y1={box.top}
-              y2={box.bottom}
-              stroke="var(--chart-text)"
-              stroke-opacity="0.5"
-            />
-            <circle
-              cx={pxAll[ci]}
-              cy={y(fan.p50[ci]!)}
-              r="4"
-              fill="var(--line-median)"
-              stroke="var(--surface, #fff)"
-              stroke-width="1.5"
-            />
-          </g>
-        ) : null}
-        <rect
-          class="sp-hit"
-          x={box.left}
-          y={box.top}
-          width={box.width}
-          height={box.height}
-          {...cur.hitProps}
-        />
-      </ChartSvg>
+          ) : null}
+          {!compare ? (
+            <path class="sp-band-outer" d={paths.outer} fill="var(--band-outer)" />
+          ) : null}
+          {!compare ? (
+            <path class="sp-band-inner" d={paths.inner} fill="var(--band-inner)" />
+          ) : null}
+          <path
+            class="sp-expected"
+            d={paths.expected}
+            fill="none"
+            stroke={compare ? 'var(--chart-text)' : 'var(--line-expected)'}
+            stroke-width="2"
+            stroke-dasharray="3 4"
+          />
+          {overlays.map((o, i) => {
+            const oi = downsampleIndices(o.rounds.length, Math.max(8, Math.round(box.width / 2)));
+            return (
+              <path
+                key={o.id}
+                class="sp-overlay-median"
+                data-series={o.id}
+                d={linePath(
+                  oi.map((k) => x(o.rounds[k]!)),
+                  oi.map((k) => y(o.p50[k]!)),
+                )}
+                fill="none"
+                stroke={seriesColor(i + 1)}
+                stroke-width="2"
+                stroke-dasharray={dashFor(i + 1)}
+              />
+            );
+          })}
+          <path
+            class="sp-median"
+            d={paths.median}
+            fill="none"
+            stroke="var(--line-median)"
+            stroke-width="2.5"
+          />
+          {n === 1
+            ? [fan.p5, fan.p25, fan.p50, fan.p75, fan.p95].map((a, k) => (
+                <circle
+                  key={k}
+                  class="sp-point"
+                  cx={pxAll[0]}
+                  cy={y(a[0]!)}
+                  r="4"
+                  fill="var(--line-median)"
+                />
+              ))
+            : null}
+          {last >= 0 && !compare ? (
+            <>
+              <text
+                class="sp-halo"
+                x={paths.xs[last]! - 4}
+                y={y(fan.p50[n - 1]!) - 6}
+                text-anchor="end"
+              >
+                median
+              </text>
+            </>
+          ) : null}
+          {ci !== null && ci < n ? (
+            <g class="sp-cursor">
+              <line
+                x1={pxAll[ci]}
+                x2={pxAll[ci]}
+                y1={box.top}
+                y2={box.bottom}
+                stroke="var(--chart-text)"
+                stroke-opacity="0.5"
+              />
+              <circle
+                cx={pxAll[ci]}
+                cy={y(fan.p50[ci]!)}
+                r="4"
+                fill="var(--line-median)"
+                stroke="var(--surface, #fff)"
+                stroke-width="1.5"
+              />
+            </g>
+          ) : null}
+          <rect
+            class="sp-hit"
+            x={box.left}
+            y={box.top}
+            width={box.width}
+            height={box.height}
+            {...cur.hitProps}
+          />
+        </ChartSvg>
+      )}
     </ChartFrame>
   );
 }

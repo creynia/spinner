@@ -10,6 +10,7 @@ import {
   formatShare,
   linearScale,
   niceDomain,
+  integerTicks,
   niceTicks,
   tickCountFor,
 } from './geom/scale';
@@ -49,7 +50,7 @@ export function OverlayHistogram(props: OverlayHistogramProps): JSX.Element {
     for (let i = 0; i < s.counts.length; i++) maxC = Math.max(maxC, s.counts[i]!);
   const [, yTop] = niceDomain(0, Math.max(1, maxC), 4);
   const y = linearScale(0, yTop, box.bottom, box.top);
-  const yTicks = niceTicks(0, yTop, 4).map((v) => ({ v, label: formatAxisCount(v) }));
+  const yTicks = integerTicks(0, yTop, 4).map((v) => ({ v, label: formatAxisCount(v) }));
   const xTicks = niceTicks(lo, xMax, tickCountFor(box.width, 80)).map((v) => ({
     v,
     label: axisFmt(v),
@@ -83,7 +84,11 @@ export function OverlayHistogram(props: OverlayHistogramProps): JSX.Element {
   });
   const summary =
     `${series.length} runs on shared bins. Middle session by run: ${medians.join('; ')}.` +
-    (props.markers?.zero !== undefined ? ` The zero line is at ${fmt(props.markers.zero)}.` : '');
+    (props.markers?.zero !== undefined
+      ? props.markers.zero >= lo && props.markers.zero <= lo + bins * bw
+        ? ` The zero line is at ${fmt(props.markers.zero)}.`
+        : ` The zero line (${fmt(props.markers.zero)}) lies outside the plotted range.`
+      : '');
   const table = {
     columns: ['Range', ...series.map((s) => s.label)],
     rows: Array.from({ length: bins }, (_, i) => [
@@ -102,56 +107,58 @@ export function OverlayHistogram(props: OverlayHistogramProps): JSX.Element {
       tooltip={tooltip}
       class="sp-overlay"
     >
-      <ChartSvg width={width} height={height} svgProps={cur.svgProps}>
-        <YAxis box={box} scale={y} ticks={yTicks} />
-        <XAxis box={box} scale={x} ticks={xTicks} label="Net result per session" />
-        {series.map((s, i) => (
-          <path
-            key={s.id}
-            class="sp-outline"
-            data-series={s.id}
-            d={histogramOutline({ lo, width: bw, counts: s.counts }, x, y)}
-            fill={seriesColor(i)}
-            fill-opacity={i === 0 ? 0.12 : 0}
-            stroke={seriesColor(i)}
-            stroke-width="2"
-            stroke-dasharray={dashFor(i)}
-            stroke-linejoin="round"
+      {bins === 0 ? null : (
+        <ChartSvg width={width} height={height} svgProps={cur.svgProps}>
+          <YAxis box={box} scale={y} ticks={yTicks} />
+          <XAxis box={box} scale={x} ticks={xTicks} label="Net result per session" />
+          {series.map((s, i) => (
+            <path
+              key={s.id}
+              class="sp-outline"
+              data-series={s.id}
+              d={histogramOutline({ lo, width: bw, counts: s.counts }, x, y)}
+              fill={seriesColor(i)}
+              fill-opacity={i === 0 ? 0.12 : 0}
+              stroke={seriesColor(i)}
+              stroke-width="2"
+              stroke-dasharray={dashFor(i)}
+              stroke-linejoin="round"
+            />
+          ))}
+          {expected !== undefined && expected >= lo && expected <= xMax ? (
+            <RefLine
+              box={box}
+              orientation="v"
+              at={x(expected)}
+              label={`expected ${fmt(expected)}`}
+              dash="8 4"
+              stroke="var(--line-expected)"
+              labelRow={1}
+            />
+          ) : null}
+          {zero !== undefined && zero >= lo && zero <= xMax ? (
+            <RefLine box={box} orientation="v" at={x(zero)} label={`zero ${fmt(zero)}`} />
+          ) : null}
+          {ci !== null && ci < bins ? (
+            <line
+              x1={x(lo + (ci + 0.5) * bw)}
+              x2={x(lo + (ci + 0.5) * bw)}
+              y1={box.top}
+              y2={box.bottom}
+              stroke="var(--chart-text)"
+              stroke-opacity="0.5"
+            />
+          ) : null}
+          <rect
+            class="sp-hit"
+            x={box.left}
+            y={box.top}
+            width={box.width}
+            height={box.height}
+            {...cur.hitProps}
           />
-        ))}
-        {expected !== undefined ? (
-          <RefLine
-            box={box}
-            orientation="v"
-            at={x(expected)}
-            label={`expected ${fmt(expected)}`}
-            dash="8 4"
-            stroke="var(--line-expected)"
-            labelRow={1}
-          />
-        ) : null}
-        {zero !== undefined ? (
-          <RefLine box={box} orientation="v" at={x(zero)} label={`zero ${fmt(zero)}`} />
-        ) : null}
-        {ci !== null && ci < bins ? (
-          <line
-            x1={x(lo + (ci + 0.5) * bw)}
-            x2={x(lo + (ci + 0.5) * bw)}
-            y1={box.top}
-            y2={box.bottom}
-            stroke="var(--chart-text)"
-            stroke-opacity="0.5"
-          />
-        ) : null}
-        <rect
-          class="sp-hit"
-          x={box.left}
-          y={box.top}
-          width={box.width}
-          height={box.height}
-          {...cur.hitProps}
-        />
-      </ChartSvg>
+        </ChartSvg>
+      )}
     </ChartFrame>
   );
 }

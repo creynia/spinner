@@ -124,106 +124,108 @@ export function Bars(props: BarsProps): JSX.Element {
       tooltip={tooltip}
       class="sp-bars-chart"
     >
-      <ChartSvg width={width} height={svgH} svgProps={cur.svgProps}>
-        <g class="sp-vticks">
-          {ticks.map((t) =>
-            horizontal ? (
-              <g key={t.v}>
-                <line class="sp-grid" x1={vs(t.v)} x2={vs(t.v)} y1={top} y2={bottom} />
-                <text class="sp-axis-text" x={vs(t.v)} y={bottom + 16} text-anchor="middle">
-                  {t.label}
-                </text>
-              </g>
-            ) : (
-              <g key={t.v}>
-                <line class="sp-grid" x1={left} x2={right} y1={vs(t.v)} y2={vs(t.v)} />
-                <text
-                  class="sp-axis-text"
-                  x={left - 6}
-                  y={vs(t.v)}
-                  text-anchor="end"
-                  dominant-baseline="central"
-                >
-                  {t.label}
-                </text>
-              </g>
-            ),
-          )}
-        </g>
-        {horizontal ? (
-          <line
-            x1={zeroPx}
-            x2={zeroPx}
-            y1={top}
-            y2={bottom}
-            stroke="var(--zero)"
-            stroke-width="1.5"
-          />
-        ) : (
-          <line
-            x1={left}
-            x2={right}
-            y1={zeroPx}
-            y2={zeroPx}
-            stroke="var(--zero)"
-            stroke-width="1.5"
-          />
-        )}
-        {rects.map((r) => {
-          const row = rows[r.i]!;
-          const neg = r.value < 0;
-          const label = fmt(r.value);
-          return (
-            <g key={row.id} class="sp-bar" data-id={row.id}>
-              <rect
-                x={r.x}
-                y={r.y}
-                width={Math.max(r.w, 1)}
-                height={Math.max(r.h, 1)}
-                fill={neg ? 'var(--chart-2)' : 'var(--chart-1)'}
-                fill-opacity={neg ? 0.8 : 0.85}
-                stroke={neg ? 'var(--chart-2)' : 'var(--chart-1)'}
-              />
-              {horizontal ? (
-                <>
+      {n === 0 ? null : (
+        <ChartSvg width={width} height={svgH} svgProps={cur.svgProps}>
+          <g class="sp-vticks">
+            {ticks.map((t) =>
+              horizontal ? (
+                <g key={t.v}>
+                  <line class="sp-grid" x1={vs(t.v)} x2={vs(t.v)} y1={top} y2={bottom} />
+                  <text class="sp-axis-text" x={vs(t.v)} y={bottom + 16} text-anchor="middle">
+                    {t.label}
+                  </text>
+                </g>
+              ) : (
+                <g key={t.v}>
+                  <line class="sp-grid" x1={left} x2={right} y1={vs(t.v)} y2={vs(t.v)} />
                   <text
-                    x={left - 8}
-                    y={r.y + r.h / 2}
+                    class="sp-axis-text"
+                    x={left - 6}
+                    y={vs(t.v)}
                     text-anchor="end"
                     dominant-baseline="central"
                   >
-                    {truncate(row.label, Math.floor((left - 12) / 6.8))}
+                    {t.label}
                   </text>
-                  <text
-                    class="sp-halo"
-                    x={neg ? zeroPx + 4 : r.x + r.w + 4}
-                    y={r.y + r.h / 2}
-                    text-anchor="start"
-                    dominant-baseline="central"
-                  >
-                    {label}
-                  </text>
-                </>
-              ) : (
-                <>
-                  <text x={r.x + r.w / 2} y={bottom + 16} text-anchor="middle">
-                    {truncate(row.label, maxVertChars)}
-                  </text>
-                  <text
-                    class="sp-halo"
-                    x={r.x + r.w / 2}
-                    y={neg ? r.y + r.h + 14 : r.y - 5}
-                    text-anchor="middle"
-                  >
-                    {label}
-                  </text>
-                </>
-              )}
-            </g>
-          );
-        })}
-        <rect class="sp-hit" x={0} y={0} width={width} height={svgH} {...cur.hitProps} />
-      </ChartSvg>
+                </g>
+              ),
+            )}
+          </g>
+          {horizontal ? (
+            <line
+              x1={zeroPx}
+              x2={zeroPx}
+              y1={top}
+              y2={bottom}
+              stroke="var(--zero)"
+              stroke-width="1.5"
+            />
+          ) : (
+            <line
+              x1={left}
+              x2={right}
+              y1={zeroPx}
+              y2={zeroPx}
+              stroke="var(--zero)"
+              stroke-width="1.5"
+            />
+          )}
+          {rects.map((r) => {
+            const row = rows[r.i]!;
+            const neg = r.value < 0;
+            const label = fmt(r.value);
+            return (
+              <g key={row.id} class="sp-bar" data-id={row.id}>
+                <rect
+                  x={r.x}
+                  y={r.y}
+                  width={Math.max(r.w, 1)}
+                  height={Math.max(r.h, 1)}
+                  fill={neg ? 'var(--chart-2)' : 'var(--chart-1)'}
+                  fill-opacity={neg ? 0.8 : 0.85}
+                  stroke={neg ? 'var(--chart-2)' : 'var(--chart-1)'}
+                />
+                {horizontal ? (
+                  <>
+                    <text
+                      x={left - 8}
+                      y={r.y + r.h / 2}
+                      text-anchor="end"
+                      dominant-baseline="central"
+                    >
+                      {truncate(row.label, Math.floor((left - 12) / 6.8))}
+                    </text>
+                    <text
+                      class="sp-halo"
+                      x={neg ? zeroPx + 4 : r.x + r.w + 4}
+                      y={r.y + r.h / 2}
+                      text-anchor="start"
+                      dominant-baseline="central"
+                    >
+                      {label}
+                    </text>
+                  </>
+                ) : (
+                  <>
+                    <text x={r.x + r.w / 2} y={bottom + 16} text-anchor="middle">
+                      {truncate(row.label, maxVertChars)}
+                    </text>
+                    <text
+                      class="sp-halo"
+                      x={r.x + r.w / 2}
+                      y={neg ? r.y + r.h + 14 : r.y - 5}
+                      text-anchor="middle"
+                    >
+                      {label}
+                    </text>
+                  </>
+                )}
+              </g>
+            );
+          })}
+          <rect class="sp-hit" x={0} y={0} width={width} height={svgH} {...cur.hitProps} />
+        </ChartSvg>
+      )}
     </ChartFrame>
   );
 }

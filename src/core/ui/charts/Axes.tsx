@@ -161,9 +161,11 @@ export function RefLine({
         stroke-width={strokeWidth}
         stroke-dasharray={dash}
       />
-      <text class="sp-halo" x={box.right - 4} y={at - 5 - labelRow * 14} text-anchor="end">
-        {label}
-      </text>
+      {label ? (
+        <text class="sp-halo" x={box.right - 4} y={at - 5 - labelRow * 14} text-anchor="end">
+          {label}
+        </text>
+      ) : null}
     </g>
   );
 }

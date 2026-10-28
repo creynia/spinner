@@ -1,6 +1,7 @@
 /* Chart tokens, defined locally (architecture.md §7): light, then dark by OS preference, then the
    forced themes. Series are told apart by dash pattern and direct labels as well as by colour. */
-.sp-chart {
+.sp-chart,
+.sp-spark {
   --chart-1: #1d5fbf;
   --chart-2: #b8470c;
   --chart-3: #1a7f4b;
@@ -17,7 +18,8 @@
   --chart-text: var(--text, #1b2430);
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .sp-chart {
+  :root:not([data-theme='light']) .sp-chart,
+  :root:not([data-theme='light']) .sp-spark {
     --chart-1: #7fb0ff;
     --chart-2: #ff9a6b;
     --chart-3: #5fd49a;
@@ -29,7 +31,8 @@
     --chart-grid: rgba(163, 179, 169, 0.2);
   }
 }
-:root[data-theme='dark'] .sp-chart {
+:root[data-theme='dark'] .sp-chart,
+:root[data-theme='dark'] .sp-spark {
   --chart-1: #7fb0ff;
   --chart-2: #ff9a6b;
   --chart-3: #5fd49a;

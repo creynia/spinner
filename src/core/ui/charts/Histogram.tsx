@@ -10,6 +10,7 @@ import {
   formatShare,
   linearScale,
   niceDomain,
+  integerTicks,
   niceTicks,
   tickCountFor,
 } from './geom/scale';
@@ -46,7 +47,7 @@ export function Histogram(props: HistogramProps): JSX.Element {
   for (let i = 0; i < bins; i++) maxC = Math.max(maxC, h.counts[i]!);
   const [, yTop] = niceDomain(0, Math.max(1, maxC), 4);
   const y = linearScale(0, yTop, box.bottom, box.top);
-  const yTicks = niceTicks(0, yTop, 4).map((v) => ({ v, label: formatAxisCount(v) }));
+  const yTicks = integerTicks(0, yTop, 4).map((v) => ({ v, label: formatAxisCount(v) }));
   const xTicks = niceTicks(xMin, xMax, tickCountFor(box.width, 80)).map((v) => ({
     v,
     label: axisFmt(v),
@@ -70,9 +71,10 @@ export function Histogram(props: HistogramProps): JSX.Element {
     };
   }
   const { zero, expected, mean } = h.markers;
-  const xz = zero !== undefined ? x(zero) : null;
-  const xe = expected !== undefined ? x(expected) : null;
-  const xm = mean !== undefined ? x(mean) : null;
+  const inside = (v: number | undefined): v is number => v !== undefined && v >= xMin && v <= xMax;
+  const xz = inside(zero) ? x(zero) : null;
+  const xe = inside(expected) ? x(expected) : null;
+  const xm = inside(mean) ? x(mean) : null;
   const close = xz !== null && xe !== null && Math.abs(xz - xe) < 120;
   const table = {
     columns: ['Range', `Number of ${noun}`, 'Share'],
@@ -90,63 +92,65 @@ export function Histogram(props: HistogramProps): JSX.Element {
       tooltip={tooltip}
       class="sp-histogram"
     >
-      <ChartSvg width={width} height={height} svgProps={cur.svgProps}>
-        <YAxis box={box} scale={y} ticks={yTicks} />
-        <g class="sp-bars" fill={seriesColor(0)} fill-opacity="0.75">
-          {rects.map((r) => (
-            <rect key={r.i} x={r.x} y={r.y} width={r.w} height={r.h} data-bin={r.i} />
-          ))}
-        </g>
-        <XAxis
-          box={box}
-          scale={x}
-          ticks={xTicks}
-          label={props.xLabel ?? 'Net result per session'}
-        />
-        {xm !== null ? (
-          <RefLine
+      {bins === 0 || total === 0 ? null : (
+        <ChartSvg width={width} height={height} svgProps={cur.svgProps}>
+          <YAxis box={box} scale={y} ticks={yTicks} />
+          <g class="sp-bars" fill={seriesColor(0)} fill-opacity="0.75">
+            {rects.map((r) => (
+              <rect key={r.i} x={r.x} y={r.y} width={r.w} height={r.h} data-bin={r.i} />
+            ))}
+          </g>
+          <XAxis
             box={box}
-            orientation="v"
-            at={xm}
-            label={`mean ${fmt(mean!)}`}
-            dash="2 3"
-            stroke="var(--chart-3)"
-            labelRow={close ? 2 : 1}
+            scale={x}
+            ticks={xTicks}
+            label={props.xLabel ?? 'Net result per session'}
           />
-        ) : null}
-        {xe !== null ? (
-          <RefLine
-            box={box}
-            orientation="v"
-            at={xe}
-            label={`expected ${fmt(expected!)}`}
-            dash="8 4"
-            stroke="var(--line-expected)"
-            labelRow={close ? 1 : 0}
+          {xm !== null ? (
+            <RefLine
+              box={box}
+              orientation="v"
+              at={xm}
+              label={`mean ${fmt(mean!)}`}
+              dash="2 3"
+              stroke="var(--chart-3)"
+              labelRow={close ? 2 : 1}
+            />
+          ) : null}
+          {xe !== null ? (
+            <RefLine
+              box={box}
+              orientation="v"
+              at={xe}
+              label={`expected ${fmt(expected!)}`}
+              dash="8 4"
+              stroke="var(--line-expected)"
+              labelRow={close ? 1 : 0}
+            />
+          ) : null}
+          {xz !== null ? (
+            <RefLine box={box} orientation="v" at={xz} label={`zero ${fmt(zero!)}`} />
+          ) : null}
+          {ci !== null && ci < bins ? (
+            <line
+              x1={centers[ci]}
+              x2={centers[ci]}
+              y1={box.top}
+              y2={box.bottom}
+              stroke="var(--chart-text)"
+              stroke-opacity="0.5"
+            />
+          ) : null}
+          <rect
+            class="sp-hit"
+            x={box.left}
+            y={box.top}
+            width={box.width}
+            height={box.height}
+            {...cur.hitProps}
           />
-        ) : null}
-        {xz !== null ? (
-          <RefLine box={box} orientation="v" at={xz} label={`zero ${fmt(zero!)}`} />
-        ) : null}
-        {ci !== null && ci < bins ? (
-          <line
-            x1={centers[ci]}
-            x2={centers[ci]}
-            y1={box.top}
-            y2={box.bottom}
-            stroke="var(--chart-text)"
-            stroke-opacity="0.5"
-          />
-        ) : null}
-        <rect
-          class="sp-hit"
-          x={box.left}
-          y={box.top}
-          width={box.width}
-          height={box.height}
-          {...cur.hitProps}
-        />
-      </ChartSvg>
+        </ChartSvg>
+      )}
     </ChartFrame>
   );
 }

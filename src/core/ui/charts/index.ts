@@ -1,4 +1,5 @@
 // Hand-rolled SVG charts (architecture.md §7). Inputs are analysis outputs, never raw sessions.
+// Components and their prop/data types only; geometry helpers stay internal to this folder.
 export { Histogram } from './Histogram';
 export type { HistogramProps } from './Histogram';
 export { OverlayHistogram } from './OverlayHistogram';
@@ -17,17 +18,5 @@ export { Bars, categoryRows, stageRows } from './Bars';
 export type { BarRow, BarsProps } from './Bars';
 export { Sparkline } from './Sparkline';
 export type { SparklineProps } from './Sparkline';
-export {
-  ChartFrame,
-  ChartSvg,
-  DataTable,
-  Legend,
-  seriesColor,
-  dashFor,
-  SERIES_DASH,
-} from './ChartFrame';
+export { ChartFrame, ChartSvg, DataTable, Legend } from './ChartFrame';
 export type { ChartFrameProps, LegendItem, TableSpec, TooltipSpec } from './ChartFrame';
-export { useElementWidth, useThrottled, useCursor } from './hooks';
-export * from './geom/scale';
-export * from './geom/shapes';
-export * from './geom/summary';
