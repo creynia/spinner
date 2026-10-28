@@ -1,6 +1,6 @@
 // Library (architecture.md §6.3): Strategies | Definitions | Runs, with search and tag filters,
 // open, duplicate and delete (with confirm). Built-in presets are listed with the strategies.
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { DefinitionRecord, StrategyRecord } from '@core/contracts/experiment';
 import type { RunMeta } from '@core/contracts/run';
 
@@ -19,12 +19,15 @@ import {
   saveDefinition,
   saveStrategy,
 } from '../Define/data';
+import { Layouts, editHref } from './Layouts';
+import { LayoutPage } from './LayoutPage';
 import './library.css';
 
-type TabId = 'strategies' | 'definitions' | 'runs';
+type TabId = 'strategies' | 'definitions' | 'layouts' | 'runs';
 const TABS = [
   { id: 'strategies', label: 'Strategies' },
   { id: 'definitions', label: 'Definitions' },
+  { id: 'layouts', label: 'Layouts' },
   { id: 'runs', label: 'Runs' },
 ] as const;
 
@@ -39,9 +42,76 @@ interface Pending {
   name: string;
 }
 
+/**
+ * The editor page opens at `?tab=layouts&edit=<id|new>`. The shell remounts a screen on every
+ * hashchange, so Back must never change the hash while edits are open. On open a sentinel entry
+ * with the SAME address is pushed; Android Back then pops to an identical URL (no hashchange, no
+ * remount) and `popstate` re-pushes the sentinel and presses the editor's own Back, so its
+ * unsaved-changes guard decides. Leaving (Back pressed, Discard, or a clean close) consumes the
+ * sentinel and the edit entry together.
+ */
+interface EditState {
+  layoutEdit: true;
+  fromList: boolean;
+}
+let openFromList = false;
+const LIST = '#/library?tab=layouts';
+
+function useEditPage(tab: TabId, query: URLSearchParams) {
+  const param = tab === 'layouts' ? query.get('edit') : null;
+  const [closed, setClosed] = useState(false);
+  const exiting = useRef(false);
+  const fromList = useRef(false);
+  useEffect(() => {
+    if (!param) return;
+    setClosed(false);
+    exiting.current = false;
+    const st = history.state as Partial<EditState> | null;
+    if (st?.layoutEdit) fromList.current = st.fromList === true;
+    else {
+      fromList.current = openFromList;
+      history.pushState({ layoutEdit: true, fromList: openFromList }, '', location.href);
+    }
+    openFromList = false;
+    const on = () => {
+      if (exiting.current || (history.state as Partial<EditState> | null)?.layoutEdit) return;
+      history.pushState({ layoutEdit: true, fromList: fromList.current }, '', location.href);
+      setTimeout(
+        () =>
+          document
+            .querySelector<HTMLButtonElement>('.layout-editor .le-head button[aria-label="Back"]')
+            ?.click(),
+        0,
+      );
+    };
+    window.addEventListener('popstate', on);
+    return () => window.removeEventListener('popstate', on);
+  }, [param]);
+  const open = (id: string) => {
+    openFromList = true;
+    navigate(editHref(id));
+  };
+  const close = () => {
+    exiting.current = true;
+    setClosed(true);
+    if (!(history.state as Partial<EditState> | null)?.layoutEdit) {
+      location.replace(LIST);
+    } else if (fromList.current) {
+      history.go(-2);
+    } else {
+      window.addEventListener('popstate', () => location.replace(LIST), { once: true });
+      history.go(-1);
+    }
+  };
+  return { editing: closed ? null : param, open, close };
+}
+
 export function Library({ query }: ScreenProps) {
   const tabParam = query.get('tab');
-  const tab: TabId = tabParam === 'definitions' || tabParam === 'runs' ? tabParam : 'strategies';
+  const tab: TabId =
+    tabParam === 'definitions' || tabParam === 'layouts' || tabParam === 'runs'
+      ? tabParam
+      : 'strategies';
   const [text, setText] = useState('');
   const [tag, setTag] = useState<string | null>(null);
   const [strategies, setStrategies] = useState<StrategyRecord[] | null>(null);
@@ -49,6 +119,7 @@ export function Library({ query }: ScreenProps) {
   const [runs, setRuns] = useState<RunMeta[] | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const version = useStore(libraryVersion, (v) => v);
+  const edit = useEditPage(tab, query);
 
   useEffect(() => {
     let live = true;
@@ -149,6 +220,15 @@ export function Library({ query }: ScreenProps) {
   const setTab = (id: string) => navigate(`/library?tab=${id}`);
   const loading = strategies === null;
 
+  if (edit.editing !== null) {
+    return (
+      <>
+        <h1 class="visually-hidden">Edit layout</h1>
+        <LayoutPage id={edit.editing} onClose={edit.close} />
+      </>
+    );
+  }
+
   return (
     <>
       <h1>Library</h1>
@@ -162,7 +242,7 @@ export function Library({ query }: ScreenProps) {
             placeholder="Name, id or tag"
           />
         </Field>
-        {allTags.length > 0 && tab !== 'runs' ? (
+        {allTags.length > 0 && (tab === 'strategies' || tab === 'definitions') ? (
           <ul class="chips" aria-label="Filter by tag">
             {allTags.map((t) => (
               <li key={t}>
@@ -245,6 +325,8 @@ export function Library({ query }: ScreenProps) {
               {shownPresets.length === 0 ? <p class="muted">No preset matches.</p> : null}
             </Card>
           </>
+        ) : tab === 'layouts' ? (
+          <Layouts matches={matches} onOpen={edit.open} />
         ) : tab === 'definitions' ? (
           <Card title="Definitions">
             {shownDefs.length === 0 ? (
