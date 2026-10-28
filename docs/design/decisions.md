@@ -70,3 +70,12 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 - Gallery: harness-data-analysis.md's `GalleryIndexV1` with architecture.md's file naming and checks; infra owns the plugin (P1). Bundle size is measured in core-store with 12 bet categories; trim further if needed to stay ≤ 2 MB (A2).
 - Version pins: architecture.md §1.1 (exact pins; Playwright 1.63.0 because it matches the preinstalled Chromium 1243) (P8). Perf env `PERF_BUDGET_MS`; full Monte Carlo flag `FULL=1` (P6, P7). WP ownership per architecture.md §12.2 (P3). WP0 includes real `money`, `rng` and `coin` (P4).
 - WP0 also makes Vitest and Playwright worker counts settable from env (`VITEST_MAX_WORKERS`, `PW_WORKERS`, default 2) for the resource baton.
+
+## Decisions during implementation
+
+- **Roulette has no `compileHistory`** (2026-10-28, PR #8). core-strategy always uses its own generic history trackers; the optional plugin hook is not implemented by roulette. `visible(state)` returns the state itself (the RNG is hidden by type only) to avoid a per-round allocation.
+- **`StepOutput.anomalies?: number`** added to `contracts/strategy.ts` (additive, PR #11); the harness sums it into the `anomalies` summary column.
+- **`ValidationContext = CompileContext & { gameId?: string }`**: callers set `gameId` so `E_GAME_MISMATCH` can fire; `W_NO_EXIT` comes from `noExitWarning(def, sessionHasStops)` (PR #11).
+- **Run control has one owner**: `src/app/services/runs.ts` moved from app-shell to ui-results, which adds keyed starts, the controller registry, resume after reload and `setRunActive` wiring. Define and Home go through it.
+- **App-shell export/import is definitions-only**; full per-run bundle export lives on the Analyze → Export tab (ui-results).
+- **Core fixtures live next to their module** (`src/core/*/__fixtures__`), never in `tests/fixtures`, because `src/core` may not import outside itself. Game-specific fixtures (such as the roulette strategy goldens above) may live in `tests/fixtures/` or `src/game/roulette/__fixtures__`, since only `src/core` has that restriction.
