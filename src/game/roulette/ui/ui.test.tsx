@@ -53,7 +53,12 @@ function outcome(pocket: string, color?: string): RoundOutcome {
 
 describe('rouletteUi', () => {
   it('is a GameUi', () => {
-    expect(Object.keys(rouletteUi).sort()).toEqual(['BetPicker', 'OutcomeGlyph', 'TableView']);
+    expect(Object.keys(rouletteUi).sort()).toEqual([
+      'BetPicker',
+      'OutcomeGlyph',
+      'TableView',
+      'chips',
+    ]);
   });
 });
 

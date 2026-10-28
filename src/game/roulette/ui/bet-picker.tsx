@@ -6,7 +6,9 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { betDef, familyOf, fixedBetIds, parseBet } from '../bets';
 import { pocketIndexOf, pocketLabels } from '../pockets';
 import type { Family, RouletteRules, WheelKind } from '../types';
+import { MAX_CHIPS_PER_SPOT } from '@core/contracts/layout';
 import { Board } from './board';
+import { stepOf } from './chips';
 import { buildBoard, type Rect } from './geometry';
 import { useOrientation } from './hooks';
 import { betName, paysText } from './names';
@@ -47,6 +49,53 @@ export function parseTyped(text: string, wheel: WheelKind): string | null {
 }
 
 type Tab = 'table' | 'calls' | 'type';
+
+/** Chip steppers (layout editor): chips per bet and a way to change them by ± the bet's step. */
+export interface ChipSteps {
+  chips(bet: string): number;
+  onAdjust(bet: string, delta: number): void;
+}
+
+/** "− n +" for one bet: buttons move by the bet's step (call bets: their pieces). */
+export function ChipStepper({
+  bet,
+  wheel,
+  steps,
+}: {
+  bet: string;
+  wheel: WheelKind;
+  steps: ChipSteps;
+}) {
+  const n = steps.chips(bet);
+  const step = stepOf(bet);
+  const name = betName(bet, wheel);
+  const unit = step === 1 ? '1 chip' : `${step} chips`;
+  return (
+    <span class="rl-step" data-stepper={bet}>
+      <button
+        type="button"
+        class="rl-btn rl-step__btn"
+        aria-label={`Remove ${unit} from ${name}`}
+        disabled={n < step}
+        onClick={() => steps.onAdjust(bet, -step)}
+      >
+        −
+      </button>
+      <output class="rl-step__n" aria-label={`${n} ${n === 1 ? 'chip' : 'chips'} on ${name}`}>
+        {n}
+      </output>
+      <button
+        type="button"
+        class="rl-btn rl-step__btn"
+        aria-label={`Add ${unit} to ${name}`}
+        disabled={n + step > MAX_CHIPS_PER_SPOT}
+        onClick={() => steps.onAdjust(bet, step)}
+      >
+        +
+      </button>
+    </span>
+  );
+}
 
 /** Every inside bet that covers this pocket, in sheet order (straight, splits, street, ...). */
 export function insideBetsContaining(label: string, wheel: WheelKind): string[] {
@@ -94,24 +143,37 @@ function MiniDiagram({ id, wheel }: { id: string; wheel: WheelKind }) {
   );
 }
 
-function BetSheet(props: {
+export function BetSheet(props: {
   label: string;
   wheel: WheelKind;
   value?: string;
-  onPick: (id: string) => void;
+  onPick?: (id: string) => void;
   onClose: () => void;
+  /** Layout editor: each row gets a − n + stepper instead of picking the bet. */
+  steps?: ChipSteps;
+  /** Always a bottom sheet over a backdrop (never the inline card of wide screens). */
+  modal?: boolean;
 }) {
   const { label, wheel } = props;
   const ref = useRef<HTMLElement>(null);
+  // A long-press opens the sheet under the finger: the release's click must not hit the backdrop.
+  const openedAt = useRef(Date.now());
   const items = useMemo(() => insideBetsContaining(label, wheel), [label, wheel]);
   useEffect(() => {
     ref.current?.focus();
   }, [label]);
   return (
     <>
-      <div class="rl-backdrop" aria-hidden="true" onClick={props.onClose} />
+      <div
+        class={`rl-backdrop${props.modal ? ' rl-backdrop--modal' : ''}`}
+        aria-hidden="true"
+        onClick={() => {
+          if (props.steps && Date.now() - openedAt.current < 500) return;
+          props.onClose();
+        }}
+      />
       <section
-        class="rl-sheet"
+        class={`rl-sheet${props.modal ? ' rl-sheet--modal' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={`Bets on ${label}`}
@@ -142,24 +204,35 @@ function BetSheet(props: {
           </button>
         </header>
         <ul class="rl-rows">
-          {items.map((id) => (
-            <li key={id}>
-              <button
-                type="button"
-                class="rl-row"
-                data-bet-row={id}
-                aria-pressed={props.value === id}
-                onClick={() => props.onPick(id)}
-              >
+          {items.map((id) =>
+            props.steps ? (
+              <li key={id} class="rl-row rl-row--steps" data-bet-row={id}>
                 <MiniDiagram id={id} wheel={wheel} />
                 <span class="rl-row__text">
                   <strong>{betName(id, wheel)}</strong>
-                  <code>{id}</code>
+                  <span class="rl-muted">{paysText(id, wheel).replace('pays ', '')}</span>
                 </span>
-                <span class="rl-row__pays">{paysText(id, wheel).replace('pays ', '')}</span>
-              </button>
-            </li>
-          ))}
+                <ChipStepper bet={id} wheel={wheel} steps={props.steps} />
+              </li>
+            ) : (
+              <li key={id}>
+                <button
+                  type="button"
+                  class="rl-row"
+                  data-bet-row={id}
+                  aria-pressed={props.value === id}
+                  onClick={() => props.onPick?.(id)}
+                >
+                  <MiniDiagram id={id} wheel={wheel} />
+                  <span class="rl-row__text">
+                    <strong>{betName(id, wheel)}</strong>
+                    <code>{id}</code>
+                  </span>
+                  <span class="rl-row__pays">{paysText(id, wheel).replace('pays ', '')}</span>
+                </button>
+              </li>
+            ),
+          )}
         </ul>
       </section>
     </>
@@ -180,14 +253,20 @@ function Components({ id, wheel }: { id: string; wheel: WheelKind }) {
   );
 }
 
-function CallsPanel({
+export function CallsPanel({
   wheel,
   value,
   onPick,
+  steps,
+  placed = [],
 }: {
   wheel: WheelKind;
   value?: string;
-  onPick: (id: string) => void;
+  onPick?: (id: string) => void;
+  /** Layout editor: sector rows get steppers, and "Add" places the neighbours (2k+1 chips). */
+  steps?: ChipSteps;
+  /** Layout editor: neighbours bets already on the layout, listed with steppers. */
+  placed?: readonly string[];
 }) {
   const [p, setP] = useState('0');
   const [k, setK] = useState(2);
@@ -197,20 +276,32 @@ function CallsPanel({
       <ul class="rl-rows">
         {CALLS.map((c) => (
           <li key={c.id}>
-            <button
-              type="button"
-              class="rl-row rl-row--call"
-              data-bet={c.id}
-              aria-pressed={value === c.id}
-              onClick={() => onPick(c.id)}
-            >
-              <span class="rl-row__text">
-                <strong>{betName(c.id, wheel)}</strong>
-                <span class="rl-muted">
-                  {c.pockets} pockets · <code>{c.id}</code>
+            {steps ? (
+              <div class="rl-row rl-row--call rl-row--steps" data-bet={c.id}>
+                <span class="rl-row__text">
+                  <strong>{betName(c.id, wheel)}</strong>
+                  <span class="rl-muted">
+                    {c.pockets} pockets · {stepOf(c.id)} chips a time
+                  </span>
                 </span>
-              </span>
-            </button>
+                <ChipStepper bet={c.id} wheel={wheel} steps={steps} />
+              </div>
+            ) : (
+              <button
+                type="button"
+                class="rl-row rl-row--call"
+                data-bet={c.id}
+                aria-pressed={value === c.id}
+                onClick={() => onPick?.(c.id)}
+              >
+                <span class="rl-row__text">
+                  <strong>{betName(c.id, wheel)}</strong>
+                  <span class="rl-muted">
+                    {c.pockets} pockets · <code>{c.id}</code>
+                  </span>
+                </span>
+              </button>
+            )}
             <Components id={c.id} wheel={wheel} />
           </li>
         ))}
@@ -253,15 +344,38 @@ function CallsPanel({
           </button>
         </div>
         <Components id={id} wheel={wheel} />
-        <button
-          type="button"
-          class="rl-btn rl-btn--primary"
-          data-bet={id}
-          aria-pressed={value === id}
-          onClick={() => onPick(id)}
-        >
-          Pick {betName(id, wheel)}
-        </button>
+        {steps ? (
+          <button
+            type="button"
+            class="rl-btn rl-btn--primary"
+            data-add-neighbours={id}
+            onClick={() => steps.onAdjust(id, stepOf(id))}
+          >
+            Add {betName(id, wheel)} ({stepOf(id)} chips)
+          </button>
+        ) : (
+          <button
+            type="button"
+            class="rl-btn rl-btn--primary"
+            data-bet={id}
+            aria-pressed={value === id}
+            onClick={() => onPick?.(id)}
+          >
+            Pick {betName(id, wheel)}
+          </button>
+        )}
+        {steps && placed.length > 0 && (
+          <ul class="rl-rows" aria-label="Neighbours on the layout">
+            {placed.map((b) => (
+              <li key={b} class="rl-row rl-row--steps" data-bet={b}>
+                <span class="rl-row__text">
+                  <strong>{betName(b, wheel)}</strong>
+                </span>
+                <ChipStepper bet={b} wheel={wheel} steps={steps} />
+              </li>
+            ))}
+          </ul>
+        )}
       </fieldset>
     </div>
   );

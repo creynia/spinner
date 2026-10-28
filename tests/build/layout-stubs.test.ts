@@ -15,9 +15,9 @@ import { rouletteUi } from '@game/roulette/ui';
 import type { RouletteRules } from '@game/roulette';
 
 describe('GameUi.chips is additive and optional', () => {
-  it('rouletteUi satisfies GameUi without chips', () => {
+  it('rouletteUi satisfies GameUi and supplies chips (L3b)', () => {
     const ui: GameUi<RouletteRules> = rouletteUi;
-    expect(ui.chips).toBeUndefined();
+    expect(ui.chips?.step('straight:0')).toBe(1);
   });
   it('accepts a ChipsUi', () => {
     const c: ChipsUi<RouletteRules> = {
