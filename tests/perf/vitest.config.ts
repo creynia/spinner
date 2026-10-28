@@ -4,7 +4,7 @@
 //
 //   res cpu <me> -- env PERF=1 PERF_BUDGET_MS=20000 npx vitest run -c tests/perf/vitest.config.ts
 //
-// Without PERF=1 every test here is skipped.
+// Without PERF=1 every test here is skipped. CI sets PERF_BUDGET_MS=60000 (locally 20000).
 import { defineConfig } from 'vitest/config';
 import { aliases } from '../../build/aliases.ts';
 

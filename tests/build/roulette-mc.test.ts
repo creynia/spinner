@@ -3,7 +3,9 @@
 //   realized edge = sum(net) / sum(wagered)         analytic edge = -sum(expectedLoss) / sum(wagered)
 // The round-by-round differences (net + expected loss) are martingale differences even when the
 // strategy adapts, so the variance of their sum is the sum of the analytic per-round variances,
-// which the harness records in `variance`. SE = sqrt(sum(variance)) / sum(wagered).
+// which the harness records in `variance`. SE = sqrt(sum of analytic per-round variance) /
+// sum(wagered). This treats the wagered denominator as fixed: the ratio estimator ignores its
+// randomness (small here; the numerator test is exact in the martingale argument).
 // CI-sized by default; FULL=1 runs 20,000 sessions x 500 rounds.
 import { describe, expect, it, vi } from 'vitest';
 import type { Json } from '@core/contracts/game';

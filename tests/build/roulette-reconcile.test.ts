@@ -15,6 +15,7 @@ const FULL = process.env.FULL === '1';
 const SESSIONS = 2000;
 // Variants use fewer sessions in CI; FULL=1 runs 2,000 everywhere.
 const VARIANT_SESSIONS = FULL ? SESSIONS : 500;
+const CLAMP_PRESETS = ['martingale-red', 'grand-martingale-red', 'two-dozens-martingale'];
 const ROUNDS = 500;
 
 // ReconcileCode and AdjustCode from game/roulette/types.ts.
@@ -61,12 +62,12 @@ const VARIANTS: Variant[] = [
 describe('zero apply rejections over full runs', () => {
   for (const v of VARIANTS)
     for (const preset of v.presets) {
-      const SESSIONS = v.sessions ?? VARIANT_SESSIONS;
-      it(`${preset} on ${v.name}: ${SESSIONS} x ${ROUNDS}`, () => {
+      const N = v.sessions ?? VARIANT_SESSIONS;
+      it(`${preset} on ${v.name}: ${N} x ${ROUNDS}`, () => {
         const def = rouletteDef(preset, {
           rules: v.rules,
           bankroll: v.bankroll,
-          sessions: SESSIONS,
+          sessions: N,
           maxRounds: ROUNDS,
         });
         let sessions = 0;
@@ -103,7 +104,7 @@ describe('zero apply rejections over full runs', () => {
           traceEvery,
         );
         expect(runner.labels.stages.length).toBeGreaterThan(0);
-        expect(sessions).toBe(SESSIONS);
+        expect(sessions).toBe(N);
         expect(unknown).toEqual([]); // includes any `apply-rejected` session error
         expect(errors).toBe(0);
         console.info(
@@ -111,4 +112,46 @@ describe('zero apply rejections over full runs', () => {
         );
       });
     }
+});
+
+// With a $5,000 bankroll affordability binds before the outside maximum, so the clamp path
+// (reconcile step 5) needs its own variants: a low `outside.max` override (with and without a huge bankroll; the presets' own caps stay below the default $5,000 maximum).
+describe('over-max clamp path (deterministic)', () => {
+  const CLAMP_VARIANTS: { name: string; rules: RulesInput; bankroll: number }[] = [
+    {
+      name: 'outside.max $1,000, bankroll $500,000',
+      rules: { preset: 'european', overrides: { limits: { outside: { max: 100_000 } } } },
+      bankroll: 50_000_000,
+    },
+    {
+      name: 'outside.max $200',
+      rules: { preset: 'european', overrides: { limits: { outside: { max: 20_000 } } } },
+      bankroll: 500_000,
+    },
+  ];
+  for (const v of CLAMP_VARIANTS)
+    for (const preset of CLAMP_PRESETS)
+      it(`${preset} with ${v.name} records clamped adjustments and no apply rejection`, () => {
+        const def = rouletteDef(preset, {
+          rules: v.rules,
+          bankroll: v.bankroll,
+          sessions: 200,
+          maxRounds: ROUNDS,
+        });
+        let clamped = 0;
+        const bad: string[] = [];
+        const all = Array.from({ length: 200 }, (_, i) => i);
+        runAll(
+          def,
+          (out) => {
+            for (const c of out.chunks) for (const e of c.errors) bad.push(e.code);
+            for (const smp of out.samples)
+              for (const w of smp.trace)
+                for (const a of w.reconcile?.adjusted ?? []) if (a.reason === 'clamped') clamped++;
+          },
+          all,
+        );
+        expect(bad).toEqual([]);
+        expect(clamped).toBeGreaterThan(0);
+      });
 });

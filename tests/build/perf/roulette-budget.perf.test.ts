@@ -9,7 +9,9 @@
 //
 // PERF_BUDGET_MS bounds the PROJECTED 3-worker wall time, i.e. the measured serial time divided by
 // P = 3 (default 60000 under CI, 20000 locally; node has no parallel in-thread workers, the browser
-// perf spec measures real Workers);
+// perf spec measures real Workers). "Projected" = serial / 3 is a LOWER BOUND: it has no worker
+// spawn, transfer or merge overhead. The real-Worker Playwright spec (tests/perf/budget.spec.ts,
+// via the Benchmark screen) is the §7.2 gate;
 // PERF_MIN_ROUNDS_PER_SEC (default 40000) is the CI floor. Both numbers go to the step summary.
 import { appendFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
