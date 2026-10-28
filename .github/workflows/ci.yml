@@ -82,5 +82,8 @@ jobs:
       - run: npm ci
       - uses: actions/download-artifact@v4
         with: { name: dist, path: dist }
+      # Node-side perf: R19 heap/throughput (strategy.md §17.9) and the 10,000 x 500 reference run
+      # on the real plugin (tests/perf/vitest.config.ts); needs no browser.
+      - run: npx vitest run -c tests/perf/vitest.config.ts
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --project=perf
