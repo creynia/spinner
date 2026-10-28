@@ -164,7 +164,7 @@ function ShowSweep({ groupId }: { groupId: string }) {
   const queue = useStore(sweepQueue, (q) => q[groupId]);
   const [group, setGroup] = useState<ExperimentGroup | null | undefined>(undefined);
   const [metas, setMetas] = useState<Record<string, RunMeta>>({});
-  const [datas, setDatas] = useState<RunData[] | null>(null);
+  const [datas, setDatas] = useState<{ values: unknown[]; runs: RunData[] } | null>(null);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -182,10 +182,13 @@ function ShowSweep({ groupId }: { groupId: string }) {
       }
       if (!on) return;
       setMetas(m);
-      const all = g.variantDefinitionIds?.length ?? 0;
-      if (g.runIds.length === all && all > 0 && g.runIds.every((id) => m[id]?.status === 'done')) {
-        const loaded = await Promise.all(g.runIds.map((id) => loadRunData(id)));
-        if (on && loaded.every((d): d is RunData => d !== null)) setDatas(loaded);
+      // Finished variants chart as they arrive (two or more).
+      const idx = g.runIds.map((_, k) => k).filter((k) => m[g.runIds[k]!]?.status === 'done');
+      if (idx.length >= 2) {
+        const loaded = await Promise.all(idx.map((k) => loadRunData(g.runIds[k]!)));
+        if (on && loaded.every((d): d is RunData => d !== null)) {
+          setDatas({ values: idx.map((k) => g.sweep!.values[k]), runs: loaded });
+        }
       } else setDatas(null);
     })().catch(() => on && setGroup(null));
     return () => {
@@ -214,7 +217,7 @@ function ShowSweep({ groupId }: { groupId: string }) {
   const total = values.length;
   const doneCount = group.runIds.filter((id) => metas[id]?.status === 'done').length;
   const running = queue?.running === true;
-  const first = datas?.[0];
+  const first = datas?.runs[0];
   return (
     <>
       <Card title="Progress">
@@ -268,8 +271,8 @@ function ShowSweep({ groupId }: { groupId: string }) {
       {datas && first ? (
         <SweepView
           path={group.sweep.path}
-          values={values}
-          runs={datas}
+          values={datas.values}
+          runs={datas.runs}
           tableMax={tableMaxFor(first.definition)}
           framing={framing}
         />

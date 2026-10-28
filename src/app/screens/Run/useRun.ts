@@ -2,7 +2,7 @@
 // progress events, and live chart data throttled to about 4 Hz.
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import type { FanChart, Histogram } from '@core/contracts/analysis';
-import type { RunMeta, RunProgress } from '@core/contracts/run';
+import type { RunData, RunMeta, RunProgress } from '@core/contracts/run';
 import { fanChart, histogramFD } from '@core';
 import { activeRun, getController, readRunMeta } from '../../services/runs';
 import { loadRunData } from '../Analyze/data';
@@ -11,6 +11,37 @@ export interface LiveCharts {
   fan: FanChart | null;
   histogram: Histogram | null;
   sessions: number;
+}
+
+/** Live charts read a bounded prefix so one refresh stays well under 50 ms at 100k sessions. */
+export const LIVE_FAN_SESSIONS = 2000;
+export const LIVE_HISTOGRAM_SESSIONS = 20_000;
+
+/** The first whole chunks of `data`, at most about `max` sessions (a valid prefix, no bias). */
+export function livePrefix(data: RunData, max: number): RunData {
+  const size = Math.max(1, data.meta.chunkSize);
+  const chunks = Math.max(1, Math.ceil(max / size));
+  const k = Math.min(data.sessions, chunks * size);
+  if (k >= data.sessions) return data;
+  return {
+    ...data,
+    sessions: k,
+    summary: { ...data.summary, sessions: k },
+    meta: { ...data.meta, prefixSessions: k },
+  };
+}
+
+/** Live fan and histogram from the controller's in-memory data. */
+export function liveCharts(data: RunData): LiveCharts {
+  const h = livePrefix(data, LIVE_HISTOGRAM_SESSIONS);
+  return {
+    fan: fanChart(livePrefix(data, LIVE_FAN_SESSIONS), { live: true }),
+    histogram: histogramFD(h.summary.net.subarray(0, h.sessions), {
+      integer: true,
+      markers: { zero: 0 },
+    }),
+    sessions: data.sessions,
+  };
 }
 
 const EMPTY: LiveCharts = { fan: null, histogram: null, sessions: 0 };
@@ -76,9 +107,7 @@ export function useRun(runId: string) {
       try {
         const data = controller.snapshot();
         if (data.sessions > 0) {
-          const net = data.summary.net.subarray(0, data.sessions);
-          const histogram = histogramFD(net, { integer: true, markers: { zero: 0 } });
-          setLive({ fan: fanChart(data, { live: true }), histogram, sessions: data.sessions });
+          setLive(liveCharts(data));
         }
       } catch {
         // not started yet
@@ -102,12 +131,7 @@ export function useRun(runId: string) {
     loadRunData(runId)
       .then((data) => {
         if (!on || !data || data.sessions === 0) return;
-        const net = data.summary.net.subarray(0, data.sessions);
-        setLive({
-          fan: fanChart(data, { live: true }),
-          histogram: histogramFD(net, { integer: true, markers: { zero: 0 } }),
-          sessions: data.sessions,
-        });
+        setLive(liveCharts(data));
       })
       .catch(() => undefined);
     return () => {

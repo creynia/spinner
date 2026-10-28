@@ -6,7 +6,7 @@ import type { RunData } from '../../contracts/run';
 import { compareRuns, fanChart } from '../../analysis';
 import { FanChart, OverlayHistogram } from '../charts';
 import { Card, Segmented } from '../kit';
-import { fmtInt, fmtNum, fmtPct, makeFramer, type MoneyFraming } from './format';
+import { fmtInt, fmtMoney, fmtNum, fmtPct, makeFramer, type MoneyFraming } from './format';
 
 export interface CompareRun {
   id: string;
@@ -27,6 +27,8 @@ interface MetricDef {
   id: string;
   label: string;
   kind: 'money' | 'pct' | 'num';
+  /** False for amounts that are not per-session flows (a drawdown is a peak, not a rate). */
+  framed?: boolean;
   value: (m: RunMetrics) => number;
   ci: (m: RunMetrics) => [number, number] | null;
   diff: (d: PairDiff) => DiffEstimate | null;
@@ -88,6 +90,7 @@ const METRICS: MetricDef[] = [
     id: 'max-drawdown',
     label: 'Mean max drawdown',
     kind: 'money',
+    framed: false,
     value: (m) => m.drawdown.mean.value,
     ci: (m) => ci(m.drawdown.mean),
     diff: (d) => d.meanMaxDrawdown,
@@ -120,16 +123,25 @@ export function CompareView({ runs, tableMax, framing }: CompareViewProps) {
     [runs, tableMax],
   );
   const [chart, setChart] = useState<'hist' | 'fan'>('hist');
-  const base = result.metrics[0]!;
-  const rph = runs[0]!.data.definition.session.roundsPerHour;
-  const fr = makeFramer(framing, base.length.mean.value, rph);
+  const frs = runs.map((r, i) =>
+    makeFramer(
+      framing,
+      result.metrics[i]!.length.mean.value,
+      r.data.definition.session.roundsPerHour,
+    ),
+  );
+  const fr = frs[0]!;
   const paired = result.diffs.length > 0 && result.diffs.every((d) => d.method === 'paired');
   const mixed = result.diffs.some((d) => d.method !== result.diffs[0]!.method);
   const fans = useMemo(() => runs.map((r) => fanChart(r.data)), [runs]);
 
-  const fmt = (def: MetricDef, v: number, sign = false): string => {
+  /** `at` is a run index (framed by that run's own rounds) or 'diff' (always per session). */
+  const fmt = (def: MetricDef, v: number, at: number | 'diff', sign = false): string => {
     if (!Number.isFinite(v)) return 'n/a';
-    if (def.kind === 'money') return fr.money(v, { sign });
+    if (def.kind === 'money')
+      return at === 'diff' || def.framed === false
+        ? fmtMoney(v, { sign })
+        : frs[at]!.money(v, { sign });
     if (def.kind === 'pct') return sign ? `${v >= 0 ? '+' : '-'}${fmtPct(Math.abs(v))}` : fmtPct(v);
     return sign ? `${v >= 0 ? '+' : '-'}${fmtNum(Math.abs(v), 1)}` : fmtNum(v, 1);
   };
@@ -143,8 +155,8 @@ export function CompareView({ runs, tableMax, framing }: CompareViewProps) {
     <div class="compare" data-method={mixed ? 'mixed' : paired ? 'paired' : 'welch'}>
       <p class="method-note" role="note" data-method-label>
         <strong>Method:</strong> {method}. Differences are against {runs[0]!.label}
-        {runs.length > 2 ? ', without correction for comparing several runs' : ''}. Amounts are{' '}
-        {fr.unit}.
+        {runs.length > 2 ? ', without correction for comparing several runs' : ''}. Run values are{' '}
+        {fr.unit}; differences are per session.
       </p>
       {result.diffs.some((d) => d.crn) ? (
         <p class="muted">
@@ -172,7 +184,7 @@ export function CompareView({ runs, tableMax, framing }: CompareViewProps) {
               class="table-scroll"
               tabIndex={0}
               role="region"
-              aria-label="Table, scrolls sideways"
+              aria-label={`${def.label}, scrolls sideways`}
             >
               <table class="plain-table" data-metric={def.id}>
                 <caption class="visually-hidden">
@@ -185,7 +197,7 @@ export function CompareView({ runs, tableMax, framing }: CompareViewProps) {
                       Value
                     </th>
                     <th scope="col" class="num">
-                      Difference (95% CI)
+                      Difference per session (95% CI)
                     </th>
                   </tr>
                 </thead>
@@ -199,10 +211,10 @@ export function CompareView({ runs, tableMax, framing }: CompareViewProps) {
                       <tr key={r.id}>
                         <th scope="row">{r.label}</th>
                         <td class="num">
-                          {fmt(def, v)}
+                          {fmt(def, v, i)}
                           {c ? (
                             <span class="ci-line">
-                              {fmt(def, c[0])} to {fmt(def, c[1])}
+                              {fmt(def, c[0], i)} to {fmt(def, c[1], i)}
                             </span>
                           ) : null}
                         </td>
@@ -211,9 +223,10 @@ export function CompareView({ runs, tableMax, framing }: CompareViewProps) {
                             <span class="muted">baseline</span>
                           ) : d ? (
                             <>
-                              {fmt(def, d.value, true)}
+                              {fmt(def, d.value, 'diff', true)}
                               <span class="ci-line">
-                                {fmt(def, d.ci.lo, true)} to {fmt(def, d.ci.hi, true)}
+                                {fmt(def, d.ci.lo, 'diff', true)} to{' '}
+                                {fmt(def, d.ci.hi, 'diff', true)}
                               </span>
                             </>
                           ) : (
@@ -249,9 +262,9 @@ export function CompareView({ runs, tableMax, framing }: CompareViewProps) {
               counts: result.sharedHistogram.counts[i]!,
             }))}
             markers={{ zero: 0 }}
-            title={`Net result per session (${fr.unit})`}
-            fmt={(c) => fr.money(c)}
-            axisFmt={(c) => fr.money(c)}
+            title="Net result per session"
+            fmt={(c) => fmtMoney(c)}
+            axisFmt={(c) => fmtMoney(c)}
           />
         ) : (
           <FanChart

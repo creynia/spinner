@@ -76,8 +76,22 @@
 .num {
   text-align: right !important;
 }
-.kn-value {
-  overflow-wrap: anywhere;
+.kn-value,
+.kn-ci {
+  white-space: nowrap;
+}
+.kn-ci-narrow {
+  display: none;
+}
+@media (max-width: 639px) {
+  .kn-ci-narrow {
+    display: block;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .keynums .kn-ci {
+    display: none;
+  }
 }
 .plain-table .num,
 .sessions-table .num {

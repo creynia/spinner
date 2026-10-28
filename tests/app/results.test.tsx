@@ -15,6 +15,7 @@ import {
 import { roulette } from '@game/roulette';
 import { Analyze } from '@app/screens/Analyze';
 import { Run } from '@app/screens/Run';
+import { liveCharts, livePrefix } from '@app/screens/Run/useRun';
 import { setPoolForTests } from '@app/services/pool';
 import {
   dryRunDefinitionIds,
@@ -116,5 +117,19 @@ describe('Run to Analyze with a real roulette run', () => {
     expect((await listRecentRuns(50)).some((r) => r.runId === runId)).toBe(false);
     expect((await dryRunDefinitionIds()).size).toBeGreaterThan(0);
     expect((await (await getCoreRepo()).loadRun(runId))?.meta.status).toBe('done');
+  }, 60_000);
+
+  it('live charts read a bounded whole-chunk prefix', async () => {
+    const runId = await startRun(definition);
+    const c = getController(runId)!;
+    while (c.status !== 'done') await c.settled();
+    const data = (await (await getCoreRepo()).loadRun(runId))!;
+    const p = livePrefix(data, 10);
+    expect(p.sessions).toBeLessThan(data.sessions);
+    expect(p.sessions % data.meta.chunkSize).toBe(0);
+    const t0 = performance.now();
+    const live = liveCharts(data);
+    expect(live.fan?.rounds.length).toBeGreaterThan(1);
+    expect(performance.now() - t0).toBeLessThan(500);
   }, 60_000);
 });

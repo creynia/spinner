@@ -162,7 +162,7 @@ export function AnalysisView(props: AnalysisViewProps) {
           <Risk metrics={metrics} tableMax={tableMax} bankroll={data.definition.session.bankroll} />
         ) : null}
         {tab === 'money' ? <Money {...{ metrics, adjusted, anomalies, n }} /> : null}
-        {tab === 'convergence' ? <Conv data={data} metrics={metrics} fr={fr} /> : null}
+        {tab === 'convergence' ? <Conv data={data} metrics={metrics} /> : null}
         {tab === 'sessions' ? (
           <Card title="Sessions">
             <p class="muted">
@@ -207,17 +207,27 @@ function Overview({
     },
     {
       id: 'median-net',
-      label: `Median net ${fr.unit}`,
-      value: fr.money(m.net.q.p50, { sign: true }),
+      label: 'Median net per session',
+      hint: 'always per session: a median of rates is not the rate of a median',
+      value: fmtMoney(m.net.q.p50, { sign: true }),
       interval: m.net.medianCI
         ? {
-            lo: fr.money(m.net.medianCI.lo, { sign: true }),
-            hi: fr.money(m.net.medianCI.hi, { sign: true }),
+            lo: fmtMoney(m.net.medianCI.lo, { sign: true }),
+            hi: fmtMoney(m.net.medianCI.hi, { sign: true }),
           }
         : null,
       tooFew: !m.net.medianCI,
     },
-    { id: 'sd', label: `Spread (SD) ${fr.unit}`, value: fr.money(m.net.sd), interval: null },
+    {
+      id: 'sd',
+      label: `Spread (SD) ${fr.unit}`,
+      value: fmtMoney(sdFor(m, fr)),
+      interval: null,
+      hint:
+        fr.framing === 'session'
+          ? undefined
+          : 'from the per-round SD, so luck does not stretch with time',
+    },
     prop('p-ahead', 'P(ahead)', m.probabilities.ahead, 'finished with more than the bankroll'),
     prop('p-bust', 'P(bust)', m.probabilities.bust),
     prop('p-stop-win', 'P(stop-win)', m.probabilities.stopWin),
@@ -232,22 +242,16 @@ function Overview({
       value: fr.money(exp.meanExpectedLoss),
       interval: null,
       hint: 'from the exact odds, before luck',
+      exact: true,
     },
-    {
-      id: 'realized-loss',
-      label: `Realized loss ${fr.unit}`,
-      value: fr.money(exp.meanRealizedLoss.value),
-      interval: exp.meanRealizedLoss.ci
-        ? { lo: fr.money(exp.meanRealizedLoss.ci.lo), hi: fr.money(exp.meanRealizedLoss.ci.hi) }
-        : null,
-      tooFew: !exp.meanRealizedLoss.ci,
-    },
+    realizedLossRow(m, fr, data.definition.session.roundsPerHour),
     {
       id: 'cost-hour',
       label: 'Cost of play (expected loss per hour)',
       value: fmtMoney(e.costOfPlayPerHour),
       interval: null,
       hint: `at ${fmtInt(data.definition.session.roundsPerHour)} rounds an hour`,
+      exact: true,
     },
     {
       id: 'luck',
@@ -255,6 +259,7 @@ function Overview({
       value: fmtZ(exp.luckZ),
       interval: null,
       hint: exp.luckLabel ? luckText(exp.luckLabel) : undefined,
+      exact: true,
     },
   ];
   if (e.realized && e.analytic !== null) {
@@ -281,9 +286,8 @@ function Overview({
       </Card>
       {b.rejected.total > 0 ? (
         <Warn id="rejected">
-          The strategy asked for {fmtInt(b.rejected.total)} bets the table would not allow (in{' '}
-          {fmtPct(b.rejected.sessionsWithRejections.p)} of sessions). They were rejected, not
-          played. See &ldquo;Where the money went&rdquo;.
+          {rejectionText(b)} They were not played, in {fmtPct(b.rejected.sessionsWithRejections.p)}{' '}
+          of sessions. See &ldquo;Where the money went&rdquo;.
         </Warn>
       ) : null}
       {b.errors.total > 0 ? (
@@ -312,8 +316,11 @@ function Overview({
         </Card>
       </div>
       {m.expected.sessionZ ? (
-        <details class="card luck">
-          <summary>Luck: how each session compares with the odds</summary>
+        <Card title="Luck">
+          <p class="muted">
+            How each session compares with the odds: 0 is average, positive is luckier than the
+            house edge predicts.
+          </p>
           <Histogram
             histogram={m.expected.sessionZ}
             title="Session luck z"
@@ -321,10 +328,64 @@ function Overview({
             axisFmt={(v) => fmtNum(v, 0)}
             xLabel="z"
           />
-        </details>
+        </Card>
       ) : null}
     </>
   );
+}
+
+function realizedLossRow(m: RunMetrics, fr: Framer, rph: number): KeyRow {
+  // Per hour uses the interval from the realized edge (metrics.md section 5), not a scaled one.
+  const perHour = m.edge.realizedLossPerHour;
+  const est =
+    fr.framing === 'hour' && perHour
+      ? perHour
+      : fr.framing === 'per100' && perHour
+        ? {
+            value: (perHour.value * 100) / rph,
+            ci: perHour.ci && {
+              ...perHour.ci,
+              lo: (perHour.ci.lo * 100) / rph,
+              hi: (perHour.ci.hi * 100) / rph,
+            },
+          }
+        : m.expected.meanRealizedLoss;
+  return {
+    id: 'realized-loss',
+    label: `Realized loss ${fr.unit}`,
+    value: fmtMoney(est.value),
+    interval: est.ci ? { lo: fmtMoney(est.ci.lo), hi: fmtMoney(est.ci.hi) } : null,
+    tooFew: !est.ci,
+  };
+}
+
+/** SD in the chosen framing: the per-round SD scaled by sqrt of the rounds (metrics.md section 7). */
+export function sdFor(m: RunMetrics, fr: Framer): number {
+  return fr.framing === 'hour'
+    ? m.volatility.sdHour
+    : fr.framing === 'per100'
+      ? m.volatility.sdPer100
+      : m.volatility.sdSession;
+}
+
+const REJECT_REASON: Record<string, string> = {
+  unaffordable: 'not enough bankroll',
+  'over-max': 'over the table limit',
+  'table-max': 'over the table limit',
+  'below-min': 'below the table minimum',
+  'inside-min-total': 'inside bets under the table minimum',
+  'not-on-wheel': 'not on this wheel',
+  'not-placeable': 'not placeable now',
+  'unknown-bet': 'unknown bet',
+  'invalid-amount': 'invalid amount',
+};
+
+/** "703 bets were rejected: 703 not enough bankroll, 0 over the table limit." */
+export function rejectionText(b: RunMetrics['breakdown']): string {
+  const parts = Object.entries(b.rejected.byReason).map(
+    ([k, v]) => `${fmtInt(v)} ${REJECT_REASON[k] ?? k}`,
+  );
+  return `${fmtInt(b.rejected.total)} bets were rejected${parts.length ? `: ${parts.join(', ')}` : ''}.`;
 }
 
 function luckText(l: NonNullable<RunMetrics['expected']['luckLabel']>): string {
@@ -405,6 +466,9 @@ function Risk({
   return (
     <div class="two-col">
       <Card title="Drawdown">
+        <p class="muted" data-scope>
+          All {fmtInt(m.n)} sessions, in dollars (not scaled by the money framing).
+        </p>
         <Histogram
           histogram={dd.histogram}
           title="Max drawdown per session"
@@ -413,6 +477,9 @@ function Risk({
         <KeyNumbers rows={ddRows} caption="Drawdown numbers with 95% intervals" />
       </Card>
       <Card title="Exposure">
+        <p class="muted" data-scope>
+          All {fmtInt(m.n)} sessions, in dollars (not scaled by the money framing).
+        </p>
         <Histogram
           histogram={ex.histogram}
           title="Largest amount on the table per session"
@@ -435,21 +502,27 @@ function Money({
   anomalies: number;
   n: number;
 }) {
-  const b = m.breakdown;
+  const b = {
+    ...m.breakdown,
+    categories: m.breakdown.categories.filter((c) => c.wagered > 0),
+  };
   const rej = Object.entries(b.rejected.byReason);
   const def = Object.entries(b.deferred.byReason);
   return (
     <>
       {b.rejected.total > 0 ? (
         <Warn id="rejected">
-          {fmtInt(b.rejected.total)} rejected bets in {fmtPct(b.rejected.sessionsWithRejections.p)}{' '}
-          of sessions (95% CI {fmtPct(b.rejected.sessionsWithRejections.ci.lo)} to{' '}
+          {rejectionText(b)} In {fmtPct(b.rejected.sessionsWithRejections.p)} of sessions (95% CI{' '}
+          {fmtPct(b.rejected.sessionsWithRejections.ci.lo)} to{' '}
           {fmtPct(b.rejected.sessionsWithRejections.ci.hi)}). The strategy asked for something the
           table would not allow.
         </Warn>
       ) : null}
       <div class="two-col">
         <Card title="By bet category">
+          <p class="muted" data-scope>
+            Totals over all {fmtInt(n)} sessions, in dollars (not scaled by the money framing).
+          </p>
           {b.categories.length ? (
             <>
               <Bars
@@ -462,7 +535,7 @@ function Money({
                 class="table-scroll"
                 tabIndex={0}
                 role="region"
-                aria-label="Table, scrolls sideways"
+                aria-label="Bet categories, scrolls sideways"
               >
                 <table class="plain-table">
                   <caption class="visually-hidden">Bet categories</caption>
@@ -505,6 +578,9 @@ function Money({
           )}
         </Card>
         <Card title="By stage">
+          <p class="muted" data-scope>
+            Totals over all {fmtInt(n)} sessions, in dollars.
+          </p>
           {b.stages.length ? (
             <>
               <Bars rows={stageRows(b)} title="Net result by stage" valueLabel="Net" signed />
@@ -512,7 +588,7 @@ function Money({
                 class="table-scroll"
                 tabIndex={0}
                 role="region"
-                aria-label="Table, scrolls sideways"
+                aria-label="Stages, scrolls sideways"
               >
                 <table class="plain-table">
                   <caption class="visually-hidden">Stages</caption>
@@ -585,7 +661,7 @@ function Money({
   );
 }
 
-function Conv({ data, metrics, fr }: { data: RunData; metrics: RunMetrics; fr: Framer }) {
+function Conv({ data, metrics }: { data: RunData; metrics: RunMetrics }) {
   const [metric, setMetric] = useState<'mean' | 'bust' | 'ahead'>('mean');
   const [halfDollars, setHalfDollars] = useState('');
   const target = useMemo(() => {
@@ -640,8 +716,8 @@ function Conv({ data, metrics, fr }: { data: RunData; metrics: RunMetrics; fr: F
             onInput={(e) => setHalfDollars(e.currentTarget.value)}
           />
           <p class="hint">
-            Default: 10% of the expected loss, at least $1. Amounts here are per session ({fr.unit}{' '}
-            elsewhere).
+            Default: 10% of the expected loss, at least $1. Amounts here are always per session,
+            whatever the money framing.
           </p>
         </div>
       </Card>

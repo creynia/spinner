@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render } from '@testing-library/preact';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { RunData } from '../../contracts/run';
 import { FLAT_COIN, MARTINGALE_COIN, coinDefinition, runCoinToEnd } from '../../testing';
+import { runMetrics } from '../../analysis';
 import { AnalysisView, ANALYZE_TABS, type AnalyzeTab } from './AnalysisView';
 import { CompareView, METHOD_PAIRED, METHOD_WELCH } from './CompareView';
 import { ProgressCard } from './ProgressCard';
@@ -134,6 +135,62 @@ describe('AnalysisView', () => {
       ]),
     );
     expect(container.querySelector('[role=switch]')?.textContent).toMatch(/Gallery trim/);
+  });
+
+  it('SD per hour and per 100 rounds come from the per-round SD, not a linear scaling', () => {
+    const m = runMetrics(big, { tableMax: 50_000 });
+    const hour = render(
+      <AnalysisView data={big} framing="hour" tab="overview" onTab={() => undefined} />,
+    ).container;
+    expect(hour.querySelector('[data-metric="sd"] .kn-value')?.textContent).toContain(
+      fmtMoney(m.volatility.sdHour),
+    );
+    cleanup();
+    const per100 = render(
+      <AnalysisView data={big} framing="per100" tab="overview" onTab={() => undefined} />,
+    ).container;
+    expect(per100.querySelector('[data-metric="sd"] .kn-value')?.textContent).toContain(
+      fmtMoney(m.volatility.sdPer100),
+    );
+    expect(m.volatility.sdHour).not.toBeCloseTo(
+      (m.net.sd * big.definition.session.roundsPerHour) / m.length.mean.value,
+      0,
+    );
+  });
+
+  it('only analytic rows say exact; the median stays per session', () => {
+    const { container } = view(big, 'overview');
+    expect(container.querySelector('[data-metric="expected-loss"] .kn-ci')?.textContent).toBe(
+      'exact',
+    );
+    expect(container.querySelector('[data-metric="sd"] .kn-ci')?.textContent).toBe('');
+    expect(container.querySelector('[data-metric="median-net"]')?.textContent).toContain(
+      'per session',
+    );
+  });
+
+  it('the rejected warning names the reasons', () => {
+    const bad: RunData = {
+      ...big,
+      chunkStats: {
+        ...big.chunkStats,
+        rejectedByReason: big.chunkStats.rejectedByReason.map((_, i): Record<string, number> =>
+          i === 0 ? { unaffordable: 7, 'over-max': 2 } : {},
+        ),
+      },
+    };
+    const w = view(bad, 'overview').container.querySelector('[data-warning="rejected"]');
+    expect(w?.textContent).toContain(
+      '9 bets were rejected: 7 not enough bankroll, 2 over the table limit',
+    );
+  });
+
+  it('scroll regions are labelled distinctly', () => {
+    const { container } = view(big, 'money');
+    const labels = [...container.querySelectorAll('[role=region]')].map((e) =>
+      e.getAttribute('aria-label'),
+    );
+    expect(new Set(labels).size).toBe(labels.length);
   });
 
   it('applies the money framing', () => {

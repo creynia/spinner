@@ -4,7 +4,7 @@ import type { RunData } from '../../contracts/run';
 import { sweepResult } from '../../analysis';
 import { SweepChart } from '../charts';
 import { Card } from '../kit';
-import { fmtInt, fmtPct, makeFramer, type MoneyFraming } from './format';
+import { fmtInt, fmtMoney, fmtPct, makeFramer, type MoneyFraming } from './format';
 
 export interface SweepViewProps {
   path: string;
@@ -22,7 +22,9 @@ export function SweepView({ path, values, runs, tableMax, framing, valueFmt }: S
   );
   const vf = valueFmt ?? ((v: unknown) => String(v));
   const rph = runs[0]?.definition.session.roundsPerHour ?? 40;
-  const fr = makeFramer(framing, sweep.points[0]?.metrics.length.mean.value ?? 0, rph);
+  // Each variant is scaled by its own mean rounds; the chart and step differences are per session.
+  const frs = sweep.points.map((p) => makeFramer(framing, p.metrics.length.mean.value, rph));
+  const fr = frs[0] ?? makeFramer('session', 0, rph);
   return (
     <>
       <Card title="Metric against parameter">
@@ -30,16 +32,21 @@ export function SweepView({ path, values, runs, tableMax, framing, valueFmt }: S
           sweep={sweep}
           parameterLabel={path}
           valueFmt={vf}
-          fmt={(c) => fr.money(c)}
-          axisFmt={(c) => fr.money(c)}
+          fmt={(c) => fmtMoney(c)}
+          axisFmt={(c) => fmtMoney(c)}
         />
         <p class="muted">
           All variants use the same seed, so differences between neighbours are paired by session.
-          Amounts are {fr.unit}.
+          The chart is per session; the table is {fr.unit}.
         </p>
       </Card>
       <Card title="Variants">
-        <div class="table-scroll" tabIndex={0} role="region" aria-label="Table, scrolls sideways">
+        <div
+          class="table-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Variants, scrolls sideways"
+        >
           <table class="plain-table" data-variants>
             <caption class="visually-hidden">One row per value of {path}</caption>
             <thead>
@@ -70,10 +77,10 @@ export function SweepView({ path, values, runs, tableMax, framing, valueFmt }: S
                 return (
                   <tr key={p.runId}>
                     <th scope="row">{vf(p.value)}</th>
-                    <td class="num">{fr.money(m.net.mean.value, { sign: true })}</td>
+                    <td class="num">{frs[i]!.money(m.net.mean.value, { sign: true })}</td>
                     <td class="num">
                       {ci
-                        ? `${fr.money(ci.lo, { sign: true })} to ${fr.money(ci.hi, { sign: true })}`
+                        ? `${frs[i]!.money(ci.lo, { sign: true })} to ${frs[i]!.money(ci.hi, { sign: true })}`
                         : 'too few sessions'}
                     </td>
                     <td class="num">
@@ -86,7 +93,7 @@ export function SweepView({ path, values, runs, tableMax, framing, valueFmt }: S
                     </td>
                     <td class="num">
                       {adj
-                        ? `${fr.money(adj.meanNet.value, { sign: true })} (${fr.money(adj.meanNet.ci.lo, { sign: true })} to ${fr.money(adj.meanNet.ci.hi, { sign: true })})`
+                        ? `${fmtMoney(adj.meanNet.value, { sign: true })} (${fmtMoney(adj.meanNet.ci.lo, { sign: true })} to ${fmtMoney(adj.meanNet.ci.hi, { sign: true })})`
                         : 'first'}
                     </td>
                   </tr>
