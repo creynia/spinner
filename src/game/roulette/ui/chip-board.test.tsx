@@ -59,8 +59,17 @@ function mount(over: Partial<ChipBoardProps<RouletteRules>> = {}) {
   const tap = (id: string, target: Element = svg): void => {
     fireEvent.click(target, { detail: 1, ...at(id) });
   };
+  const openMode = (): void => {
+    fireEvent.click(q(r.container, '.rl-mode'));
+  };
+  const openCalls = (): void => {
+    openMode();
+    fireEvent.click(r.getByRole('button', { name: 'Call bets…' }));
+  };
   return {
     ...r,
+    openMode,
+    openCalls,
     svg,
     onAdjust,
     onStatus,
@@ -91,9 +100,11 @@ describe('tap placement', () => {
   });
 
   it('a lock picks the nearest bet of that family anywhere in the cell', () => {
-    const { svg, onAdjust, getByRole, at } = mount();
+    const { svg, onAdjust, getByRole, at, openMode } = mount();
+    openMode();
     const group = getByRole('radiogroup');
     fireEvent.click(group.querySelector('[role=radio][aria-label="2, split"]')!);
+    expect(q(document.body, '.rl-mode').textContent).toBe('Split');
     // Near the middle of cell 17 a split is still chosen, never the straight.
     const p = at('straight:17');
     fireEvent.click(svg, { detail: 1, ...p });
@@ -199,7 +210,8 @@ describe('tools', () => {
 
 describe('bet-type lock', () => {
   it('is a radiogroup named "Bet type" with label-in-name options', () => {
-    const { getByRole } = mount();
+    const { getByRole, openMode } = mount();
+    openMode();
     const group = getByRole('radiogroup');
     const label = document.getElementById(group.getAttribute('aria-labelledby')!)!;
     expect(label.textContent).toBe('Bet type');
@@ -220,7 +232,8 @@ describe('bet-type lock', () => {
   });
 
   it('arrow keys move and select, announce the mode, and persist per device', () => {
-    const { getByRole, onStatus } = mount();
+    const { getByRole, onStatus, openMode } = mount();
+    openMode();
     const group = getByRole('radiogroup');
     const auto = group.querySelector('[role=radio]')!;
     fireEvent.keyDown(auto, { key: 'ArrowRight' });
@@ -229,6 +242,7 @@ describe('bet-type lock', () => {
     expect(localStorage.getItem('spinner:chip-lock')).toBe('split');
     cleanup();
     const again = mount();
+    again.openMode();
     expect(
       again
         .getByRole('radiogroup')
@@ -244,7 +258,8 @@ describe('bet-type lock', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('blocked');
     });
-    const { getByRole } = mount();
+    const { getByRole, openMode } = mount();
+    openMode();
     expect(() =>
       fireEvent.click(getByRole('radiogroup').querySelectorAll('[role=radio]')[3]!),
     ).not.toThrow();
@@ -253,9 +268,15 @@ describe('bet-type lock', () => {
 });
 
 describe('call bets and neighbours', () => {
-  it('the Call bets tab exists on European only', () => {
+  it('one compact control opens the mode sheet; Call bets… is European only', () => {
     const e = mount();
-    expect(e.getByRole('tablist')).toBeTruthy();
+    expect(e.container.querySelector('[role=tablist]')).toBeNull();
+    const btn = q(e.container, '.rl-mode');
+    expect(btn.textContent).toBe('Auto');
+    expect(btn.getAttribute('aria-label')).toBe('Auto, bet type and call bets');
+    e.openMode();
+    expect(e.getByRole('dialog', { name: 'Bet type' })).toBeTruthy();
+    expect(e.getByRole('button', { name: 'Call bets…' })).toBeTruthy();
     cleanup();
     const us = render(
       <ChipBoard
@@ -266,13 +287,26 @@ describe('call bets and neighbours', () => {
         onAdjust={() => undefined}
       />,
     );
-    expect(us.container.querySelector('[role=tablist]')).toBeNull();
+    fireEvent.click(q(us.container, '.rl-mode'));
+    expect(us.queryByRole('button', { name: 'Call bets…' })).toBeNull();
+  });
+
+  it('Escape closes the sheet and focus returns to the control', async () => {
+    vi.useFakeTimers();
+    const { container, openMode, getByRole } = mount();
+    openMode();
+    fireEvent.keyDown(getByRole('dialog'), { key: 'Escape' });
+    await act(() => {
+      vi.advanceTimersByTime(10);
+    });
+    expect(container.querySelector('[role=dialog]')).toBeNull();
+    expect(document.activeElement).toBe(q(container, '.rl-mode'));
   });
 
   it('sector steppers move by the call bet pieces', () => {
-    const { getByRole, container, onAdjust } = mount({ spots: [{ bet: 'voisins', chips: 9 }] });
+    const { container, onAdjust, openCalls } = mount({ spots: [{ bet: 'voisins', chips: 9 }] });
     expect(stepOf('voisins')).toBe(9);
-    fireEvent.click(getByRole('tab', { name: 'Call bets' }));
+    openCalls();
     const plus = q(container, '[data-bet="voisins"] button[aria-label^="Add"]');
     fireEvent.click(plus);
     expect(onAdjust).toHaveBeenLastCalledWith('voisins', 9);
@@ -285,10 +319,10 @@ describe('call bets and neighbours', () => {
   });
 
   it('neighbours add 2k+1 chips and placed neighbours get steppers', () => {
-    const { getByRole, container, onAdjust } = mount({
+    const { container, onAdjust, openCalls } = mount({
       spots: [{ bet: 'neighbours:0:2', chips: 5 }],
     });
-    fireEvent.click(getByRole('tab', { name: 'Call bets' }));
+    openCalls();
     fireEvent.click(q(container, '[data-add-neighbours]'));
     expect(onAdjust).toHaveBeenLastCalledWith('neighbours:0:2', 5);
     fireEvent.click(q(container, 'button[aria-label="More neighbours"]'));
@@ -389,7 +423,7 @@ describe('readOnly', () => {
       ],
     });
     expect(container.querySelector('[role=button]')).toBeNull();
-    expect(container.querySelector('[role=radiogroup]')).toBeNull();
+    expect(container.querySelector('[role=radiogroup], .rl-mode')).toBeNull();
     expect(container.querySelector('[role=tablist]')).toBeNull();
     expect(svg.classList.contains('rl-board--place')).toBe(false);
     expect(q(container, '[data-spot="straight:17"]:not(.rl-chip--ghost)').textContent).toBe('4');

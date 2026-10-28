@@ -34,8 +34,8 @@ export const BUILTIN_LAYOUTS: readonly ChipLayout[] = [
   make('zero-neighbours', 'Zero and neighbours', 'Zero and two pockets each side, one chip each.', [
     { bet: 'neighbours:0:2', chips: pieces('neighbours:0:2') },
   ]),
-  make('two-dozens', 'Two dozens', 'The first and second dozens, one chip each.', [
-    { bet: 'dozen:1', chips: 1 },
-    { bet: 'dozen:2', chips: 1 },
+  make('two-dozens', 'Two dozens', 'The first and second dozens, five chips each.', [
+    { bet: 'dozen:1', chips: 5 },
+    { bet: 'dozen:2', chips: 5 },
   ]),
 ];

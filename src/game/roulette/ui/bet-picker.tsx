@@ -151,6 +151,8 @@ export function BetSheet(props: {
   onClose: () => void;
   /** Layout editor: each row gets a − n + stepper instead of picking the bet. */
   steps?: ChipSteps;
+  /** Always a bottom sheet over a backdrop (never the inline card of wide screens). */
+  modal?: boolean;
 }) {
   const { label, wheel } = props;
   const ref = useRef<HTMLElement>(null);
@@ -163,7 +165,7 @@ export function BetSheet(props: {
   return (
     <>
       <div
-        class="rl-backdrop"
+        class={`rl-backdrop${props.modal ? ' rl-backdrop--modal' : ''}`}
         aria-hidden="true"
         onClick={() => {
           if (props.steps && Date.now() - openedAt.current < 500) return;
@@ -171,7 +173,7 @@ export function BetSheet(props: {
         }}
       />
       <section
-        class="rl-sheet"
+        class={`rl-sheet${props.modal ? ' rl-sheet--modal' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={`Bets on ${label}`}

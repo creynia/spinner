@@ -158,10 +158,18 @@ const GHOST_NUDGE = 6;
 
 function ChipView(props: { chip: Chip; board: ReturnType<typeof buildBoard>; place: boolean }) {
   const { chip, board, place } = props;
-  const at = chipAt(board, chip.spot, chip.pending);
+  const counted = chip.count !== undefined;
+  // Count chips (layout editor, thumbnails) sit on a straight's cell centre so they never read as a
+  // split or corner; split, corner and street chips stay on their lines. TableView keeps `chipAt`.
+  const cell =
+    counted && chip.spot.startsWith('straight:')
+      ? board.pockets.get(chip.spot.slice(9))
+      : undefined;
+  const at = cell
+    ? { x: cell.x + cell.w / 2, y: cell.y + cell.h / 2 }
+    : chipAt(board, chip.spot, chip.pending);
   if (!at) return null;
   const nudge = chip.ghost ? GHOST_NUDGE : 0;
-  const counted = chip.count !== undefined;
   const face = counted ? String(chip.count) : chipText(chip.cents);
   const cls = [
     'rl-chip',
