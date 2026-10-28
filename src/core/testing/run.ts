@@ -1,6 +1,7 @@
 // Helpers that run a definition over the `coin` game through the real pool, controller and
 // in-thread transport (tests only).
 import type { NormalizedDefinition } from '../contracts/experiment';
+import type { GamePlugin } from '../contracts/game';
 import type { RunData } from '../contracts/run';
 import {
   createInThreadTransport,
@@ -35,6 +36,7 @@ export function coinRun(
     sink?: MemorySink;
     pool?: SimPool;
     runId?: string;
+    plugin?: GamePlugin<unknown, unknown, unknown, unknown>;
     controller?: Partial<RunControllerOptions>;
   } = {},
 ): CoinRun {
@@ -42,7 +44,7 @@ export function coinRun(
   const sink = opts.sink ?? createMemorySink(definition);
   const controller = createRunController({
     definition,
-    plugin: coin,
+    plugin: opts.plugin ?? coin,
     pool,
     sink,
     runId: opts.runId ?? 'run-test',

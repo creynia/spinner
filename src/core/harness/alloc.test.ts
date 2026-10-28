@@ -1,4 +1,5 @@
-// "No per-round allocation" (harness doc §14.3): the session loop retains nothing per round. Heap
+// The session loop retains nothing per round (harness doc §14.3; this measures retained heap,
+// not allocation churn, which the plugin's own arrays account for). Heap
 // growth after a forced GC over 100k rounds stays under 1 MB, and does not scale with the number
 // of rounds (10x the rounds, the same growth).
 import v8 from 'node:v8';
@@ -39,7 +40,7 @@ describe('session loop memory', () => {
     return rounds;
   }
 
-  it('100k rounds grow the heap by less than 1 MB, and 1M rounds by about the same', () => {
+  it('retains nothing per round: 100k rounds grow the heap by less than 1 MB, and 1M rounds by about the same', () => {
     playRounds(3); // warm up the JIT and every lazily built cache
     const h0 = heapAfterGc();
     const r1 = playRounds(1);
