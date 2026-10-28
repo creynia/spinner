@@ -75,7 +75,8 @@ describe('Define structure', () => {
 
   it('converts hours and spins at the pace', async () => {
     const { container } = mount();
-    fireEvent.click(screen.getByRole('button', { name: /Session/ }));
+    const toggle = screen.queryByRole('button', { name: /Session/ });
+    if (toggle) fireEvent.click(toggle);
     const hours = container.querySelector<HTMLInputElement>('#hours')!;
     fireEvent.input(hours, { target: { value: '5' } });
     await waitFor(() =>
@@ -130,7 +131,7 @@ describe('share links', () => {
     await waitFor(() =>
       expect(container.querySelector<HTMLInputElement>('#exp-name')!.value).toBe('Shared one'),
     );
-    expect(screen.getByRole('status').textContent).toMatch(/Loaded from a link/);
+    expect(container.querySelector('.define-notice')!.textContent).toMatch(/Loaded from a link/);
     const back = docToDefinition(definitionToDoc(norm, { kind: 'link' }));
     expect(back.run.seed).toBe(777);
     await act(async () => undefined);

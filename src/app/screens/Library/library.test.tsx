@@ -62,9 +62,10 @@ describe('Library', () => {
     await waitFor(() => expect(saved()).toHaveLength(2));
   });
 
-  it('opens a preset in Define', () => {
+  it('opens a preset in Define', async () => {
     render(<Library params={{}} query={new URLSearchParams()} />);
-    const link = document.querySelector('a[href="#/define?preset=flat-red"]');
-    expect(link).not.toBeNull();
+    await waitFor(() =>
+      expect(document.querySelector('a[href="#/define?preset=flat-red"]')).not.toBeNull(),
+    );
   });
 });
