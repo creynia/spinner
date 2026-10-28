@@ -201,12 +201,6 @@ export function validationContext(rules: RouletteRules): CompileContext & { game
     rules,
     limits: (b, r, v) => plugin.limits(b, r as RouletteRules, v as never),
     compileFact: (ref, r) => plugin.compileFact(ref, r as RouletteRules) as never,
-    ...(plugin.compileHistory
-      ? {
-          compileHistory: (p: never, r: unknown) =>
-            plugin.compileHistory?.(p, r as RouletteRules) ?? null,
-        }
-      : {}),
   } as CompileContext & { gameId: string };
 }
 
