@@ -11,6 +11,8 @@ export interface ButtonProps {
   'aria-label'?: string;
   class?: string;
   id?: string;
+  /** Focus this control when a sheet opens (the least destructive one). */
+  autoFocus?: boolean;
 }
 
 export function Button({
@@ -23,7 +25,13 @@ export function Button({
   const className = `btn btn-${variant}${cls ? ` ${cls}` : ''}`;
   if (href !== undefined && !rest.disabled) {
     return (
-      <a class={className} href={href} id={rest.id} aria-label={rest['aria-label']}>
+      <a
+        class={className}
+        href={href}
+        id={rest.id}
+        aria-label={rest['aria-label']}
+        data-autofocus={rest.autoFocus ? '' : undefined}
+      >
         {children}
       </a>
     );
@@ -33,6 +41,7 @@ export function Button({
       class={className}
       type={rest.type ?? 'button'}
       id={rest.id}
+      data-autofocus={rest.autoFocus ? '' : undefined}
       disabled={rest.disabled}
       onClick={rest.onClick}
       aria-label={rest['aria-label']}

@@ -1,5 +1,6 @@
 // Settings (architecture.md §6.4): kept in the `settings` store through the repo, with `theme`
 // mirrored to localStorage['spinner:theme'] (main.tsx reads it synchronously). All access in try/catch.
+import { showToast } from '@core/ui';
 import { createStore } from '../state/store';
 import type { Repo } from './db';
 
@@ -16,7 +17,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = { theme: 'system', framing: 'session', pace: 'live' };
 export const THEME_KEY = 'spinner:theme';
-const SETTINGS_ID = 'app';
+const SETTING_KEYS = ['theme', 'framing', 'pace'] as const;
 
 export const settingsStore = createStore<Settings>(DEFAULT_SETTINGS);
 
@@ -69,26 +70,39 @@ function writeLocalCopy(s: Settings): void {
 
 let repo: Repo | null = null;
 
-/** Load persisted settings from the repo and apply the theme. Never throws. */
+/** Load persisted settings (one `{ key, value }` record each) and apply the theme. Never throws. */
 export async function loadSettings(r: Repo): Promise<Settings> {
   repo = r;
-  let stored: unknown = null;
+  const stored: Record<string, unknown> = {};
   try {
-    stored = await r.getSettings();
-  } catch {
-    // fall through to the local copy
+    for (const key of SETTING_KEYS) stored[key] = await r.getSetting(key);
+  } catch (e) {
+    reportError('Could not read saved settings', e);
   }
-  // A memory-only repo forgets on reload, so the localStorage copy fills in for it.
-  stored ??= readLocalCopy();
-  settingsStore.set(sanitizeSettings(stored));
+  // A memory-only repo forgets on reload, so the localStorage copy fills in what it lacks.
+  const local = readLocalCopy() as Record<string, unknown> | null;
+  const merged: Record<string, unknown> = {};
+  for (const key of SETTING_KEYS) merged[key] = stored[key] ?? local?.[key];
+  settingsStore.set(sanitizeSettings(merged));
   applyTheme(settingsStore.get().theme);
   return settingsStore.get();
 }
 
+function reportError(message: string, e: unknown): void {
+  console.error(message, e);
+  showToast(`${message}.`, { tone: 'error' });
+}
+
 export function updateSettings(patch: Partial<Settings>): void {
-  const next = sanitizeSettings({ ...settingsStore.get(), ...patch });
+  const prev = settingsStore.get();
+  const next = sanitizeSettings({ ...prev, ...patch });
   settingsStore.set(next);
   writeLocalCopy(next);
   if (patch.theme !== undefined) applyTheme(next.theme);
-  void repo?.putSettings({ id: SETTINGS_ID, ...next }).catch(() => undefined);
+  for (const key of SETTING_KEYS) {
+    if (next[key] === prev[key]) continue;
+    repo
+      ?.setSetting(key, next[key])
+      .catch((e: unknown) => reportError('Could not save a setting', e));
+  }
 }

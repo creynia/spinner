@@ -174,12 +174,14 @@ export function normalizeDefinition(
   }
   let rules: NormalizedDefinition['game']['rules'] | undefined;
   let resolvedRules: unknown;
-  try {
-    const raw = game.rules as string | { preset: string; overrides: Record<string, Json> };
-    rules = plugin.rules.normalize(raw);
-    resolvedRules = plugin.rules.resolve(rules);
-  } catch (e) {
-    errors.push(err('E_RULES', '/game/rules', e instanceof Error ? e.message : 'invalid rules'));
+  if (game.id === plugin.id) {
+    try {
+      const raw = game.rules as string | { preset: string; overrides: Record<string, Json> };
+      rules = plugin.rules.normalize(raw);
+      resolvedRules = plugin.rules.resolve(rules);
+    } catch (e) {
+      errors.push(err('E_RULES', '/game/rules', e instanceof Error ? e.message : 'invalid rules'));
+    }
   }
 
   // 2. strategy

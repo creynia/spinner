@@ -34,17 +34,28 @@ export function setSinkFactory(f: (() => Promise<RunSink>) | null): void {
   sinkFactory = f;
 }
 
+/** Finished runs never change, so a verdict is computed once per run id per page load. */
+const verdictCache = new Map<string, RunVerdict>();
+export function clearVerdictCache(): void {
+  verdictCache.clear();
+}
+
 async function loadVerdict(meta: RunMeta, sink: RunSink | null): Promise<RunVerdict | null> {
-  if (meta.status !== 'done' || !sink) return null;
+  if (meta.status !== 'done') return null;
+  const cached = verdictCache.get(meta.runId);
+  if (cached) return cached;
+  if (!sink) return null;
   try {
     const data = await sink.load(meta.runId);
     if (!data) return null;
     const d = data.definition.session;
-    return {
+    const v: RunVerdict = {
       ...verdictFromMetrics(runMetrics(data)),
       roundsPerSession: d.maxRounds,
       roundsPerHour: d.roundsPerHour,
     };
+    verdictCache.set(meta.runId, v);
+    return v;
   } catch {
     return null;
   }
@@ -53,15 +64,19 @@ async function loadVerdict(meta: RunMeta, sink: RunSink | null): Promise<RunVerd
 /** Most recent first. `definitionNames` maps definitionId -> name. */
 export async function listRecentRuns(limit = 5): Promise<RunListItem[]> {
   const repo = await getRepo();
-  const [runs, defs] = await Promise.all([repo.listRuns(), repo.listDefinitions()]);
+  const [all, defs] = await Promise.all([repo.listRuns(), repo.listDefinitions()]);
+  const runs = [...all].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const names = new Map(defs.map((d) => [d.id, d.definition.name]));
+  // Only the newest `limit` runs are touched; their verdicts are cached per run id.
+  const top = runs.slice(0, limit);
   let sink: RunSink | null = null;
-  try {
-    sink = await getSink();
-  } catch {
-    sink = null;
+  if (top.some((m) => m.status === 'done' && !verdictCache.has(m.runId))) {
+    try {
+      sink = await getSink();
+    } catch {
+      sink = null;
+    }
   }
-  const top = [...runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
   const items = await Promise.all(
     top.map(async (m): Promise<RunListItem> => ({
       runId: m.runId,

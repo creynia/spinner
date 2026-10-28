@@ -1,5 +1,6 @@
 // TopBar (architecture.md §6.1): back, title, running-run chip. Phones show it above the content;
 // from 768 px the NavRail sits beside it. The h1 belongs to the screen, so the title is a <p>.
+import { goBack, parentOf } from '../router';
 import { useStore } from '../state/store';
 import { activeRun } from '../services/runs';
 import { RunningChip } from './RunningChip';
@@ -26,14 +27,15 @@ export function titleFor(path: string): string {
 export function TopBar({ path }: { path: string }) {
   const run = useStore(activeRun, (r) => r);
   const atRoot = path === '/';
+  const parent = parentOf(path);
   return (
     <header class="topbar">
-      {atRoot ? null : (
-        <button type="button" class="topbar-back" onClick={() => history.back()}>
+      {parent === null ? null : (
+        <button type="button" class="topbar-back" onClick={() => goBack(path)}>
           <span aria-hidden="true">‹</span> Back
         </button>
       )}
-      <a class="topbar-brand" href="#/">
+      <a class={`topbar-brand${atRoot ? '' : ' off-root'}`} href="#/">
         spinner
       </a>
       <p class="topbar-title">{atRoot ? '' : titleFor(path)}</p>
