@@ -1,0 +1,237 @@
+/* Strategy builder. Tokens only; every control is at least var(--tap) tall. */
+.builder,
+.strategy-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.bsec {
+  margin: 12px 0 6px;
+  font-size: 1rem;
+}
+.bsec--big {
+  font-size: 1.1rem;
+}
+.bstages,
+.blist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bstage {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.bstage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bstage-title {
+  margin: 0;
+  font-size: 1rem;
+}
+.blayout,
+.brule {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.brule--off {
+  opacity: 0.7;
+}
+.brow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+.brow--meta {
+  margin-top: 4px;
+}
+.bkw {
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: lowercase;
+}
+.b-always,
+.b-comma {
+  color: var(--muted);
+}
+.bchip,
+.b-add,
+.b-joiner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.bchip {
+  border-color: var(--accent);
+}
+.b-add {
+  border-style: dashed;
+  color: var(--accent);
+  font-weight: 600;
+}
+.b-joiner {
+  min-width: var(--tap);
+  justify-content: center;
+  padding: 0 8px;
+  color: var(--muted);
+}
+.bchip--err {
+  border-color: var(--danger);
+  border-width: 2px;
+}
+.bchip--warn {
+  border-style: dotted;
+}
+.bchip-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: var(--bg);
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+.b-pill {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+.b-tools {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+.b-icon {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.b-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.b-errs {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+.b-err {
+  color: var(--danger);
+}
+.b-warn {
+  color: var(--muted);
+}
+.b-sev {
+  font-weight: 700;
+}
+.b-code {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.b-err-note {
+  margin: 0;
+  color: var(--danger);
+}
+.bvar {
+  display: grid;
+  grid-template-columns: 1fr 1fr var(--tap);
+  gap: 8px;
+  align-items: end;
+}
+@media (max-width: 480px) {
+  .bvar {
+    grid-template-columns: 1fr var(--tap);
+  }
+}
+.bhooks summary {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.json-area {
+  min-height: 8rem;
+  padding: 8px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  resize: vertical;
+}
+.json-area--big {
+  min-height: 18rem;
+}
+.ed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+}
+.ed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ed-preview {
+  margin: 4px 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+.ed-row {
+  display: flex;
+}
+.bet-btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+.field-label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.ed-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

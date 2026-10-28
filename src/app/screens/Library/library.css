@@ -1,0 +1,18 @@
+/* Library screen. */
+.lib-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.lib-row .row-link {
+  flex: 1 1 14rem;
+  min-width: 0;
+  border-bottom: 0;
+}
+.lib-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

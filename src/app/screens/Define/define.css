@@ -1,0 +1,169 @@
+/* Define screen. Tokens only; every control is at least var(--tap) tall. */
+.define-screen {
+  padding-bottom: 150px;
+}
+@media (min-width: 768px) {
+  .define-screen {
+    padding-bottom: 0;
+  }
+}
+.define-name {
+  max-width: 560px;
+}
+.define-grid {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.define-card {
+  min-width: 0;
+}
+.define-h {
+  margin: 0;
+}
+.define-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.define-toggle > span:first-child {
+  flex: 0 0 auto;
+}
+.define-sum {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+.define-toggle > span:last-child {
+  margin-left: auto;
+}
+.define-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+}
+.define-rand .btn {
+  width: 100%;
+}
+.define-opt {
+  margin-bottom: 8px;
+}
+.define-limits summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  cursor: pointer;
+  font-weight: 600;
+}
+.define-row-btn {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.define-diags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.define-diag {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.define-diag--error .b-sev {
+  color: var(--danger);
+}
+.define-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(57px + env(safe-area-inset-bottom));
+  z-index: 20;
+  padding: 8px var(--gutter);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.define-verdict {
+  margin: 0 0 6px;
+  min-height: 1.4em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.define-verdict:empty {
+  display: none;
+}
+.define-bar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.define-bar-row .btn {
+  flex: 1 1 0;
+  padding: 0 8px;
+}
+.define-badge {
+  flex: 0 0 auto;
+}
+.define-badge--err {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.define-badge--warn {
+  border-style: dashed;
+}
+@media (min-width: 768px) {
+  .define-bar {
+    position: sticky;
+    bottom: 0;
+    left: auto;
+    right: auto;
+    margin: 0 calc(var(--gutter) * -1);
+    border-radius: 0;
+  }
+  .define-bar-row .btn {
+    flex: 0 0 auto;
+    padding: 0 16px;
+  }
+  .define-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    column-gap: 16px;
+    align-items: start;
+  }
+  .define-grid > #define-strategy {
+    grid-column: 1;
+    grid-row: 1 / span 5;
+  }
+  .define-grid > :not(#define-strategy) {
+    grid-column: 2;
+  }
+}
+
+.define-limits summary::before {
+  content: '\25b8';
+  display: inline-block;
+  width: 1.2em;
+}
+.define-limits[open] summary::before {
+  content: '\25be';
+}
