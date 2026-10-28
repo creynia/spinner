@@ -1,0 +1,40 @@
+.imp-drop {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 24px 16px;
+  text-align: center;
+}
+.imp-drop.is-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.imp-pick {
+  position: relative;
+  cursor: pointer;
+}
+.imp-pick:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.imp-link {
+  display: grid;
+  gap: 8px;
+}
+.imp-link .input {
+  min-height: var(--tap, 44px);
+  width: 100%;
+  box-sizing: border-box;
+}
+.imp-bad {
+  border-color: var(--danger);
+}
+.imp-results {
+  display: grid;
+  gap: 12px;
+}
+.chip-note {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+}

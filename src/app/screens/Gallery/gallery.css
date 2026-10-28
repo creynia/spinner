@@ -1,0 +1,15 @@
+.gal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+@media (min-width: 900px) {
+  .gal-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.gal-facts {
+  margin: 8px 0 12px;
+}
