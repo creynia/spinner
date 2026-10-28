@@ -881,6 +881,8 @@ The Watch screen renders: stage chip, fired rules highlighted in the builder's s
 
 ## 13. Builder UI model
 
+> **Chip stages (2026-10-28).** A stage may carry an `x-chips` block (chip counts per spot plus one chip value) that compiles to ordinary layout rows. The builder shows it as a chips panel. See `docs/design/layouts.md` §3, §5.1 and §7 for the compile rule, the stale and rebuild states, and the round-trip laws.
+
 The builder edits a **view model** that maps losslessly to normalized JSON. The JSON tab and the builder always show the same document; edits in either re-validate (debounced 150 ms) and diagnostics attach by path.
 
 ### 13.1 Structure

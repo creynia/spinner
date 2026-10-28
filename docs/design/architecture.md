@@ -936,6 +936,8 @@ inline "not found" card, never a crash.
 
 ### 6.3 Screens: phone (360–430 px) and desktop
 
+> **Layouts (2026-10-28).** Library has a fourth tab, Layouts, with the layout editor at `#/library?tab=layouts&edit=<id|new>`. Define opens the same editor in a sheet from a stage's chips panel and accepts `#/define?layout=<id>`. Both editors catch Android Back through a same-hash history sentinel, because `RouteBoundary key={hash}` remounts on every hash change. Saved layouts live in the IndexedDB `layouts` store (DB v2). See `docs/design/layouts.md`.
+
 **Home `#/`.** Phone: "New experiment" primary button; a "Resume" card per
 paused/interrupted run; *Recent runs* (verdict line per run, e.g. "mean −$41 ±
 $6 · P(ahead) 38% · bust 2%", tap → Analyze); *Recent definitions*; *Presets*

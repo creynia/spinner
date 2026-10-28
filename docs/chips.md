@@ -32,6 +32,18 @@ All "before v1" items are closed by #17 and #18:
 - `tests/perf/budget.spec.ts` asserts at least 2 workers. On a runner with 2 cores or fewer, `poolSize()` gives 1 and the test fails. GitHub's hosted runners have 4 vCPU (#19 review).
 - Core harness: `controller.settled()` resolves on the *next* transition, so awaiting it on a finished run hangs. App callers guard for this (Sweep, Benchmark). Clarify the docstring, or add a `whenSettled()` that resolves at once for a terminal run (#19 review).
 
+## Chip layouts follow-ups (from PRs #22–#34)
+
+- **Table-check wording** (#26): the banner is generic ("N spots would not be placed as drawn"). A game-specific message, e.g. "Inside bets total $15; the table needs $25", needs a plugin hook. Also, a folded duplicate's head row reports `ok` when it should report `merged` (cosmetic).
+- **Editor shell** (#26, #33): the landscape bet-type control lives inside `ChipBoard`, so the shell can't show it in its rail. Leaving the Library editor through the tab bar or bottom nav, or Back past a deep link, skips the unsaved-changes guard; only a page unload is protected.
+- **ChipBoard** (#29, #34): with a very tall host above it, the board can still get small. The mode button label clips slightly at 844×390. Call bets are two taps away (mode button → Call bets…).
+- **Library** (#33): there is no "Export all layouts". New layouts start on European; change the wheel from More. After the first save of a new layout the address stays `edit=new`.
+- **Builder chips panel** (#31): the table check covers the stage's chip spots, not manual or inherited rows. Rebuild drops `when`-guarded rows on a spot's bet; they were shadowed anyway.
+- **Sweep** (#30): add permanent tests for manual rows after chip rows and for `{units}` / `{prog}` chip stages. An invalid chip stage reports "too large for this layout", which misleads.
+- **Define** (#34): the minimum hint ("Add $X more … to reach the table minimum") rarely shows. It appears only when a chip value is set and the only table problems are minimums. The preselected chip is the smallest denomination that passes the table check, usually $25 once there is an outside bet, so you see the hint mainly when you lower the chip by hand or the layout is inside-only. `branchedFrom` isn't cleared when picking from the Presets sheet; this is harmless, since only a strategy identical to that preset gets its id back.
+- **Perf** (#34): `tests/build/perf/chips-budget.perf.test.ts` (runs only with `PERF=1`) runs Red ×5 + split + voisins at $5, 10,000 × 500. In the PR #34 runs it measured about 100k rounds/s serial, which projects to about 16.5 s on 3 threads against the 20 s budget. That is roughly half the speed of the 3-stage reference strategy measured in the same run; these figures are not recorded in the test. Profile if layouts grow.
+- **Design docs**: game.md §12, strategy.md §13 and architecture.md §6.3 now point to `layouts.md`. Fold the details in properly the next time those docs are revised.
+
 ## Later (nice to have)
 
 - Charts: the FanChart `alive` strip (harness-data-analysis.md §12.1); Bars tick collisions at very large values; one money format for axis ticks and tables (PR #6).
