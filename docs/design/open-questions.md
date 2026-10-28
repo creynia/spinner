@@ -14,6 +14,6 @@ Each entry is a question the orchestrator would have asked the user. It was deci
 
 The build VM cannot reach github.io or a real phone, so these PLAYBOOK §15 items are still open:
 
-1. **Phone check.** Open https://creynia.github.io/spinner/ on a mid-range Android, install it as a PWA, then run Settings → Benchmark (10,000 × 500). Check that it finishes under 20 s and the layout works at 360 px. The build VM measured 7.7 s on 3 Workers.
+1. **Phone check.** Open https://creynia.github.io/spinner/ on a mid-range Android, install it as a PWA, then run Settings → Benchmark (10,000 × 500). Check that it finishes under 90 s (the phone budget; 20 s is the laptop budget, PLAYBOOK §7.2) and the layout works at 360 px. The build VM measured 7.7 s on 3 Workers. Record the result (device, browser, workers, ms, rounds/s) in `docs/perf.md`, as harness-data-analysis.md §14 asks.
 2. **Update path on the live site.** After the next deploy, Settings → Check for updates should show the toast, and the SHA in About should change. The e2e test covers this against two local builds only.
-3. **Phone sleep mid-run.** Lock the phone during a run, unlock it, and check that the run resumes, or offers Resume, with the same results digest.
+3. **Phone sleep mid-run.** Lock the phone during a run, unlock it, and check that the run resumes, or offers Resume, and that the finished run has all its sessions and the same headline results as an uninterrupted run with the same seed.
