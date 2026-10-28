@@ -41,6 +41,8 @@ jobs:
       - run: npm run build
       - name: Assert the sim worker is a separate chunk
         run: ls dist/assets/sim.worker-*.js
+      - name: Assert the service worker and gallery index are emitted
+        run: test -f dist/sw.js && test -f dist/gallery/index.json && test -f dist/manifest.webmanifest
       - name: Bundle size report
         run: du -ab dist | sort -n | tail -25 >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
