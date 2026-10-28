@@ -1,6 +1,5 @@
 // Chip text (strategy.md §13.2): sentences generated from JSON and the fact schema labels.
-import type { Condition, Effect } from '@core/contracts/strategy';
-import { betLabel, factByName, money, type BuilderEnv } from './env';
+import { str, betLabel, factByName, money, type BuilderEnv } from './env';
 import type { AmountModel, ConditionChip, ConditionChips } from './model';
 
 type Obj = Record<string, unknown>;
@@ -41,26 +40,26 @@ function valueText(ref: string, v: unknown, env: BuilderEnv): string {
     return money(v);
   if (info?.value.type === 'enum' && info.value.labels) {
     const i = info.value.values.indexOf(v as string | number);
-    if (i >= 0) return info.value.labels[i] ?? String(v);
+    if (i >= 0) return info.value.labels[i] ?? str(v);
   }
   if (info?.name.startsWith('lastDozen') || info?.name === 'lastColumn') {
     const n = Number(v);
     if (n >= 1 && n <= 3) return ['1st', '2nd', '3rd'][n - 1]!;
   }
-  return String(v);
+  return str(v);
 }
 
 export function describeExpr(e: unknown, env: BuilderEnv): string {
   if (typeof e === 'number') return money(e);
   if (typeof e === 'string') return factText(e, env);
-  if (!isObj(e)) return String(e);
-  if ('units' in e) return `${e.units} unit${e.units === 1 ? '' : 's'}`;
-  if ('fact' in e) return factText(String(e.fact), env);
-  if ('var' in e) return String(e.var);
-  if ('prog' in e) return `progression ${String(e.prog)}`;
-  if ('pctOfBankroll' in e) return `${e.pctOfBankroll}% of bankroll`;
-  if ('tableMin' in e) return `table min ${String(e.tableMin)}`;
-  if ('tableMax' in e) return `table max ${String(e.tableMax)}`;
+  if (!isObj(e)) return str(e);
+  if ('units' in e) return `${str(e.units)} unit${e.units === 1 ? '' : 's'}`;
+  if ('fact' in e) return factText(str(e.fact), env);
+  if ('var' in e) return str(e.var);
+  if ('prog' in e) return `progression ${str(e.prog)}`;
+  if ('pctOfBankroll' in e) return `${str(e.pctOfBankroll)}% of bankroll`;
+  if ('tableMin' in e) return `table min ${str(e.tableMin)}`;
+  if ('tableMax' in e) return `table max ${str(e.tableMax)}`;
   if ('keepOr' in e) return `keep, else ${describeExpr(e.keepOr, env)}`;
   const k = Object.keys(e)[0];
   return k ? `${k}(…)` : '?';
@@ -90,7 +89,7 @@ function histText(h: Obj, env: BuilderEnv): string {
     const eq = Array.isArray(h.equals) ? h.equals : [h.equals];
     return eq.map((v) => valueText(h.fact as string, v, env)).join(' or ');
   }
-  return eventText(String(h.event), h, env);
+  return eventText(str(h.event), h, env);
 }
 
 function eventText(name: string, c: Obj, env: BuilderEnv): string {
@@ -99,17 +98,17 @@ function eventText(name: string, c: Obj, env: BuilderEnv): string {
   if (name === 'bet-won') return `${bet ?? 'a bet'} won`;
   if (name === 'bet-lost') return `${bet ?? 'a bet'} lost`;
   if (name === 'bet-push') return `${bet ?? 'a bet'} pushed`;
-  if (name === 'prog-cap') return `progression ${String(c.prog ?? '?')} hit its cap`;
-  if (name === 'prog-done') return `progression ${String(c.prog ?? '?')} finished`;
+  if (name === 'prog-cap') return `progression ${str(c.prog ?? '?')} hit its cap`;
+  if (name === 'prog-done') return `progression ${str(c.prog ?? '?')} finished`;
   return `${decl?.label ?? name}${bet ? ` (${bet})` : ''}`;
 }
 
-export function describeCondition(c: Condition | unknown, env: BuilderEnv): string {
-  if (!isObj(c)) return String(c);
+export function describeCondition(c: unknown, env: BuilderEnv): string {
+  if (!isObj(c)) return str(c);
   if (c.always === true) return 'always';
   if (Array.isArray(c.cmp)) {
     const [l, op, r] = c.cmp as unknown[];
-    return `${describeExpr(l, env)} ${OP_TEXT[String(op)] ?? String(op)} ${describeExpr(r, env)}`;
+    return `${describeExpr(l, env)} ${OP_TEXT[str(op)] ?? str(op)} ${describeExpr(r, env)}`;
   }
   if (Array.isArray(c.fact)) {
     const [ref, op, v] = c.fact as [string, string, unknown];
@@ -126,18 +125,18 @@ export function describeCondition(c: Condition | unknown, env: BuilderEnv): stri
   }
   if (typeof c.event === 'string') return eventText(c.event, c, env);
   if (typeof c.onTable === 'string') return `${betLabel(env, c.onTable)} is on the table`;
-  if (isObj(c.streak)) return `${histText(c.streak, env)} ${c.streak.atLeast}+ times in a row`;
+  if (isObj(c.streak)) return `${histText(c.streak, env)} ${str(c.streak.atLeast)}+ times in a row`;
   if (isObj(c.countInLast)) {
     const h = c.countInLast;
-    const lo = h.atLeast !== undefined ? `≥ ${h.atLeast}` : '';
-    const hi = h.atMost !== undefined ? `≤ ${h.atMost}` : '';
-    return `${histText(h, env)} ${[lo, hi].filter(Boolean).join(' and ')} of the last ${h.n}`;
+    const lo = h.atLeast !== undefined ? `≥ ${str(h.atLeast)}` : '';
+    const hi = h.atMost !== undefined ? `≤ ${str(h.atMost)}` : '';
+    return `${histText(h, env)} ${[lo, hi].filter(Boolean).join(' and ')} of the last ${str(h.n)}`;
   }
   if (isObj(c.since)) {
     const h = c.since;
     return h.atLeast !== undefined
-      ? `${histText(h, env)} not seen for ${h.atLeast}+ ${env.roundWord}s`
-      : `${histText(h, env)} seen within ${h.atMost} ${env.roundWord}s`;
+      ? `${histText(h, env)} not seen for ${str(h.atLeast)}+ ${env.roundWord}s`
+      : `${histText(h, env)} seen within ${str(h.atMost)} ${env.roundWord}s`;
   }
   if (typeof c.everyN === 'number')
     return `every ${c.everyN} ${c.of === 'stage' ? `${env.roundWord}s in the stage` : 'rounds'}`;
@@ -165,8 +164,8 @@ export function describeWhen(w: ConditionChips, env: BuilderEnv): string {
     : w.chips.map((c) => describeChip(c, env)).join(w.mode === 'any' ? ' or ' : ' and ');
 }
 
-export function describeEffect(e: Effect | unknown, env: BuilderEnv): string {
-  if (!isObj(e)) return String(e);
+export function describeEffect(e: unknown, env: BuilderEnv): string {
+  if (!isObj(e)) return str(e);
   if ('clear' in e) return 'take all bets down';
   if ('skipRound' in e) return `sit out this ${env.roundWord}`;
   if (typeof e.goto === 'string') return `go to stage ${e.goto}${e.reenter ? ' (restart)' : ''}`;
@@ -186,7 +185,7 @@ export function describeEffect(e: Effect | unknown, env: BuilderEnv): string {
       advance: 'advance',
       back: 'step back',
     };
-    return `${verb[String(e.do)] ?? String(e.do)} ${e.prog}`;
+    return `${verb[str(e.do)] ?? str(e.do)} ${e.prog}`;
   }
   if (typeof e.bet === 'string')
     return `bet ${describeExpr(e.amount, env)} on ${betLabel(env, e.bet)}`;

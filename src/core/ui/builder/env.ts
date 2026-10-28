@@ -1,7 +1,7 @@
 // What the builder needs to know about the game (all of it from the plugin; nothing roulette-specific).
-import type { BetCatalogEntry } from '@core/contracts/game';
-import type { FactDecl, FactParam, FactSchema, FactType } from '@core/contracts/facts';
-import type { Diagnostic } from '@core/contracts/strategy';
+import type { BetCatalogEntry } from '../../contracts/game';
+import type { FactDecl, FactParam, FactSchema, FactType } from '../../contracts/facts';
+import type { Diagnostic } from '../../contracts/strategy';
 import type { GameUi } from '../game-ui';
 
 export interface BuilderEnv {
@@ -46,7 +46,7 @@ export const SESSION_FACT_DEFS: readonly SessionFactDef[] = (
     {
       name: 'lastResult',
       label: 'last result',
-      value: { type: 'enum', values: ['win', 'loss', 'push', 'none'] } as FactType,
+      value: { type: 'enum', values: ['win', 'loss', 'push', 'none'] },
     },
   ] as Omit<SessionFactDef, 'group'>[]
 ).map((d) => ({ ...d, group: 'session' as const }));
@@ -106,4 +106,13 @@ export function diagsAt(diags: readonly Diagnostic[], path: string): Diagnostic[
 }
 export function diagsExactlyUnder(diags: readonly Diagnostic[], path: string): Diagnostic[] {
   return diagsAt(diags, path);
+}
+
+/** A display string for an unknown JSON value (never "[object Object]"). */
+export function str(x: unknown, fallback = ''): string {
+  return typeof x === 'string'
+    ? x
+    : typeof x === 'number' || typeof x === 'boolean'
+      ? String(x)
+      : fallback;
 }

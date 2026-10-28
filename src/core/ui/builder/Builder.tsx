@@ -2,13 +2,7 @@
 // with a layout list and rule rows that read as sentences. Edits flow model -> JSON on every change.
 import type { ComponentChildren } from 'preact';
 import { useMemo, useState } from 'preact/hooks';
-import type {
-  Condition,
-  Diagnostic,
-  Effect,
-  ProgressionSpec,
-  StrategyDefinition,
-} from '@core/contracts/strategy';
+import type { Condition, Diagnostic, Effect, StrategyDefinition } from '../../contracts/strategy';
 import { Select, Toggle } from '../kit';
 import { describeAmount, describeChip, describeEffect } from './describe';
 import {
@@ -216,7 +210,7 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
 
   const rename = (m: BuilderModel, from: string, to: string) => {
     const fix = (e: Effect): Effect =>
-      (e as { goto?: string }).goto === from ? ({ ...e, goto: to } as Effect) : e;
+      (e as { goto?: string }).goto === from ? { ...e, goto: to } : e;
     for (const s of m.stages) {
       if (s.extends === from) s.extends = to;
       for (const r of s.rules) r.then = r.then.map((c) => ({ effect: fix(c.effect) }));
@@ -513,7 +507,7 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
           ? chip.kind === 'not'
             ? chipToCondition(chip.chip)
             : chipToCondition(chip)
-          : ({ cmp: ['net', '<=', -10000] } as Condition);
+          : { cmp: ['net', '<=', -10000] };
         const put = (fn: (c: ConditionChips) => void) =>
           mutate((m) => {
             const s2 = m.stages[w.si]!;
@@ -598,10 +592,7 @@ export function Builder({ value, onChange, env, diagnostics }: BuilderProps) {
           <ProgressionEditor
             env={env}
             name={cur?.name ?? freshSlug('prog', progNames)}
-            spec={
-              cur?.spec ??
-              ({ kind: 'martingale', track: 'red', maxSteps: 6, onCap: 'reset' } as ProgressionSpec)
-            }
+            spec={cur?.spec ?? { kind: 'martingale', track: 'red', maxSteps: 6, onCap: 'reset' }}
             existing={progNames}
             onClose={close}
             onSave={(name, spec) => {

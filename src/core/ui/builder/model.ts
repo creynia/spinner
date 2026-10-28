@@ -10,8 +10,9 @@ import type {
   Rule,
   Stage,
   StrategyDefinition,
-} from '@core/contracts/strategy';
-import { normalizeStrategy } from '@core/strategy';
+} from '../../contracts/strategy';
+import { str } from './env';
+import { normalizeStrategy } from '../../strategy';
 
 type Obj = Record<string, unknown>;
 const isObj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -68,7 +69,7 @@ function toChip(c: unknown, depth: number): ConditionChip {
   if (isObj(c)) {
     if (isLeaf(c)) return { kind: 'leaf', cond: c };
     if (soleKey(c) === 'not' && isObj(c.not) && isLeaf(c.not)) {
-      return { kind: 'not', chip: { kind: 'leaf', cond: c.not as Condition } };
+      return { kind: 'not', chip: { kind: 'leaf', cond: c.not } };
     }
     if (
       depth === 0 &&
@@ -130,9 +131,7 @@ function chipToCond(chip: ConditionChip): Condition {
 export function chipsToCond(g: ConditionChips): Condition {
   if (g.chips.length === 0) return g.mode === 'all' ? { always: true } : { any: [] };
   if (g.chips.length === 1) return chipToCond(g.chips[0]!);
-  return (
-    g.mode === 'all' ? { all: g.chips.map(chipToCond) } : { any: g.chips.map(chipToCond) }
-  ) as Condition;
+  return g.mode === 'all' ? { all: g.chips.map(chipToCond) } : { any: g.chips.map(chipToCond) };
 }
 
 // ------------------------------------------------------------------ amounts
@@ -248,14 +247,14 @@ function layoutFrom(l: Obj): LayoutRow {
   const { picked, extra } = split(l, LAYOUT_OWN);
   const a = picked.amount;
   const row: LayoutRow = {
-    bet: String(picked.bet),
+    bet: str(picked.bet),
     amount: amountFrom(a),
     extra: clone(extra),
   };
   if ('when' in picked) row.when = condToChips(picked.when);
-  if ('parent' in picked) row.parent = String(picked.parent);
+  if ('parent' in picked) row.parent = str(picked.parent);
   if (picked.working === 'on' || picked.working === 'off') row.working = picked.working;
-  if ('label' in picked) row.label = String(picked.label);
+  if ('label' in picked) row.label = str(picked.label);
   return row;
 }
 function layoutTo(r: LayoutRow): LayoutSpec {
@@ -276,8 +275,8 @@ function ruleFrom(r: Obj): RuleRow {
     once: picked.once === true ? true : picked.once === 'stage' ? 'stage' : false,
     extra: clone(extra),
   };
-  if ('id' in picked) row.id = String(picked.id);
-  if ('label' in picked) row.label = String(picked.label);
+  if ('id' in picked) row.id = str(picked.id);
+  if ('label' in picked) row.label = str(picked.label);
   if ('cooldown' in picked) row.cooldown = Number(picked.cooldown);
   return row;
 }
@@ -306,9 +305,9 @@ export function fromJson(source: StrategyDefinition): BuilderModel {
   const m: BuilderModel = {
     head: {
       schema: 1,
-      id: String(picked.id ?? ''),
-      name: String(picked.name ?? ''),
-      game: String(picked.game ?? 'roulette'),
+      id: str(picked.id ?? ''),
+      name: str(picked.name ?? ''),
+      game: str(picked.game ?? 'roulette'),
       unit: Number(picked.unit ?? 0),
     },
     stages: arr(picked.stages)
@@ -317,7 +316,7 @@ export function fromJson(source: StrategyDefinition): BuilderModel {
         const sp = split(s, STAGE_OWN);
         const p = sp.picked;
         const card: StageCard = {
-          id: String(p.id ?? ''),
+          id: str(p.id ?? ''),
           layout: arr(p.layout).filter(isObj).map(layoutFrom),
           onEnter: arr(p.onEnter).map((e) => ({ effect: normEffect(e as Effect) })),
           onExit: arr(p.onExit).map((e) => ({ effect: normEffect(e as Effect) })),
@@ -329,14 +328,14 @@ export function fromJson(source: StrategyDefinition): BuilderModel {
           },
           extra: clone(sp.extra),
         };
-        if ('label' in p) card.label = String(p.label);
-        if ('extends' in p) card.extends = String(p.extends);
+        if ('label' in p) card.label = str(p.label);
+        if ('extends' in p) card.extends = str(p.extends);
         return card;
       }),
     extra: clone(extra),
   };
   if (picked.kind === 'rules') m.head.kind = 'rules';
-  if ('notes' in picked) m.notes = String(picked.notes);
+  if ('notes' in picked) m.notes = str(picked.notes);
   if (Array.isArray(picked.tags)) m.tags = picked.tags.map(String);
   if (isObj(picked.vars))
     m.vars = Object.entries(picked.vars).map(([name, initial]) => ({
@@ -382,7 +381,7 @@ export function toJson(m: BuilderModel): StrategyDefinition {
     return st as unknown as Stage;
   });
   // effects inside rules also drop `working: auto`
-  for (const st of o.stages as unknown as { rules?: Rule[] }[]) {
+  for (const st of o.stages as { rules?: Rule[] }[]) {
     for (const r of st.rules ?? []) r.then = r.then.map(normEffect);
   }
   return o as unknown as StrategyDefinition;

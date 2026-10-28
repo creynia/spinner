@@ -1,7 +1,7 @@
 // Builder | JSON tabs over one strategy document (strategy.md §13). The JSON tab validates live;
 // the builder is offered only while the document is structurally a strategy.
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Diagnostic, StrategyDefinition } from '@core/contracts/strategy';
+import type { Diagnostic, StrategyDefinition } from '../../contracts/strategy';
 import { Segmented, useId } from '../kit';
 import { Builder } from './Builder';
 import type { BuilderEnv } from './env';

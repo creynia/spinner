@@ -10,6 +10,9 @@ import {
   Card,
   Field,
   MoneyInput,
+  pathToElementId,
+  StrategyEditor,
+  type BuilderEnv,
   Segmented,
   Select,
   Sheet,
@@ -17,7 +20,6 @@ import {
   showToast,
   useId,
 } from '@core/ui';
-import { pathToElementId, StrategyEditor, type BuilderEnv } from '@core/ui/builder';
 import { rouletteUi } from '@game/roulette/ui';
 import { EXTRA_TARGETS } from '@game/roulette';
 import { navigate } from '../../router';

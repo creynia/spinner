@@ -168,14 +168,14 @@ export function Library({ query }: ScreenProps) {
             <Card title="Your strategies">
               {shownStrategies.length === 0 ? (
                 <EmptyState
-                  title={strategies!.length === 0 ? 'No saved strategies yet' : 'No match'}
+                  title={strategies.length === 0 ? 'No saved strategies yet' : 'No match'}
                   action={
                     <Button variant="primary" href={href('/define')}>
                       Build one in Define
                     </Button>
                   }
                 >
-                  {strategies!.length === 0
+                  {strategies.length === 0
                     ? 'Use "Save strategy" in Define to keep one here.'
                     : 'Try another search or tag.'}
                 </EmptyState>

@@ -4,10 +4,10 @@ import type { Diagnostic, StrategyDefinition } from '@core/contracts/strategy';
 import { validateStrategy } from '@core/strategy';
 import { ROULETTE_PRESETS, roulette } from '@game/roulette';
 import { rouletteUi } from '@game/roulette/ui';
-import goldens from './roulette-goldens.fixture.json';
-import { Builder } from './Builder';
-import type { BuilderEnv } from './env';
-import { StrategyEditor } from './StrategyEditor';
+import goldens from './__fixtures__/roulette-goldens.json';
+import { Builder } from '@core/ui/builder/Builder';
+import type { BuilderEnv } from '@core/ui/builder/env';
+import { StrategyEditor } from '@core/ui/builder/StrategyEditor';
 
 afterEach(cleanup);
 
@@ -134,7 +134,7 @@ describe('StrategyEditor', () => {
       <StrategyEditor value={v} onChange={onChange} env={env} diagnostics={[]} structural={[]} />,
     );
     fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
-    const area = screen.getByLabelText('Strategy JSON') as HTMLTextAreaElement;
+    const area = screen.getByLabelText<HTMLTextAreaElement>('Strategy JSON');
     fireEvent.input(area, { target: { value: '{ not json' } });
     expect(screen.getByRole('alert')).toBeTruthy();
     expect(onChange).not.toHaveBeenCalled();

@@ -2,12 +2,12 @@
 // commits with "Done". Nested pickers swap the sheet's content instead of stacking dialogs.
 import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
-import type { FactParam } from '@core/contracts/facts';
-import type { Condition, Effect, ProgressionSpec } from '@core/contracts/strategy';
-import { PROGRESSION_KINDS } from '@core/strategy';
+import type { FactParam } from '../../contracts/facts';
+import type { Condition, Effect, ProgressionSpec } from '../../contracts/strategy';
+import { PROGRESSION_KINDS } from '../../strategy';
 import { Button, Segmented, Sheet, Toggle, useId } from '../kit';
 import { describeAmount, describeCondition, describeEffect } from './describe';
-import { allFacts, betLabel, factByName, type BuilderEnv, type FactInfo } from './env';
+import { str, allFacts, betLabel, factByName, type BuilderEnv, type FactInfo } from './env';
 import { JsonField, NumField, SelectField, TextField } from './fields';
 import { amountFrom, amountTo, type AmountModel } from './model';
 
@@ -274,7 +274,7 @@ export function AmountEditor(p: {
 function enumOptions(f: FactInfo): { value: string; label: string }[] {
   if (f.value.type === 'enum') {
     const labels = f.value.labels;
-    return f.value.values.map((v, i) => ({ value: String(v), label: labels?.[i] ?? String(v) }));
+    return f.value.values.map((v, i) => ({ value: str(v), label: labels?.[i] ?? str(v) }));
   }
   if (f.value.type === 'boolean')
     return [
@@ -348,14 +348,14 @@ export function FactRefFields(p: {
             min={pr.min}
             max={pr.max}
             value={Number(argAt(i)) || pr.min || 1}
-            onChange={(n) => set(i, String(n))}
+            onChange={(n) => set(i, str(n))}
           />
         ) : pr.type === 'enum' ? (
           <SelectField
             key={pr.name}
             label={pr.name}
             value={argAt(i)}
-            options={(pr.values ?? []).map((v) => ({ value: String(v), label: String(v) }))}
+            options={(pr.values ?? []).map((v) => ({ value: str(v), label: str(v) }))}
             onChange={(v) => set(i, v)}
           />
         ) : (
@@ -378,8 +378,8 @@ export function FactRefFields(p: {
   );
 }
 function defaultArg(pr: FactParam): string {
-  if (pr.type === 'number') return String(pr.min ?? 1);
-  if (pr.type === 'enum') return String(pr.values?.[0] ?? '');
+  if (pr.type === 'number') return str(pr.min ?? 1);
+  if (pr.type === 'enum') return str(pr.values?.[0] ?? '');
   return 'red';
 }
 
@@ -392,7 +392,7 @@ function ValueField(p: {
   return (
     <SelectField
       label="Value"
-      value={String(p.value)}
+      value={str(p.value)}
       options={opts}
       onChange={(s) => p.onChange(coerce(p.f, s))}
     />
@@ -452,11 +452,11 @@ function freshCondition(kind: CKind, env: BuilderEnv): Condition {
     case 'event':
       return { event: 'bet-lost' };
     case 'streak':
-      return { streak: { ...pred, atLeast: 3 } } as Condition;
+      return { streak: { ...pred, atLeast: 3 } };
     case 'countInLast':
-      return { countInLast: { ...pred, n: 10, atLeast: 6 } } as Condition;
+      return { countInLast: { ...pred, n: 10, atLeast: 6 } };
     case 'since':
-      return { since: { ...pred, atLeast: 20 } } as Condition;
+      return { since: { ...pred, atLeast: 20 } };
     case 'onTable':
       return { onTable: 'red' };
     case 'everyN':
@@ -480,8 +480,8 @@ function PredicateFields(p: {
       <JsonField label="Predicate (JSON)" value={h} onChange={(v) => isObj(v) && p.onChange(v)} />
     );
   }
-  const info = factByName(p.env, h.fact.split(':')[0]!);
-  const eq = Array.isArray(h.equals) ? h.equals[0] : h.equals;
+  const info = factByName(p.env, str(h.fact).split(':')[0]!);
+  const eq = Array.isArray(h.equals) ? (h.equals as unknown[])[0] : h.equals;
   return (
     <>
       <FactRefFields
@@ -533,7 +533,7 @@ export function ConditionEditor(p: {
           <>
             <SelectField
               label="Event"
-              value={String(o.event)}
+              value={str(o.event)}
               options={[
                 { value: 'bet-won', label: 'a bet won' },
                 { value: 'bet-lost', label: 'a bet lost' },
@@ -542,23 +542,23 @@ export function ConditionEditor(p: {
                 { value: 'prog-done', label: 'a progression finished' },
                 ...p.env.facts.events.map((e) => ({ value: e.name, label: e.label })),
               ]}
-              onChange={(event) => setC({ event } as Condition)}
+              onChange={(event) => setC({ event })}
             />
-            {['bet-won', 'bet-lost', 'bet-push'].includes(String(o.event)) ||
+            {['bet-won', 'bet-lost', 'bet-push'].includes(str(o.event)) ||
             p.env.facts.events
               .find((e) => e.name === o.event)
               ?.params?.some((q) => q.type === 'bet') ? (
               <BetButton
                 env={p.env}
                 label="Only for bet (optional)"
-                value={String(o.bet ?? '')}
-                onOpen={() => open('event.bet', String(o.bet ?? ''))}
+                value={str(o.bet ?? '')}
+                onOpen={() => open('event.bet', str(o.bet ?? ''))}
               />
             ) : null}
-            {String(o.event).startsWith('prog-') && (
+            {str(o.event).startsWith('prog-') && (
               <TextField
                 label="Progression name"
-                value={String(o.prog ?? '')}
+                value={str(o.prog ?? '')}
                 onInput={(prog) => setC({ ...(o as object), event: o.event, prog } as Condition)}
               />
             )}
@@ -571,8 +571,8 @@ export function ConditionEditor(p: {
           <BetButton
             env={p.env}
             label="Bet"
-            value={String(o.onTable)}
-            onOpen={() => open('onTable', String(o.onTable))}
+            value={str(o.onTable)}
+            onOpen={() => open('onTable', str(o.onTable))}
           />
         )}
         {kind === 'everyN' && (
@@ -582,11 +582,11 @@ export function ConditionEditor(p: {
               integer
               min={1}
               value={Number(o.everyN)}
-              onChange={(n) => setC({ ...(o as object), everyN: n } as Condition)}
+              onChange={(n) => setC({ ...(o as object), everyN: n })}
             />
             <SelectField
               label="Counting"
-              value={String(o.of ?? 'round')}
+              value={str(o.of ?? 'round')}
               options={[
                 { value: 'round', label: 'rounds of the session' },
                 { value: 'stage', label: 'rounds in this stage' },
@@ -642,9 +642,8 @@ function replaceFactArg(env: BuilderEnv, c: Condition, i: number, id: string): C
     vals[i] = id;
     return [name, ...vals].join(':');
   };
-  if (Array.isArray(o.cmp)) (o.cmp as unknown[])[0] = patch(String((o.cmp as unknown[])[0]));
-  else if (Array.isArray(o.fact))
-    (o.fact as unknown[])[0] = patch(String((o.fact as unknown[])[0]));
+  if (Array.isArray(o.cmp)) (o.cmp as unknown[])[0] = patch(str((o.cmp as unknown[])[0]));
+  else if (Array.isArray(o.fact)) (o.fact as unknown[])[0] = patch(str((o.fact as unknown[])[0]));
   else
     for (const k of ['streak', 'countInLast', 'since']) {
       const h = o[k];
@@ -669,13 +668,13 @@ function FactCondFields(p: {
     const f = factByName(p.env, r.split(':')[0]!);
     return f?.value.type === 'number'
       ? ({ cmp: [r, op, typeof v === 'number' ? v : 0] } as Condition)
-      : ({
+      : {
           fact: [
             r,
             op === '!=' ? '!=' : '==',
             typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean' ? v : '',
           ],
-        } as Condition);
+        };
   };
   return (
     <>
@@ -845,8 +844,8 @@ export function EffectEditor(p: {
           <BetButton
             env={p.env}
             label="Bet"
-            value={String(o[kind])}
-            onOpen={() => open(kind, String(o[kind]))}
+            value={str(o[kind])}
+            onOpen={() => open(kind, str(o[kind]))}
           />
         )}
         {kind === 'bet' && (
@@ -873,7 +872,7 @@ export function EffectEditor(p: {
           <>
             <VarSelect
               vars={p.vars}
-              value={String(o[kind])}
+              value={str(o[kind])}
               onChange={(v) => set({ ...o, [kind]: v })}
             />
             <AmountFields
@@ -890,7 +889,7 @@ export function EffectEditor(p: {
         {kind === 'goto' && (
           <SelectField
             label="Stage"
-            value={String(o.goto)}
+            value={str(o.goto)}
             options={p.stages.map((s) => ({ value: s, label: s }))}
             onChange={(goto) => set({ ...o, goto })}
           />
@@ -899,13 +898,13 @@ export function EffectEditor(p: {
           <>
             <SelectField
               label="Progression"
-              value={String(o.prog)}
+              value={str(o.prog)}
               options={p.progressions.map((s) => ({ value: s, label: s }))}
               onChange={(prog) => set({ ...o, prog })}
             />
             <SelectField
               label="Operation"
-              value={String(o.do)}
+              value={str(o.do)}
               options={['win', 'loss', 'push', 'reset', 'advance', 'back'].map((v) => ({
                 value: v,
                 label: v,
@@ -917,7 +916,7 @@ export function EffectEditor(p: {
         {kind === 'stop' && (
           <TextField
             label="Reason"
-            value={String(o.stop)}
+            value={str(o.stop)}
             hint="Lowercase letters, digits and dashes."
             onInput={(stop) => set({ stop })}
           />
@@ -1055,7 +1054,7 @@ export function ProgressionEditor(p: {
       />
       <SelectField
         label="Kind"
-        value={String(spec.kind)}
+        value={str(spec.kind)}
         options={PROGRESSION_KINDS.map((k) => ({ value: k, label: k }))}
         onChange={(kind) => setSpec(defaultSpec(kind, track))}
       />
@@ -1086,7 +1085,7 @@ export function ProgressionEditor(p: {
       spec.kind === 'oscars-grind' ? (
         <SelectField
           label="When the cap is reached"
-          value={String(
+          value={str(
             spec.onCap ??
               (spec.kind === 'martingale' || spec.kind === 'grand-martingale' ? 'reset' : 'stay'),
           )}

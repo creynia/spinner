@@ -36,10 +36,10 @@ export interface DefineDoc {
 
 // ------------------------------------------------------------------ presets
 
-const presetFiles = import.meta.glob('../../../game/roulette/presets/*.json', {
+const presetFiles = import.meta.glob<StrategyDefinition>('../../../game/roulette/presets/*.json', {
   eager: true,
   import: 'default',
-}) as Record<string, StrategyDefinition>;
+});
 
 const byId = new Map<string, StrategyDefinition>();
 for (const [path, def] of Object.entries(presetFiles)) {
@@ -118,7 +118,7 @@ export function setOverride(
       return;
     }
     const child = o[k];
-    const next: Record<string, Json> = isObj(child) ? (child as Record<string, Json>) : {};
+    const next: Record<string, Json> = isObj(child) ? child : {};
     o[k] = next;
     walk(next, i + 1);
     if (Object.keys(next).length === 0) delete o[k];
@@ -136,7 +136,7 @@ export function resolveRulesSafe(doc: DefineDoc): {
   error: string | null;
 } {
   try {
-    return { rules: game.plugin.rules.resolve(rulesRef(doc)) as RouletteRules, error: null };
+    return { rules: game.plugin.rules.resolve(rulesRef(doc)), error: null };
   } catch (e) {
     return { rules: null, error: e instanceof Error ? e.message : 'Invalid rules' };
   }
@@ -200,8 +200,8 @@ export function validationContext(rules: RouletteRules): CompileContext & { game
     facts: plugin.facts,
     rules,
     limits: (b, r, v) => plugin.limits(b, r as RouletteRules, v as never),
-    compileFact: (ref, r) => plugin.compileFact(ref, r as RouletteRules) as never,
-  } as CompileContext & { gameId: string };
+    compileFact: (ref, r) => plugin.compileFact(ref, r as RouletteRules),
+  };
 }
 
 // ------------------------------------------------------------------ analysis
@@ -239,7 +239,7 @@ export function analyze(doc: DefineDoc): Analysis {
   }
   if (isObj(doc.strategy)) {
     const res = normalizeDefinition(docToDefinition(doc), {
-      plugin: game.plugin as never,
+      plugin: game.plugin,
       resolveStrategyRef: () => undefined,
     });
     for (const d of [...(res.ok ? [] : res.errors), ...res.warnings]) {

@@ -146,7 +146,7 @@ async function localQuickCheck(d: NormalizedDefinition, sessions: number): Promi
   const t0 = performance.now();
   const c = createRunController({
     definition: def,
-    plugin: game.plugin as never,
+    plugin: game.plugin,
     pool: getPool(),
     sink,
     locks: null,

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { encodeShareLink } from '@core';
 import { createMemoryRepo } from '../../services/db';
@@ -53,9 +53,9 @@ describe('Define structure', () => {
   it('invalid JSON-level edits show errors in the panel badge and disable Run', async () => {
     const { container } = mount();
     fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
-    const area = screen.getByLabelText('Strategy JSON') as HTMLTextAreaElement;
-    const bad = JSON.parse(area.value);
-    bad.stages[0].layout[0].bet = 'not-a-bet';
+    const area = screen.getByLabelText<HTMLTextAreaElement>('Strategy JSON');
+    const bad = JSON.parse(area.value) as { stages: { layout: { bet: string }[] }[] };
+    bad.stages[0]!.layout[0]!.bet = 'not-a-bet';
     fireEvent.input(area, { target: { value: JSON.stringify(bad) } });
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Validation: \d+ error/ })).toBeTruthy(),
@@ -65,7 +65,7 @@ describe('Define structure', () => {
     )!;
     expect(run.hasAttribute('disabled')).toBe(true);
     // round trip back to the builder once fixed
-    bad.stages[0].layout[0].bet = 'black';
+    bad.stages[0]!.layout[0]!.bet = 'black';
     fireEvent.input(area, { target: { value: JSON.stringify(bad) } });
     fireEvent.click(screen.getByRole('radio', { name: 'Builder' }));
     await waitFor(() =>
@@ -134,7 +134,6 @@ describe('share links', () => {
     expect(container.querySelector('.define-notice')!.textContent).toMatch(/Loaded from a link/);
     const back = docToDefinition(definitionToDoc(norm, { kind: 'link' }));
     expect(back.run.seed).toBe(777);
-    await act(async () => undefined);
   });
 
   it('shows a clear error for a damaged link', async () => {
