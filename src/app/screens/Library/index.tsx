@@ -43,23 +43,39 @@ interface Pending {
 }
 
 /**
- * The editor page opens at `?tab=layouts&edit=<id|new>`. Android Back (a hashchange that drops
- * `edit`) must not discard edits silently: the page is kept, the address is restored and the
- * editor's own Back is pressed, so its unsaved-changes guard decides.
+ * The editor page opens at `?tab=layouts&edit=<id|new>`. The shell remounts a screen on every
+ * hashchange, so Back must never change the hash while edits are open. On open a sentinel entry
+ * with the SAME address is pushed; Android Back then pops to an identical URL (no hashchange, no
+ * remount) and `popstate` re-pushes the sentinel and presses the editor's own Back, so its
+ * unsaved-changes guard decides. Leaving (Back pressed, Discard, or a clean close) consumes the
+ * sentinel and the edit entry together.
  */
+interface EditState {
+  layoutEdit: true;
+  fromList: boolean;
+}
+let openFromList = false;
+const LIST = '#/library?tab=layouts';
+
 function useEditPage(tab: TabId, query: URLSearchParams) {
   const param = tab === 'layouts' ? query.get('edit') : null;
-  const [editing, setEditing] = useState<string | null>(param);
+  const [closed, setClosed] = useState(false);
   const exiting = useRef(false);
-  const pushed = useRef(false);
+  const fromList = useRef(false);
   useEffect(() => {
-    if (param) {
-      exiting.current = false;
-      pushed.current = true;
-      setEditing(param);
-    } else if (editing !== null && !exiting.current) {
-      history.pushState(null, '', `#${editHref(editing)}`);
-      pushed.current = true;
+    if (!param) return;
+    setClosed(false);
+    exiting.current = false;
+    const st = history.state as Partial<EditState> | null;
+    if (st?.layoutEdit) fromList.current = st.fromList === true;
+    else {
+      fromList.current = openFromList;
+      history.pushState({ layoutEdit: true, fromList: openFromList }, '', location.href);
+    }
+    openFromList = false;
+    const on = () => {
+      if (exiting.current || (history.state as Partial<EditState> | null)?.layoutEdit) return;
+      history.pushState({ layoutEdit: true, fromList: fromList.current }, '', location.href);
       setTimeout(
         () =>
           document
@@ -67,23 +83,27 @@ function useEditPage(tab: TabId, query: URLSearchParams) {
             ?.click(),
         0,
       );
-    }
+    };
+    window.addEventListener('popstate', on);
+    return () => window.removeEventListener('popstate', on);
   }, [param]);
   const open = (id: string) => {
-    pushed.current = true;
+    openFromList = true;
     navigate(editHref(id));
   };
   const close = () => {
     exiting.current = true;
-    setEditing(null);
-    if (location.hash.includes('edit=')) {
-      if (pushed.current) history.back();
-      else location.replace('#/library?tab=layouts');
+    setClosed(true);
+    if (!(history.state as Partial<EditState> | null)?.layoutEdit) {
+      location.replace(LIST);
+    } else if (fromList.current) {
+      history.go(-2);
+    } else {
+      window.addEventListener('popstate', () => location.replace(LIST), { once: true });
+      history.go(-1);
     }
   };
-  /** The id is now known: show it in the address without a new history entry. */
-  const saved = (id: string) => history.replaceState(null, '', `#${editHref(id)}`);
-  return { editing, open, close, saved };
+  return { editing: closed ? null : param, open, close };
 }
 
 export function Library({ query }: ScreenProps) {
@@ -204,7 +224,7 @@ export function Library({ query }: ScreenProps) {
     return (
       <>
         <h1 class="visually-hidden">Edit layout</h1>
-        <LayoutPage id={edit.editing} onClose={edit.close} onSaved={edit.saved} />
+        <LayoutPage id={edit.editing} onClose={edit.close} />
       </>
     );
   }

@@ -24,16 +24,7 @@ type Loaded =
   | { kind: 'builtin' }
   | { kind: 'ready'; record: LayoutRecord | null };
 
-export function LayoutPage({
-  id: routeId,
-  onClose,
-  onSaved,
-}: {
-  id: string;
-  onClose: () => void;
-  /** A new layout got its id; the host swaps `new` for it in the address. */
-  onSaved: (id: string) => void;
-}) {
+export function LayoutPage({ id: routeId, onClose }: { id: string; onClose: () => void }) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [savedId, setSavedId] = useState<string | null>(routeId === 'new' ? null : routeId);
   const [variant, setVariant] = useState(DEFAULT_RULE_PRESET as string);
@@ -103,7 +94,6 @@ export function LayoutPage({
           ...(r.notes !== undefined ? { notes: r.notes } : {}),
         });
         setSavedId(created.id);
-        onSaved(created.id);
       }
       showToast(`Saved ${r.name}`);
     } catch (e) {

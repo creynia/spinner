@@ -124,7 +124,7 @@ describe('editor page', () => {
       variant: 'european',
       spots: [{ bet: 'red', chips: 3 }],
     });
-    const { rerender } = render(<Library params={{}} query={q(`tab=layouts&edit=${mine.id}`)} />);
+    render(<Library params={{}} query={q(`tab=layouts&edit=${mine.id}`)} />);
     await screen.findByRole('button', { name: 'Back' });
     expect(document.querySelectorAll('h1')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'More' }));
@@ -137,15 +137,18 @@ describe('editor page', () => {
       expect((await (await libraryRepo()).getLayout(mine.id))?.layout.name).toBe('Mine 2'),
     );
 
-    // Dirty again, then the route drops `edit` (Android Back): the guard asks, the page stays.
+    // Dirty again, then Android Back pops the sentinel: the guard asks and the page stays.
     fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Mine 3' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[0] ?? document.body);
-    rerender(<Library params={{}} query={q('tab=layouts')} />);
+    expect((history.state as { layoutEdit?: boolean } | null)?.layoutEdit).toBe(true);
+    history.replaceState(null, '', location.href); // what popping the sentinel leaves behind
+    window.dispatchEvent(new PopStateEvent('popstate'));
     await screen.findByText('Discard changes?');
-    expect(location.hash).toContain(`edit=${mine.id}`);
+    expect((history.state as { layoutEdit?: boolean } | null)?.layoutEdit).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
     expect(screen.queryByText('Discard changes?')).toBeNull();
     expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy();
+    expect((await (await libraryRepo()).getLayout(mine.id))?.layout.name).toBe('Mine 2');
   });
 
   it('reports an unknown id and a built-in id without opening the editor', async () => {

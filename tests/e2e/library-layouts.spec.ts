@@ -31,7 +31,8 @@ test('Layouts tab: create, save, rename, duplicate, export, re-import, delete', 
   const vh = page.viewportSize()!.height;
   for (const i of [2, 3]) {
     const box = (await page.locator('li.lay-card').nth(i).boundingBox())!;
-    if (info.project.name === 'phone-360') expect(box.y, `row ${i + 1} top`).toBeLessThan(vh);
+    if (info.project.name === 'phone-360')
+      expect(box.y, `row ${i + 1} top`).toBeLessThan(i === 3 ? vh - 40 : vh);
   }
   const thumb = (await page.locator('li.lay-card .lay-thumb').first().boundingBox())!;
   expect(thumb.width).toBeLessThanOrEqual(96);
@@ -43,14 +44,31 @@ test('Layouts tab: create, save, rename, duplicate, export, re-import, delete', 
   await expect(row(page, 'Copy of James Bond').getByText('Built-in')).toHaveCount(0);
 
   // Create by taps.
-  await page.getByRole('button', { name: 'New layout' }).click();
-  await expect(page).toHaveURL(/edit=new/);
-  await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
-  const board = page.locator('.le-board');
-  await board.locator('[data-bet="red"]').first().click();
-  await board.locator('[data-bet="red"]').first().click();
-  await board.locator('[data-bet="dozen:2"]').first().click();
+  const tap = async () => {
+    await page.getByRole('button', { name: 'New layout' }).click();
+    await expect(page).toHaveURL(/edit=new/);
+    await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
+    const board = page.locator('.le-board');
+    await board.locator('[data-bet="red"]').first().click();
+    await board.locator('[data-bet="red"]').first().click();
+    await board.locator('[data-bet="dozen:2"]').first().click();
+    await expect(page.getByText(/3 chips · 2 spots/)).toBeVisible();
+  };
+  await tap();
+
+  // Android Back with unsaved edits asks first; Keep editing leaves them; Discard leaves the page.
+  await page.evaluate(() => history.back());
+  await expect(page.getByRole('dialog', { name: 'Discard changes?' })).toBeVisible();
+  await screenCheck(page, guard, 'discard guard');
+  await page.getByRole('button', { name: 'Keep editing' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText(/3 chips · 2 spots/)).toBeVisible();
+  await expect(page).toHaveURL(/edit=new/);
+  await page.evaluate(() => history.back());
+  await page.getByRole('button', { name: 'Discard' }).click();
+  await expect(page).toHaveURL(/tab=layouts$/);
+  await expect(page.locator('li.lay-card')).toHaveCount(7);
+  await tap();
   await screenCheck(page, guard, 'editor');
   await page.getByRole('button', { name: 'More' }).click();
   await page.getByRole('textbox', { name: 'Name' }).fill('E2E layout');

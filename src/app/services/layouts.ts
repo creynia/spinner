@@ -142,6 +142,23 @@ async function takenIds(repo: Repo): Promise<Set<string>> {
   return new Set([...BUILTIN_IDS, ...(await repo.listLayouts()).map((r) => r.id)]);
 }
 
+/** Only the known `ChipLayout` fields (and `x-` extension keys) survive an import. */
+function cleanLayout(l: ChipLayout, id: string): ChipLayout {
+  const out: ChipLayout = {
+    schema: 1,
+    id,
+    name: l.name,
+    game: l.game,
+    variant: l.variant,
+    spots: l.spots.map((s) => ({ bet: s.bet, chips: s.chips })),
+  };
+  if (l.notes !== undefined) out.notes = l.notes;
+  if (l.tags !== undefined) out.tags = [...l.tags];
+  for (const k of Object.keys(l))
+    if (k.startsWith('x-')) out[k as `x-${string}`] = l[k as `x-${string}`];
+  return out;
+}
+
 export class LayoutInvalidError extends Error {
   constructor(readonly items: string[]) {
     super(items[0] ?? 'invalid layout');
@@ -201,7 +218,13 @@ export async function duplicateLayout(entry: {
   const name = `Copy of ${entry.layout.name}`.slice(0, 80);
   const id = allocLayoutId(name, await takenIds(repo));
   return saveLayout(
-    { ...entry.layout, id, name },
+    {
+      ...entry.layout,
+      id,
+      name,
+      spots: entry.layout.spots.map((s) => ({ ...s })),
+      ...(entry.layout.tags ? { tags: [...entry.layout.tags] } : {}),
+    },
     { origin: entry.builtin ? 'builtin' : 'user', derivedFrom: entry.layout.id },
   );
 }
@@ -294,7 +317,7 @@ export async function importLayoutText(text: string, repo: Repo): Promise<Layout
     let id = l.id;
     if (taken.has(id)) id = allocLayoutId(l.id, taken);
     taken.add(id);
-    const rec = { ...l, id };
+    const rec = cleanLayout(l, id);
     const errs2 = layoutErrors(rec);
     if (errs2.length > 0) {
       items.push({ status: 'invalid', name, items: errs2.map((e) => `${e.path}: ${e.message}`) });

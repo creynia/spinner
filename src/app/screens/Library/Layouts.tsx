@@ -176,8 +176,14 @@ export function Layouts({
                   </h3>
                   <p class="row-sub">
                     {variantLabel(l.variant)} · {plural(l.spots.length, 'spot')} ·{' '}
-                    {plural(totalChips(l.spots), 'chip')} ·{' '}
-                    <span data-used-in={e.usedIn}>{usedText(e.usedIn)}</span>
+                    {plural(totalChips(l.spots), 'chip')}
+                    {e.usedIn > 0 ? ' · ' : null}
+                    <span
+                      data-used-in={e.usedIn}
+                      class={e.usedIn === 0 ? 'visually-hidden' : undefined}
+                    >
+                      {usedText(e.usedIn)}
+                    </span>
                   </p>
                   <div class="lib-actions">
                     {e.builtin ? (
