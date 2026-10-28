@@ -4,3 +4,4 @@ export type { BetPickerProps, GameUi, OutcomeGlyphProps, TableViewProps } from '
 export * from './kit';
 export * from './charts';
 export * from './results';
+export * from './trace';
