@@ -43,14 +43,14 @@
   min-width: 0;
 }
 .lay-thumb {
-  flex: 1 1 9rem;
-  max-width: 16rem;
-  width: 100%;
+  flex: 0 0 auto;
+  width: 84px;
+  height: 88px;
+  overflow: hidden;
   min-width: 0;
   overflow: hidden;
 }
 .lay-body {
-  flex: 1 1 14rem;
   min-width: 0;
 }
 .lay-name {
@@ -72,8 +72,36 @@
 
 .lay-thumb .layout-thumb,
 .lay-thumb svg {
+  display: block;
+  width: 100%;
   max-width: 100%;
   height: auto;
+  max-height: 88px;
+}
+.lay-thumb {
+  pointer-events: none;
+}
+.lay-head {
+  margin-bottom: 8px;
+}
+.lay-menu {
+  display: grid;
+  gap: 8px;
+}
+.lay-card {
+  flex-wrap: nowrap;
+  padding: 8px;
+  gap: 10px;
+  align-items: flex-start;
+}
+.lay-card .lay-body {
+  flex: 1 1 0;
+}
+.lay-card .row-sub {
+  margin: 0 0 6px;
+}
+.lay-card .lay-name {
+  font-size: 0.95rem;
 }
 .lay-card {
   box-sizing: border-box;
@@ -89,4 +117,21 @@
 .tablist {
   width: 0;
   min-width: 100%;
+}
+
+.lay-card .lib-actions {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.lay-card .lib-actions .btn {
+  padding: 0 10px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.lay-card .row-sub {
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+.lay-list {
+  gap: 8px;
 }

@@ -57,8 +57,11 @@ describe('Layouts tab', () => {
     expect(within(first).getByText('Built-in')).toBeTruthy();
     expect(first.querySelector('.layout-thumb')).toBeTruthy();
     expect(within(first).getByRole('button', { name: /^Duplicate to edit/ })).toBeTruthy();
-    expect(within(first).queryByRole('button', { name: /^Delete/ })).toBeNull();
-    expect(within(first).queryByRole('button', { name: /^Rename/ })).toBeNull();
+    fireEvent.click(within(first).getByRole('button', { name: /^More actions/ }));
+    expect(screen.queryByRole('button', { name: /^Delete/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Rename/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Export/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(within(first).getByText('Used in 0')).toBeTruthy();
   });
 
@@ -91,12 +94,14 @@ describe('Layouts tab', () => {
     await waitFor(() => expect(rows()).toHaveLength(BUILTIN_LAYOUTS.length + 2));
     expect((await repo.listLayouts()).map((r) => r.origin).sort()).toEqual(['builtin', 'user']);
 
-    fireEvent.click(within(li()).getByRole('button', { name: 'Rename Mine' }));
+    fireEvent.click(within(li()).getByRole('button', { name: 'More actions for Mine' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Mine' }));
     fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Renamed' } });
     fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
     await waitFor(() => expect(li().textContent).toContain('Renamed'));
 
-    fireEvent.click(within(li()).getByRole('button', { name: 'Delete Renamed' }));
+    fireEvent.click(within(li()).getByRole('button', { name: 'More actions for Renamed' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Renamed' }));
     await screen.findByText(/It is used in 1 definition and 1 strategy/);
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(li()).toBeNull());

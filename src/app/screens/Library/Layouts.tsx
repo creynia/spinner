@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import {
   Button,
-  Card,
   Chip,
   EmptyState,
   Field,
@@ -48,6 +47,7 @@ const totalChips = (spots: readonly { chips: number }[]) => spots.reduce((n, s) 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 type Pending =
+  | { kind: 'menu'; entry: LayoutEntry }
   | { kind: 'delete'; entry: LayoutEntry; used: { definitions: number; strategies: number } }
   | { kind: 'rename'; entry: LayoutEntry; name: string };
 
@@ -105,7 +105,7 @@ export function Layouts({
 
   const confirm = () => {
     const p = pending;
-    if (!p) return;
+    if (!p || p.kind === 'menu') return;
     void act(async () => {
       if (p.kind === 'delete') {
         await deleteLayout(p.entry.id);
@@ -120,11 +120,18 @@ export function Layouts({
     }, 'Could not save.');
   };
 
+  const duplicate = (e: LayoutEntry) =>
+    void act(async () => {
+      const rec = await duplicateLayout(e);
+      setPending(null);
+      showToast(`Duplicated as ${rec.layout.name}`);
+    }, 'Could not duplicate.');
+
   const usedText = (n: number) => `Used in ${n}`;
 
   return (
     <>
-      <Card title="Chip layouts">
+      <div class="lay-head">
         <div class="lib-toolbar">
           <Button variant="primary" onClick={() => onOpen('new')}>
             New layout
@@ -145,7 +152,7 @@ export function Layouts({
             ))}
           </ul>
         ) : null}
-      </Card>
+      </div>
       {shown.length === 0 ? (
         <EmptyState title="No match">Try another search or wheel.</EmptyState>
       ) : (
@@ -177,63 +184,21 @@ export function Layouts({
                       <Button
                         variant="primary"
                         aria-label={`Duplicate to edit ${l.name}`}
-                        onClick={() =>
-                          void act(async () => {
-                            const rec = await duplicateLayout(e);
-                            showToast(`Duplicated as ${rec.layout.name}`);
-                          }, 'Could not duplicate.')
-                        }
+                        onClick={() => duplicate(e)}
                       >
                         Duplicate to edit
                       </Button>
                     ) : (
-                      <>
-                        <Button aria-label={`Edit ${l.name}`} onClick={() => onOpen(e.id)}>
-                          Edit
-                        </Button>
-                        <Button
-                          aria-label={`Duplicate ${l.name}`}
-                          onClick={() =>
-                            void act(async () => {
-                              const rec = await duplicateLayout(e);
-                              showToast(`Duplicated as ${rec.layout.name}`);
-                            }, 'Could not duplicate.')
-                          }
-                        >
-                          Duplicate
-                        </Button>
-                        <Button
-                          aria-label={`Rename ${l.name}`}
-                          onClick={() => setPending({ kind: 'rename', entry: e, name: l.name })}
-                        >
-                          Rename
-                        </Button>
-                      </>
-                    )}
-                    <Button
-                      aria-label={`Export ${l.name}`}
-                      onClick={() => {
-                        download(layoutFileName(l), layoutFileText([l]));
-                        showToast(`Exported ${layoutFileName(l)}`);
-                      }}
-                    >
-                      Export
-                    </Button>
-                    <Button
-                      aria-label={`Use in Define: ${l.name}`}
-                      href={href(`/define?layout=${encodeURIComponent(e.id)}`)}
-                    >
-                      Use in Define
-                    </Button>
-                    {e.builtin ? null : (
-                      <Button
-                        variant="danger"
-                        aria-label={`Delete ${l.name}`}
-                        onClick={() => askDelete(e)}
-                      >
-                        Delete
+                      <Button aria-label={`Edit ${l.name}`} onClick={() => onOpen(e.id)}>
+                        Edit
                       </Button>
                     )}
+                    <Button
+                      aria-label={`More actions for ${l.name}`}
+                      onClick={() => setPending({ kind: 'menu', entry: e })}
+                    >
+                      More
+                    </Button>
                   </div>
                 </div>
               </li>
@@ -241,6 +206,61 @@ export function Layouts({
           })}
         </ul>
       )}
+
+      {pending?.kind === 'menu' ? (
+        <Sheet open title={pending.entry.layout.name} onClose={() => setPending(null)}>
+          <div class="lay-menu">
+            {pending.entry.builtin ? null : (
+              <>
+                <Button
+                  aria-label={`Duplicate ${pending.entry.layout.name}`}
+                  onClick={() => duplicate(pending.entry)}
+                >
+                  Duplicate
+                </Button>
+                <Button
+                  aria-label={`Rename ${pending.entry.layout.name}`}
+                  onClick={() =>
+                    setPending({
+                      kind: 'rename',
+                      entry: pending.entry,
+                      name: pending.entry.layout.name,
+                    })
+                  }
+                >
+                  Rename
+                </Button>
+              </>
+            )}
+            <Button
+              aria-label={`Export ${pending.entry.layout.name}`}
+              onClick={() => {
+                const l = pending.entry.layout;
+                download(layoutFileName(l), layoutFileText([l]));
+                showToast(`Exported ${layoutFileName(l)}`);
+                setPending(null);
+              }}
+            >
+              Export
+            </Button>
+            <Button
+              aria-label={`Use in Define: ${pending.entry.layout.name}`}
+              href={href(`/define?layout=${encodeURIComponent(pending.entry.id)}`)}
+            >
+              Use in Define
+            </Button>
+            {pending.entry.builtin ? null : (
+              <Button
+                variant="danger"
+                aria-label={`Delete ${pending.entry.layout.name}`}
+                onClick={() => askDelete(pending.entry)}
+              >
+                Delete
+              </Button>
+            )}
+          </div>
+        </Sheet>
+      ) : null}
 
       {pending?.kind === 'delete' ? (
         <Sheet open title="Delete layout?" onClose={() => setPending(null)}>

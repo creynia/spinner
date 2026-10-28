@@ -21,7 +21,21 @@ test('Layouts tab: create, save, rename, duplicate, export, re-import, delete', 
   if (SHOTS) {
     mkdirSync(SHOTS, { recursive: true });
     await page.screenshot({ path: `${SHOTS}/library-layouts-${info.project.name}.png` });
+    await page.getByRole('button', { name: 'New layout' }).scrollIntoViewIfNeeded();
+    await page.evaluate(() => document.querySelector('.lay-head')?.scrollIntoView());
+    await page.screenshot({ path: `${SHOTS}/library-layouts-list-${info.project.name}.png` });
+    await page.evaluate(() => window.scrollTo(0, 0));
   }
+
+  // Compact rows: the 4th row starts on the first screen, and a thumbnail is small and inert.
+  const vh = page.viewportSize()!.height;
+  for (const i of [2, 3]) {
+    const box = (await page.locator('li.lay-card').nth(i).boundingBox())!;
+    if (info.project.name === 'phone-360') expect(box.y, `row ${i + 1} top`).toBeLessThan(vh);
+  }
+  const thumb = (await page.locator('li.lay-card .lay-thumb').first().boundingBox())!;
+  expect(thumb.width).toBeLessThanOrEqual(96);
+  expect(thumb.height).toBeLessThanOrEqual(121);
 
   // Duplicate a built-in.
   await page.getByRole('button', { name: 'Duplicate to edit James Bond' }).click();
@@ -50,6 +64,7 @@ test('Layouts tab: create, save, rename, duplicate, export, re-import, delete', 
   await screenCheck(page, guard, 'layouts list after save');
 
   // Rename.
+  await page.getByRole('button', { name: 'More actions for E2E layout' }).click();
   await page.getByRole('button', { name: 'Rename E2E layout' }).click();
   await page.getByRole('textbox', { name: 'Name' }).fill('E2E renamed');
   await page.getByRole('dialog').getByRole('button', { name: 'Rename', exact: true }).click();
@@ -57,6 +72,7 @@ test('Layouts tab: create, save, rename, duplicate, export, re-import, delete', 
 
   // Export.
   const dl = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'More actions for E2E renamed' }).click();
   await page.getByRole('button', { name: 'Export E2E renamed' }).click();
   const download = await dl;
   expect(download.suggestedFilename()).toMatch(/\.layout\.json$/);
@@ -75,6 +91,7 @@ test('Layouts tab: create, save, rename, duplicate, export, re-import, delete', 
 
   // Delete with confirm.
   await page.goto('./?e2e#/library?tab=layouts');
+  await page.getByRole('button', { name: 'More actions for E2E renamed' }).click();
   await page.getByRole('button', { name: 'Delete E2E renamed' }).click();
   await expect(page.getByRole('dialog')).toContainText('Stages that used it keep their copy');
   await screenCheck(page, guard, 'delete confirm');
