@@ -109,15 +109,7 @@ describe('WP-L1 stubs (core/strategy/chips.ts)', () => {
   });
 });
 
-describe('WP-L2 stubs (core/store/layouts.ts)', () => {
-  it.each([
-    ['layoutHash', () => store.layoutHash({} as never)],
-    ['allocLayoutId', () => store.allocLayoutId('x', new Set())],
-    ['encodeLayoutFile', () => store.encodeLayoutFile([], { id: 'a', version: '0' })],
-    ['decodeLayoutFile', () => store.decodeLayoutFile('{}')],
-  ] as [string, () => unknown][])('%s throws not implemented (WP-L2)', (name, call) => {
-    expect(call).toThrow(`not implemented (WP-L2): ${name}`);
-  });
+describe('WP-L2 (core/store/layouts.ts)', () => {
   it('LayoutFileError carries a code', () => {
     const e = new store.LayoutFileError('not-json', 'bad');
     expect([e.code, e.message, e instanceof Error]).toEqual(['not-json', 'bad', true]);
