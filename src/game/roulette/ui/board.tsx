@@ -2,6 +2,7 @@
 import type { ComponentChildren } from 'preact';
 import { useMemo } from 'preact/hooks';
 import {
+  BADGE,
   CHIP_R,
   buildBoard,
   chipAt,
@@ -142,9 +143,9 @@ function ChipView(props: { chip: Chip; board: ReturnType<typeof buildBoard> }) {
         {chipText(chip.cents)}
       </text>
       {chip.pending && (
-        <g class="rl-badge" transform={`translate(${CHIP_R - 2} ${-CHIP_R + 2})`}>
+        <g class="rl-badge" transform={`translate(${BADGE.dx} ${BADGE.dy})`}>
           <title>prison</title>
-          <circle r="5.5" />
+          <circle r={BADGE.r} />
           <text text-anchor="middle" dominant-baseline="central">
             P
           </text>

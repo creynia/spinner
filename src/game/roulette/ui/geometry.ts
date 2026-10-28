@@ -271,6 +271,8 @@ export function minTapSize(b: Board, cssWidth: number): number {
 }
 
 export const CHIP_R = 11;
+/** The pending marker: a disc on the chip's top-left, centre offset and radius. */
+export const BADGE = { dx: -9, dy: -9, r: 7 } as const;
 const FONT_NUM = 17;
 const FONT_OUT = 13;
 

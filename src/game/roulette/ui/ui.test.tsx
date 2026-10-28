@@ -1,12 +1,22 @@
 import { cleanup, fireEvent, render } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Layout, RoundOutcome } from '@core/contracts/game';
+import { readFileSync } from 'node:fs';
 import { ROULETTE_PRESETS } from '../rules';
 import { betDef, catalog, familyOf, fixedBetIds, parseBet } from '../bets';
 import { pocketLabels } from '../pockets';
 import type { WheelKind } from '../types';
 import { BetPicker, OutcomeGlyph, TableView, rouletteUi } from './index';
-import { CHIP_R, anchorOf, buildBoard, chipAt, hotZone, labelBox, minTapSize } from './geometry';
+import {
+  BADGE,
+  CHIP_R,
+  anchorOf,
+  buildBoard,
+  chipAt,
+  hotZone,
+  labelBox,
+  minTapSize,
+} from './geometry';
 import { chipsOf } from './chips';
 
 const WHEELS: WheelKind[] = ['european', 'american', 'triple-zero'];
@@ -335,6 +345,16 @@ describe('OutcomeGlyph', () => {
   });
 });
 
+const css = readFileSync('src/game/roulette/ui/ui.css', 'utf8');
+
+describe('pending badge style', () => {
+  it('fills the badge disc with a light colour, not the SVG default black', () => {
+    const rule = /\.rl-badge circle\s*{([^}]*)}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/fill:\s*#(?:fff|ffffff)\b/i);
+    expect(css).not.toMatch(/\.rl-badge rect/);
+  });
+});
+
 describe('geometry', () => {
   it.each(WHEELS)('keeps chips off their own label (%s)', (wheel) => {
     for (const o of ['portrait', 'landscape'] as const) {
@@ -353,6 +373,15 @@ describe('geometry', () => {
             c.y + CHIP_R > l.y &&
             c.y - CHIP_R < l.y + l.h;
           expect(hit, `${wheel} ${o} ${spot} pending=${pending}`).toBe(false);
+          const box = b.outside.find((x) => x.id === spot)?.rect;
+          if (pending && box && ['red', 'black', 'odd', 'even', 'low', 'high'].includes(spot)) {
+            const bx = c.x + BADGE.dx;
+            const by = c.y + BADGE.dy;
+            expect(bx - BADGE.r, spot).toBeGreaterThanOrEqual(box.x);
+            expect(bx + BADGE.r, spot).toBeLessThanOrEqual(box.x + box.w);
+            expect(by - BADGE.r, spot).toBeGreaterThanOrEqual(box.y);
+            expect(by + BADGE.r, spot).toBeLessThanOrEqual(box.y + box.h);
+          }
         }
     }
   });
