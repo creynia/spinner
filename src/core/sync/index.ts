@@ -5,9 +5,12 @@ export { createClock, cmpHlc, hlcDevice, hlcWall, type HlcClock } from './hlc';
 export { entryOf, fingerprintValue, SUPPORTED_V, verifyEntry } from './fingerprint';
 export { concurrent, descends } from './vv';
 export {
+  copyIdChain,
+  copyIdOf,
   copyOf,
   equivalent,
   foldEntries,
+  isCopyOf,
   joinDef,
   resolve,
   type Folded,
@@ -27,3 +30,4 @@ export { downloadRun, evictRun, uploadPendingRuns } from './runs';
 export { runGc } from './gc';
 export { beginFirst, previewFirst, reseed } from './first';
 export { eraseRemote, resetLocalSyncState } from './erase';
+export { LibFileError, LIB_MAX_BYTES, type LibFileErrorCode } from './libfile';

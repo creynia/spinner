@@ -600,7 +600,7 @@ Mapping the fold to an action:
 |---|---|
 | `winner` is the base entry, and there is no candidate | `skip-older`; `seen` is updated |
 | `winner` is the candidate (it dominates everything, or wins among the maximal) and no published entry is equivalent to it | `keep-local`: the mark stays, and the push mints from `seen`, so the new entry descends from everything folded |
-| `winner` is equivalent to the candidate and also published | `apply` that published entry and drop the mark: our edit already exists |
+| `winner` is equivalent to the candidate and also published | if that published entry descends **every** other published entry, `apply` it and drop the mark (our edit already exists); otherwise `keep-local`: the candidate, which descends all of them, is pushed, so a concurrent entry cannot win again (a deleted record would come back) |
 | any other winner | `apply` it. The candidate, when live and not equivalent to the winner, is among the losers, so it becomes a copy |
 | `v > SUPPORTED_V`, or an unknown kind | `opaque` |
 
@@ -752,6 +752,18 @@ device. Other devices never build a `RunMeta` for it; they show the stub row.
 Copy ids are checked against the local stores and the incoming remote keys. When the deterministic
 id is already taken by unrelated content, the next 6 hex digits of the fingerprint are appended, so
 the result is still deterministic.
+
+**Engine contract for copies** (`copyIdChain(l)` = `<slug>-<hex6>`, then 12, 18, … hex digits):
+
+1. The id `copyOf` returns is what goes into `syncMeta.copies`.
+2. Skip the loser if any id of the chain is in `copies` (a deleted copy stays deleted).
+3. Skip it if any id of the chain has an index entry, or a remote entry of this cycle not applied
+   yet, for which `isCopyOf(loser, entry)` holds (the copy exists, made here or on another device; a 12-digit copy embeds its own id, so
+   its hash differs from the 6-digit one's).
+4. `taken` holds only chain ids whose live entry (index, store or incoming remote) has other
+   content. A tombstone at a chain id counts
+   as a deleted copy (rule 3), also on devices that never made it; the cost is a lost edit only if
+   an unrelated record at exactly that id was deleted (about 2⁻²⁴).
 
 ### 7.8 Never corrupt local data
 
