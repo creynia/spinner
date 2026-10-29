@@ -15,7 +15,6 @@ import {
   type SyncDirtyRecord,
   type SyncIndexRecord,
   type SyncKey,
-  type SyncMetaKey,
 } from '../contracts/sync';
 import { sha256Hex } from '../experiment';
 import {
@@ -40,8 +39,7 @@ export type Bundles = Record<string, RunBundleRef>;
 
 /** `syncMeta.bundles`: runId -> the bundle this device uploaded or adopted for it. */
 export async function readBundles(raw: Backend): Promise<Bundles> {
-  // `bundles` is not in `SyncMetaKey` yet (hand-off with the engine, see the file header)
-  return ((await metaGet(raw, 'bundles' as SyncMetaKey)) as unknown as Bundles | undefined) ?? {};
+  return (await metaGet(raw, 'bundles')) ?? {};
 }
 
 function nonce(): string {
@@ -87,25 +85,6 @@ export async function flushLib(ctx: SyncCtx): Promise<void> {
 }
 
 /**
- * Index rows of live runs that say "not on this device" while the results are here. The snapshot
- * drops the mark of a run whose fingerprint equals the remote stub's (a file imported on a second
- * device, a run re-imported after a delete) without saying the run is local; this does.
- */
-async function healLocalFlags(raw: Backend): Promise<void> {
-  const rows = await raw.getAll<SyncIndexRecord>('syncIndex');
-  for (const r of rows) {
-    if (
-      r.kind === 'run' &&
-      r.local === 0 &&
-      !r.entry.deleted &&
-      (await raw.get('runs', r.entry.id))
-    ) {
-      await markLocal(raw, r.key, 1);
-    }
-  }
-}
-
-/**
  * Upload bundles of finished local runs, before the lib file that references them. Candidates are
  * the `run:*` dirty marks of done, non-dry runs that have no bundle ref yet (newest first, one at
  * a time, only while no run is active).
@@ -114,7 +93,6 @@ export async function uploadPendingRuns(ctx: SyncCtx, deadline: number): Promise
   const st = internalOf(ctx);
   const { deps, remote } = ctx;
   const raw = st.raw;
-  await healLocalFlags(raw);
   const marks = (await raw.getAll<SyncDirtyRecord>('syncDirty')).filter((m) =>
     m.key.startsWith('run:'),
   );
@@ -133,9 +111,6 @@ export async function uploadPendingRuns(ctx: SyncCtx, deadline: number): Promise
     // the remote already has a stub for this digest with a bundle (a shared import, a run that
     // arrived by download): that bundle is the one referenced; upload nothing (§7.6)
     if (prev && prev.resultsDigest === meta.resultsDigest && prev.bundle) {
-      // the run is on this device: say so (the snapshot drops the mark of an equal fingerprint
-      // without touching `local`)
-      await markLocal(raw, m.key, 1);
       continue;
     }
     const def = await raw.get<DefinitionRecord>('definitions', meta.definitionId);

@@ -356,6 +356,19 @@ describe.each([false, true])('runs (idb %s)', (idb) => {
       expect('data' in (await decodeRunBundle(enc.bytes, 'roulette'))).toBe(true);
     });
 
+    it('a cycle that downloads into a full device reports local-full', async () => {
+      const { a, b } = await world(idb, ALL);
+      await finishRun(a, await tinyRun(16));
+      await settle(a);
+      vi.stubGlobal('navigator', {
+        storage: { estimate: () => Promise.resolve({ quota: 1000, usage: 999 }) },
+      });
+      const r = await b.cycle();
+      expect(r.outcome).toBe('error');
+      expect(r.error?.code).toBe('local-full');
+      await emptyOf(b);
+    });
+
     it('not enough space on the device throws a quota error and writes nothing', async () => {
       const { a, b } = await world(idb);
       const made = await finishRun(a, await tinyRun(15));
@@ -569,38 +582,29 @@ describe.each([false, true])(
 
 void def;
 
-describe('known gap in the engine (WP-S2b), found by the runs fuzz', () => {
-  // `noteRuns` (engine.ts) seeds `deletedRuns` from the index's tombstones and only revisits pulled
-  // run keys whose pulled entries include a tombstone. A run that was deleted and then imported
-  // again arrives as a LIVE entry that descends our tombstone, so its id stays in `deletedRuns`
-  // for that cycle and `joinDef` strips it from the definition's `runIds`: the definition record
-  // never regains the run. The fix is in engine.ts (also revisit pulled run keys whose index row
-  // is a tombstone). `it.fails` flips to red when it lands: then make this a normal `it` and
-  // delete `deletedIds` from the fuzz kit.
-  it.fails(
-    'a run imported again after a delete is listed by its definition on every device',
-    async () => {
-      const inner = createMemoryRemote();
-      const a = await makeDevice({ id: A, idb: false, now: clock, remote: inner });
-      const b = await makeDevice({ id: B, idb: false, now: clock, remote: inner });
-      const data = await tinyRun(50);
-      const id = await importRunFile(a, data);
-      await settle(a, b);
-      await importRunFile(b, data);
-      for (const s of ['runs', 'summaries', 'checkpoints', 'breakdowns', 'samples'] as const) {
-        await b.tracked.tx([s], 'readwrite', (t) => t.delete(s, id));
-      }
-      const rec = (await b.raw.get<{ runIds: string[] }>('definitions', data.meta.definitionId))!;
-      await b.tracked.tx(['definitions'], 'readwrite', (t) =>
-        t.put('definitions', { ...rec, runIds: rec.runIds.filter((r) => r !== id) }),
-      );
-      await settle(a, b);
-      await importRunFile(a, data); // the same file again
-      await settle(a, b);
-      for (const d of [a, b]) {
-        const def = (await d.raw.get<{ runIds: string[] }>('definitions', data.meta.definitionId))!;
-        expect(def.runIds).toContain(id);
-      }
-    },
-  );
+describe('runs and definitions', () => {
+  // The engine-level twin of this lives in engine.test.ts; this one goes through real bundles.
+  it('a run imported again after a delete is listed by its definition on every device', async () => {
+    const inner = createMemoryRemote();
+    const a = await makeDevice({ id: A, idb: false, now: clock, remote: inner });
+    const b = await makeDevice({ id: B, idb: false, now: clock, remote: inner });
+    const data = await tinyRun(50);
+    const id = await importRunFile(a, data);
+    await settle(a, b);
+    await importRunFile(b, data);
+    for (const s of ['runs', 'summaries', 'checkpoints', 'breakdowns', 'samples'] as const) {
+      await b.tracked.tx([s], 'readwrite', (t) => t.delete(s, id));
+    }
+    const rec = (await b.raw.get<{ runIds: string[] }>('definitions', data.meta.definitionId))!;
+    await b.tracked.tx(['definitions'], 'readwrite', (t) =>
+      t.put('definitions', { ...rec, runIds: rec.runIds.filter((r) => r !== id) }),
+    );
+    await settle(a, b);
+    await importRunFile(a, data); // the same file again
+    await settle(a, b);
+    for (const d of [a, b]) {
+      const def = (await d.raw.get<{ runIds: string[] }>('definitions', data.meta.definitionId))!;
+      expect(def.runIds).toContain(id);
+    }
+  });
 });

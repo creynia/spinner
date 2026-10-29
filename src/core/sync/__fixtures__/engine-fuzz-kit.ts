@@ -130,8 +130,6 @@ async function run(o: Opts) {
   const pool = o.runs ? await pooled() : [];
   const finished = new Set<number>();
   const paused = new Map<number, number>();
-  /** Run ids deleted by anyone: not imported again (see the `it.fails` in runs.test.ts). */
-  const deletedIds = new Set<string>();
   const devs: Dev[] = [];
 
   const group0 = (id: string): boolean => id === IDS[0];
@@ -215,13 +213,11 @@ async function run(o: Opts) {
       }
     } else if (k < 7) {
       // the same file imported on whichever devices happen to pick it: a shared run
-      const data = pool[PRIVATE_RUNS + rnd(SHARED_RUNS)]!;
-      if (!deletedIds.has(data.meta.runId)) await importRunFile(d, data);
+      await importRunFile(d, pool[PRIVATE_RUNS + rnd(SHARED_RUNS)]!);
     } else {
       const have = await d.raw.getAllKeys('runs');
       if (have.length > 0) {
         const id = have[rnd(have.length)] as string;
-        deletedIds.add(id);
         // Repo.deleteRun: the results go and the definition forgets the run, in one transaction
         const m = await d.raw.get<{ definitionId: string }>('runs', id);
         const rec = m && (await d.raw.get<{ runIds: string[] }>('definitions', m.definitionId));
