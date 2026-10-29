@@ -177,6 +177,7 @@ test('a run made on device A is remote on B: Analyze downloads it, Remove downlo
     timeout: 30_000,
   });
   expect(Buffer.compare(Buffer.from(bundleFile().bytes), goodBytes)).toBe(0);
+  await bp.goto('./?e2e#/'); // leave the card, so the next visit mounts a fresh one
   await bp.goto(`./?e2e#/analyze/${runA}`);
   await expect(bp.getByRole('heading', { level: 1, name: `Analyze: ${NAME}` })).toBeVisible({
     timeout: 60_000,
