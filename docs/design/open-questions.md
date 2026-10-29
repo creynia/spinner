@@ -16,6 +16,12 @@ Each entry is a question the orchestrator would have asked the user. It was deci
 | 10 | 2026-10-28 | layouts.md Q5 | Should presets show as chips by default? | No; "Edit on the table" converts a stage on request. | Convert all presets. | Medium: preset definition ids, the pinned id vectors and existing "already ran" matches change; traces do not. |
 | 11 | 2026-10-28 | PR #29 review | The board didn't fit on a phone with a bet-type row and a Call bets tab. | Both moved into one corner button ("Auto ▾") that opens a sheet. The whole table fits without scrolling. | Keep visible rows and let the page scroll; put the lock in the editor toolbar. | Low: UI only. |
 | 12 | 2026-10-28 | PR #29 | Built-in layouts and chip values. | Six built-ins: James Bond, Voisins, Tiers, Orphelins, zero neighbours (`neighbours:0:2`) and two dozens (5 chips each). Voisins, Tiers and Orphelins are separate layouts. Chips: $1, $5, $25, $100, $500, $1,000. | Different set; one combined "French call bets" layout. | Low: data only. |
+| 13 | 2026-10-29 | sync.md | Does the theme sync across devices? | No; it stays per device. Framing and pace do sync. | Sync it. | Low. |
+| 14 | 2026-10-29 | sync.md | Which devices download every run's full data? | Phones download when a run is opened; desktops download everything in the background. You can change it per device. | Everything everywhere; nothing until opened. | Low: a per-device setting. |
+| 15 | 2026-10-29 | sync.md | Continue a paused or cancelled run on another device? | Not in v1; it shows there as paused or partial. | Allow resume elsewhere. | Medium. |
+| 16 | 2026-10-29 | sync.md | Upload big runs on mobile data? | Always. | Wi-Fi only (the browser can't reliably tell). | Low. |
+| 17 | 2026-10-29 | sync.md | Leave the Google app in Testing mode or publish it? | Testing, with you as the only test user (you'll see "Google hasn't verified this app" → Continue). | Publish to production. | Low. |
+| 18 | 2026-10-29 | sync.md | Encrypt Drive data with a passphrase? | No in v1 (appDataFolder is private to this app and your account). | Add passphrase encryption. | Medium. |
 
 ## Checks only you can do
 
