@@ -4,7 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import type { Json } from '@core/contracts/experiment';
 import type { Diagnostic, StrategyDefinition } from '@core/contracts/strategy';
-import { decodeShareLink, importDefinitionFile, SHARE_FALLBACK_NOTICE } from '@core';
+import {
+  decodeShareLink,
+  importDefinitionFile,
+  SHARE_FALLBACK_NOTICE,
+  validateDefinitionName,
+} from '@core';
 import {
   Button,
   Card,
@@ -54,6 +59,7 @@ import {
   loadDefinitionOfRun,
   measuredRate,
   QUICK_SESSIONS,
+  renameDefinition,
   saveDefinition,
   saveStrategy,
   shareOf,
@@ -722,6 +728,24 @@ export function Define({ params, query }: ScreenProps) {
     }
   };
 
+  /** Renames the saved definition this draft was opened from; the rest of the draft is untouched. */
+  const renameSaved = async () => {
+    const id = doc.derivedFrom;
+    if (!id) return;
+    const check = validateDefinitionName(doc.name);
+    if (!check.ok) {
+      showToast(check.error, { tone: 'error' });
+      return;
+    }
+    try {
+      await renameDefinition(id, check.name);
+      patch({ name: check.name });
+      showToast(`Renamed the saved definition to ${check.name}`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not rename.', { tone: 'error' });
+    }
+  };
+
   const doDry = async () => {
     if (!analysis.normalized) return;
     setBusy('dry');
@@ -821,8 +845,17 @@ export function Define({ params, query }: ScreenProps) {
             id="exp-name"
             value={doc.name}
             onInput={(e) => patch({ name: e.currentTarget.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && doc.derivedFrom) {
+                e.preventDefault();
+                void renameSaved();
+              }
+            }}
           />
         </Field>
+        {doc.derivedFrom ? (
+          <Button onClick={() => void renameSaved()}>Rename saved definition</Button>
+        ) : null}
       </div>
 
       <div class="define-grid">

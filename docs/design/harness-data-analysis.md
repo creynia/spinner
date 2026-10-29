@@ -480,6 +480,19 @@ interface Backend {
 
 The memory backend implements this with `Map`s and `structuredClone` on put/get, so tests catch aliasing bugs. The same suite runs against both backends (fake-indexeddb is not needed if the architecture spike prefers the memory one in node; otherwise `fake-indexeddb` is a dev dependency).
 
+### 9.2a Renaming an experiment
+
+An experiment is a `DefinitionRecord`; its runs point at it by `definitionId`. A rename (`Repo.renameDefinition`)
+changes `definition.name` and `updatedAt` only. The record id (so `definitionId`, `runKey` and the run id prefix)
+never changes, and `simKey` ignores names. Run meta stores no name: every screen resolves the live name through the
+record, so a rename needs no other write (there is no snapshot to update). Names are trimmed, non-empty, at most 120
+characters; duplicates are allowed.
+
+The id is a hash of the whole definition, name included, so a renamed record no longer hashes to its own id. The record
+keeps `idName`, the name the id was minted with (cleared when renamed back). Run files carry it as the optional
+`definitionIdName`, and the importer checks the hash with it. A file keeps the name it had when exported; importing a
+run whose definition already exists locally keeps the local (live) name.
+
 ### 9.3 Opening and fallback (prior-art policy)
 
 `openStore()` **never throws**. It tries `indexedDB.open(name, 1)` with a 4 s timeout. On a `SecurityError`, an `InvalidStateError`, a missing `indexedDB`, the timeout, or a `VersionError` (the stored DB is newer: "data from a newer version of the app, update to see it"), it returns the memory backend with `persistent: false`. It does not delete or overwrite anything it cannot read.

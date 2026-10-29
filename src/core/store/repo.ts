@@ -4,6 +4,7 @@ import type { LayoutRecord } from '../contracts/layout';
 import type { RunData, RunMeta } from '../contracts/run';
 import { newRunId } from '../experiment';
 import type { Backend } from './backend';
+import { renameDefinitionRecord } from './definitions';
 import { loadRun, writeCompacted } from './sink';
 
 export interface ImportResult {
@@ -16,6 +17,8 @@ export interface Repo {
   listDefinitions(): Promise<DefinitionRecord[]>;
   getDefinition(id: string): Promise<DefinitionRecord | undefined>;
   putDefinition(rec: DefinitionRecord): Promise<void>;
+  /** Changes `definition.name` only; the id, and so every `runKey`, stays. Throws on a bad name. */
+  renameDefinition(id: string, name: string): Promise<DefinitionRecord>;
   listStrategies(): Promise<StrategyRecord[]>;
   getStrategy(id: string): Promise<StrategyRecord | undefined>;
   putStrategy(rec: StrategyRecord): Promise<void>;
@@ -59,6 +62,7 @@ export function createRepo(backend: Backend): Repo {
       (await backend.getAll<DefinitionRecord>('definitions', 'byUpdated')).reverse(),
     getDefinition: (id) => backend.get('definitions', id),
     putDefinition: (rec) => putOne('definitions', rec),
+    renameDefinition: (id, name) => renameDefinitionRecord(backend, id, name),
     listStrategies: async () =>
       (await backend.getAll<StrategyRecord>('strategies', 'byUpdated')).reverse(),
     getStrategy: (id) => backend.get('strategies', id),

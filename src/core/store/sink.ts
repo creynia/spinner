@@ -32,6 +32,7 @@ import {
   type Backend,
   type StoreName,
 } from './backend';
+import type { StoredDefinitionRecord, StoredRunData } from './definitions';
 import { resultsDigest } from './digest';
 
 export interface StoreRunSink extends RunSink {
@@ -119,6 +120,15 @@ function fromParts(meta: RunMeta, parts: RunPart[]): Omit<RunData, 'definition' 
 
 /** Everything durable for a run, prefix applied; `null` when the run (or its definition) is unknown. */
 export async function loadRun(backend: Backend, runId: string): Promise<RunData | null> {
+  const data = await loadRunOf(backend, runId);
+  if (!data) return null;
+  const rec = await backend.get<StoredDefinitionRecord>('definitions', data.meta.definitionId);
+  if (!rec?.idName) return data;
+  const withName: StoredRunData = { ...data, idName: rec.idName };
+  return withName;
+}
+
+async function loadRunOf(backend: Backend, runId: string): Promise<RunData | null> {
   const meta = await backend.get<RunMeta>('runs', runId);
   if (!meta) return null;
   const def = await backend.get<DefinitionRecord>('definitions', meta.definitionId);
@@ -201,10 +211,12 @@ export async function writeCompacted(
     t.put('samples', { v: 1, runId: meta.runId, samples: data.samples } satisfies SampleRecord);
     for (const k of partKeys) t.delete('runParts', k);
     if (!existing) {
+      const idName = (data as StoredRunData).idName;
       t.put('definitions', {
         v: 1,
         id: meta.definitionId,
         definition: data.definition,
+        ...(idName && idName !== data.definition.name ? { idName } : {}),
         createdAt: meta.createdAt,
         updatedAt: meta.createdAt,
         origin: origin ?? (meta.imported ? 'import' : 'user'),

@@ -2,6 +2,7 @@
 // Sessions, Export over one stored run. Money framing comes from settings.
 import { useState } from 'preact/hooks';
 import { AnalysisView, Button, isAnalyzeTab, type AnalyzeTab } from '@core/ui';
+import { RenameExperiment } from '../RenameExperiment';
 import { navigate } from '../../router';
 import { settingsStore } from '../../services/settings';
 import { useStore } from '../../state/store';
@@ -13,6 +14,7 @@ export function Analyze({ params, query }: ScreenProps) {
   const run = useRunData(runId);
   const framing = useStore(settingsStore, (s) => s.framing);
   const q = query.get('tab');
+  const [renaming, setRenaming] = useState(false);
   const [tab, setTab] = useState<AnalyzeTab>(isAnalyzeTab(q) ? q : 'overview');
   // Switching tabs rewrites the hash in place: no history entry, no screen remount.
   const onTab = (t: AnalyzeTab) => {
@@ -59,10 +61,20 @@ export function Analyze({ params, query }: ScreenProps) {
       <div class="actions">
         <Button href={`#/define?from=${encodeURIComponent(data.meta.runId)}`}>Run again</Button>
         <Button href={`#/compare?runs=${encodeURIComponent(data.meta.runId)}`}>Compare</Button>
+        <Button onClick={() => setRenaming(true)} aria-label={`Rename ${data.definition.name}`}>
+          Rename
+        </Button>
         {status !== 'done' ? (
           <Button href={`#/run/${encodeURIComponent(data.meta.runId)}`}>Open the run</Button>
         ) : null}
       </div>
+      {renaming ? (
+        <RenameExperiment
+          id={data.meta.definitionId}
+          name={data.definition.name}
+          onClose={() => setRenaming(false)}
+        />
+      ) : null}
       <AnalysisView
         data={data}
         framing={framing}

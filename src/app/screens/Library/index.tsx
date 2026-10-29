@@ -19,6 +19,7 @@ import {
   saveDefinition,
   saveStrategy,
 } from '../Define/data';
+import { RenameExperiment } from '../RenameExperiment';
 import { Layouts, editHref } from './Layouts';
 import { LayoutPage } from './LayoutPage';
 import './library.css';
@@ -118,6 +119,7 @@ export function Library({ query }: ScreenProps) {
   const [definitions, setDefinitions] = useState<DefinitionRecord[] | null>(null);
   const [runs, setRuns] = useState<RunMeta[] | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const version = useStore(libraryVersion, (v) => v);
   const edit = useEditPage(tab, query);
 
@@ -350,6 +352,12 @@ export function Library({ query }: ScreenProps) {
                     </a>
                     <div class="lib-actions">
                       <Button
+                        onClick={() => setRenaming({ id: d.id, name: d.definition.name })}
+                        aria-label={`Rename ${d.definition.name}`}
+                      >
+                        Rename
+                      </Button>
+                      <Button
                         onClick={() => void duplicateDefinition(d)}
                         aria-label={`Duplicate ${d.definition.name}`}
                       >
@@ -413,6 +421,9 @@ export function Library({ query }: ScreenProps) {
         )}
       </Tabs>
 
+      {renaming ? (
+        <RenameExperiment id={renaming.id} name={renaming.name} onClose={() => setRenaming(null)} />
+      ) : null}
       {pending ? (
         <Sheet open title={`Delete ${pending.kind}?`} onClose={() => setPending(null)}>
           <p>

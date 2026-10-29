@@ -38,6 +38,7 @@ import {
   type TypedArray,
 } from './columns';
 import { decodeArray, defaultEncoding, encodeArray, type EncodedArray } from './codec';
+import type { StoredRunData } from './definitions';
 import { resultsDigest } from './digest';
 
 export const APP_ID = 'spinner';
@@ -53,6 +54,8 @@ export interface RunBundleV1 {
   core: { version: string };
   game: { id: string; version: string };
   definitionId: string;
+  /** The name `definitionId` was hashed with, written only for a renamed definition. */
+  definitionIdName?: string;
   definition: NormalizedDefinition;
   meta: {
     runId: string;
@@ -227,6 +230,7 @@ export async function buildRunBundle(
   opts: { trimForGallery?: boolean } = {},
 ): Promise<RunBundleV1> {
   const { meta } = data;
+  const idName = (data as StoredRunData).idName;
   const digest = meta.resultsDigest ?? (await resultsDigest(data));
   let out = data;
   let trimmed = trimInfoOf(meta);
@@ -246,6 +250,7 @@ export async function buildRunBundle(
     core: { version: meta.coreVersion },
     game: { id: meta.gameId, version: meta.gameVersion },
     definitionId: meta.definitionId,
+    ...(idName && idName !== out.definition.name ? { definitionIdName: idName } : {}),
     definition: out.definition,
     meta: {
       runId: meta.runId,
@@ -416,7 +421,10 @@ async function parseBundle(
   } catch (e) {
     return fail(e instanceof DefinitionFormatError ? e.message : 'file damaged: definition');
   }
-  if ((await hashDefinition(definition)) !== b.definitionId)
+  const idName = b.definitionIdName;
+  if (idName !== undefined && typeof idName !== 'string') fail('file damaged: definitionIdName');
+  const hashed = idName === undefined ? definition : { ...definition, name: idName };
+  if ((await hashDefinition(hashed)) !== b.definitionId)
     fail('file damaged: definitionId does not match');
 
   // labels, schedule, columns
@@ -537,9 +545,10 @@ async function parseBundle(
       ...(m.trimmed ? { trimInfo: m.trimmed } : {}),
     },
   };
-  const data: RunData = {
+  const data: StoredRunData = {
     meta,
     definition,
+    ...(idName !== undefined && idName !== definition.name ? { idName } : {}),
     sessions,
     summary,
     checkpoints: { schedule: Int32Array.from(b.schedule), equity },
