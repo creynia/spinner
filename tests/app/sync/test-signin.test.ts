@@ -119,7 +119,7 @@ describe('testSignIn through the redirect', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(settled).toBe(false); // the page is leaving
     expect(source.state).toEqual({ state: 'redirecting' });
-    expect(localStorage.getItem('spinner:sync:gate')).toBe('1');
+    expect(Number(localStorage.getItem('spinner:sync:gate'))).toBeGreaterThan(0); // a timestamp
     expect(nav.length).toBe(1);
     // Google answers; the return page runs in a fresh page load
     const back = consentRedirect(new URL(nav[0]!), 1);
@@ -144,6 +144,20 @@ describe('testSignIn through the redirect', () => {
     localStorage.setItem(TOKEN_KEY, localStorage.getItem(TOKEN_KEY)!); // untouched by setup
     expect(await svc.resumeTestSignIn()).toEqual({ email: 'owner@example.com', files: 0 });
     expect(await svc.resumeTestSignIn()).toBeNull(); // once
+  });
+
+  it('a cancelled redirect leaves a flag that expires after 10 minutes (no stale result)', async () => {
+    setup();
+    // a token is present (signed in earlier), and a gate flag from a redirect that never came back
+    localStorage.setItem(
+      TOKEN_KEY,
+      JSON.stringify({ token: 'fake-token-1', expiresAt: Date.now() + 3_600_000, email: 'a@b.c' }),
+    );
+    setup();
+    localStorage.setItem('spinner:sync:gate', String(Date.now() - 11 * 60_000));
+    expect(await svc.resumeTestSignIn()).toBeNull();
+    localStorage.setItem('spinner:sync:gate', '1'); // the old format never resumes either
+    expect(await svc.resumeTestSignIn()).toBeNull();
   });
 
   it('resumeTestSignIn is null when no gate redirect was in flight', async () => {

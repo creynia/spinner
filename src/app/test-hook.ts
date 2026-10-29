@@ -3,6 +3,22 @@
 import { CORE_VERSION } from '@core/contracts/version';
 import { SIM_PROTOCOL, type FromSim } from '@core/contracts/protocol';
 import { spawnSimWorker } from '../workers/spawn';
+import {
+  accountSwitchPrompt,
+  conflictNotices,
+  expireTokenForTest,
+  firstSyncError,
+  firstSyncPrompt,
+  signInError,
+  signInRedirectOffer,
+  syncAbout,
+  syncAuth,
+  syncDeviceId,
+  syncDevices,
+  syncElsewhere,
+  syncPrefs,
+  syncStatus,
+} from './services/sync';
 
 function ping(): Promise<'pong'> {
   return new Promise((resolve, reject) => {
@@ -31,8 +47,35 @@ function ping(): Promise<'pong'> {
   });
 }
 
+/**
+ * `window.__spinnerSync`: the sync stores and the D23 test helper, nothing else. It deliberately
+ * has no `signOut`, `removeDriveData` or other action: a browser test drives those through the UI.
+ */
+const syncHook = {
+  syncStatus,
+  syncAuth,
+  conflictNotices,
+  syncPrefs,
+  firstSyncPrompt,
+  syncDevices,
+  syncAbout,
+  accountSwitchPrompt,
+  firstSyncError,
+  signInError,
+  signInRedirectOffer,
+  syncElsewhere,
+  syncDeviceId,
+  expireTokenForTest,
+};
+declare global {
+  interface Window {
+    __spinnerSync?: typeof syncHook;
+  }
+}
+
 export function installTestHook(): void {
   if (import.meta.env.MODE === 'production' && !location.search.includes('e2e')) return;
+  window.__spinnerSync = syncHook;
   window.__spinner = {
     version: __APP_VERSION__,
     sha: __BUILD_SHA__,

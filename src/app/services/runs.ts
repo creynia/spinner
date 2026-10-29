@@ -183,6 +183,36 @@ export function getController(runId: string): HarnessRunController | undefined {
 }
 
 let activeCount = 0;
+const liveRuns = new Set<string>();
+const runListeners = new Set<
+  (e: { runId: string; status: RunMeta['status']; active: boolean }) => void
+>();
+
+/**
+ * True while a run is running or queued in this page (`runId`: that run). The sync service waits
+ * on it before a first sync or Replace and refuses a redirect sign-in (sync.md §5.1, §7.3).
+ */
+export function isActive(runId?: string): boolean {
+  return runId === undefined ? liveRuns.size > 0 : liveRuns.has(runId);
+}
+
+/** Called when a run goes live or stops being live (done, paused, error, cancelled). */
+export function onRunChange(
+  fn: (e: { runId: string; status: RunMeta['status']; active: boolean }) => void,
+): () => void {
+  runListeners.add(fn);
+  return () => void runListeners.delete(fn);
+}
+
+/** The Home verdict of a done run for the sync stub (`describeRun`); undefined when unreadable. */
+export async function describeRun(meta: RunMeta): Promise<RunVerdict | undefined> {
+  try {
+    return (await loadVerdict(meta, await getSink())) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Register a controller: progress goes to `activeRun`, `setRunActive` tracks running runs. */
 export function adoptController(c: HarnessRunController): void {
   if (controllers.get(c.runId) === c) return;
@@ -193,7 +223,10 @@ export function adoptController(c: HarnessRunController): void {
     if (live !== running) {
       running = live;
       activeCount += live ? 1 : -1;
+      if (live) liveRuns.add(c.runId);
+      else liveRuns.delete(c.runId);
       setRunActive(activeCount > 0);
+      for (const fn of [...runListeners]) fn({ runId: c.runId, status: p.status, active: live });
     }
     if (live) activeRun.set(p);
     else if (activeRun.get()?.runId === p.runId) activeRun.set(null);
