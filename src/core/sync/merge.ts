@@ -1,7 +1,10 @@
-// Order-independent merge of sync entries (sync.md §7.4, §7.5). STUB from WP-S0; WP-S2a writes
-// the bodies.
-import type { DeviceId, Hlc, SyncEntry, SyncIndexRecord } from '../contracts/sync';
-import { notImplemented, notImplementedAsync } from './stub';
+// Order-independent merge of sync entries (sync.md §7.4, §7.5).
+import type { DefinitionRecord } from '../contracts/experiment';
+import type { DeviceId, Hlc, SyncEntry, SyncIndexRecord, SyncKind } from '../contracts/sync';
+import { canonicalJson, sha256Pure, toHex, utf8Encode } from '../experiment';
+import { entryOf, fingerprintValue, SUPPORTED_V } from './fingerprint';
+import { cmpHlc } from './hlc';
+import { descends } from './vv';
 
 export interface Folded {
   winner: SyncEntry;
@@ -9,21 +12,186 @@ export interface Folded {
   seen: Record<DeviceId, number>;
 }
 
-/** Order-independent fold of every entry known for one key (§7.4). Never mutates an input entry. */
-export function foldEntries(_all: readonly SyncEntry[], _deletedRuns: ReadonlySet<string>): Folded {
-  return notImplemented('S2a', 'foldEntries');
+type Vv = Record<DeviceId, number>;
+
+const joinVv = (vs: Iterable<Vv>): Vv => {
+  const out: Vv = {};
+  for (const v of vs) for (const [d, n] of Object.entries(v)) out[d] = Math.max(out[d] ?? 0, n);
+  // key order must not depend on the order of the inputs (serialised output is order-independent)
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+};
+const vvKey = (v: Vv): string =>
+  JSON.stringify(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+const isDeleted = (e: SyncEntry): boolean => e.deleted === true;
+const cmpStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/** A total order on entries: HLC, then (only for malformed input) hash and vv. */
+function cmpEntry(a: SyncEntry, b: SyncEntry): number {
+  return (
+    cmpHlc(a.hlc, b.hlc) ||
+    cmpStr(a.hash, b.hash) ||
+    cmpStr(vvKey(a.vv), vvKey(b.vv)) ||
+    Number(isDeleted(a)) - Number(isDeleted(b))
+  );
+}
+
+/** Newer record schema, or a kind this build does not know: kept, never interpreted. */
+function opaqueReason(e: SyncEntry): string | undefined {
+  if (!Object.hasOwn(SUPPORTED_V, e.kind)) return `unknown kind ${String(e.kind)} (${e.key})`;
+  if (e.v > SUPPORTED_V[e.kind])
+    return `${e.key} has record schema v${e.v}; this build understands v${SUPPORTED_V[e.kind]}`;
+  return undefined;
 }
 
 /** Same hash and same deleted flag. */
-export function equivalent(_a: SyncEntry, _b: SyncEntry): boolean {
-  return notImplemented('S2a', 'equivalent');
+export function equivalent(a: SyncEntry, b: SyncEntry): boolean {
+  return a.hash === b.hash && isDeleted(a) === isDeleted(b);
 }
 
+/** Order-independent fold of every entry known for one key (§7.4). Never mutates an input entry. */
+export function foldEntries(all: readonly SyncEntry[], deletedRuns: ReadonlySet<string>): Folded {
+  if (all.length === 0) throw new Error('foldEntries: empty set');
+  // 1. equivalence classes collapse into the lowest-HLC entry, with their vvs joined (N3)
+  const classes = new Map<string, SyncEntry[]>();
+  for (const e of all) {
+    const k = `${isDeleted(e) ? 1 : 0}|${e.hash}`;
+    const c = classes.get(k);
+    if (c) c.push(e);
+    else classes.set(k, [e]);
+  }
+  const reps: SyncEntry[] = [];
+  for (const cls of classes.values()) {
+    const low = cls.reduce((m, e) => (cmpEntry(e, m) < 0 ? e : m));
+    reps.push({ ...low, vv: joinVv(cls.map((c) => c.vv)) });
+  }
+  // 2. maximal elements under strict vv dominance (no pairwise mutation)
+  const maximal = reps.filter(
+    (e) => !reps.some((o) => o !== e && descends(o, e) && !descends(e, o)),
+  );
+  const seen = joinVv(all.map((e) => e.vv));
+  // 3. winner
+  const kind = all[0]!.kind;
+  const byPreference = (a: SyncEntry, b: SyncEntry): number =>
+    Number(isDeleted(a)) - Number(isDeleted(b)) || cmpEntry(b, a);
+  const best = [...maximal].sort(byPreference)[0]!;
+  const canJoin = kind === 'def' && !maximal.some((e) => opaqueReason(e) !== undefined);
+  const winner = canJoin ? joinDef(maximal as SyncEntry<'def'>[], deletedRuns) : best;
+  const losers =
+    kind === 'def' || kind === 'setting' || kind === 'run'
+      ? []
+      : maximal.filter((e) => e !== best && !isDeleted(e)).sort(cmpEntry);
+  return { winner, losers, seen };
+}
+
+// ------------------------------------------------------------------ joinDef
+
+const DEF_KNOWN = new Set([
+  'v',
+  'id',
+  'definition',
+  'createdAt',
+  'updatedAt',
+  'derivedFrom',
+  'displayName',
+  'displayNameAt',
+  'origin',
+  'runIds',
+]);
+
+/**
+ * The join of the maximal definition entries (§7.5): a pure function of the set. `hlc` is the
+ * highest live HLC, `vv` the join of every maximal vv; nothing is minted.
+ */
 export function joinDef(
-  _maximal: readonly SyncEntry<'def'>[],
-  _deletedRuns: ReadonlySet<string>,
+  maximal: readonly SyncEntry<'def'>[],
+  deletedRuns: ReadonlySet<string>,
 ): SyncEntry<'def'> {
-  return notImplemented('S2a', 'joinDef');
+  if (maximal.length === 0) throw new Error('joinDef: empty set');
+  const vv = joinVv(maximal.map((e) => e.vv));
+  const live = maximal.filter((e) => !isDeleted(e) && e.value !== null).sort(cmpEntry);
+  if (live.length === 0) {
+    // every maximal entry is a tombstone (equivalent ones collapse; take the latest regardless)
+    const top = [...maximal].sort(cmpEntry).at(-1)!;
+    return { ...top, vv };
+  }
+  if (live.length === 1) return { ...live[0]!, vv };
+
+  const top = live.at(-1)!; // highest HLC
+  const recs = live.map((e) => e.value as DefinitionRecord & Record<string, unknown>);
+  const topRec = recs.at(-1)!;
+
+  const unknown: Record<string, unknown> = {};
+  for (const r of recs) for (const k of Object.keys(r)) if (!DEF_KNOWN.has(k)) unknown[k] = r[k];
+
+  const runIds = [...new Set(recs.flatMap((r) => r.runIds ?? []))]
+    .filter((id) => !deletedRuns.has(id))
+    .sort();
+
+  // displayName: later displayNameAt wins, ties by the higher entry HLC (`live` is ascending)
+  let nameFrom = 0;
+  for (let i = 1; i < recs.length; i++) {
+    if ((recs[i]!.displayNameAt ?? '') >= (recs[nameFrom]!.displayNameAt ?? '')) nameFrom = i;
+  }
+  // origin / derivedFrom: the earlier createdAt (ties: the lower HLC)
+  let originFrom = 0;
+  for (let i = 1; i < recs.length; i++) {
+    if (recs[i]!.createdAt < recs[originFrom]!.createdAt) originFrom = i;
+  }
+
+  const value: Record<string, unknown> = {
+    ...unknown,
+    v: topRec.v,
+    id: topRec.id,
+    definition: topRec.definition,
+    createdAt: recs.reduce((m, r) => (r.createdAt < m ? r.createdAt : m), recs[0]!.createdAt),
+    updatedAt: recs.reduce((m, r) => (r.updatedAt > m ? r.updatedAt : m), recs[0]!.updatedAt),
+    origin: recs[originFrom]!.origin,
+    runIds,
+  };
+  if (recs[originFrom]!.derivedFrom !== undefined)
+    value.derivedFrom = recs[originFrom]!.derivedFrom;
+  if (recs[nameFrom]!.displayName !== undefined) value.displayName = recs[nameFrom]!.displayName;
+  if (recs[nameFrom]!.displayNameAt !== undefined)
+    value.displayNameAt = recs[nameFrom]!.displayNameAt;
+
+  const hash = toHex(sha256Pure(utf8Encode(canonicalJson(fingerprintValue('def', value)))));
+  return {
+    key: top.key,
+    kind: 'def',
+    id: top.id,
+    hlc: top.hlc,
+    basis: top.basis,
+    vv,
+    hash,
+    v: top.v,
+    value: value as unknown as DefinitionRecord,
+  };
+}
+
+// ------------------------------------------------------------------ copyOf
+
+const COPY_KINDS: ReadonlySet<SyncKind> = new Set<SyncKind>(['strategy', 'layout', 'group']);
+const SLUG_BASE_MAX = 33;
+const NAME_MAX = 80;
+
+function slugBase(id: string): string {
+  const s = id
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, SLUG_BASE_MAX)
+    .replace(/-+$/g, '');
+  return s === '' ? 'copy' : s;
+}
+
+const nameOf = (n: unknown, fallback: string): string => (typeof n === 'string' ? n : fallback);
+
+/** The copy's id and name: a pure function of the loser's fingerprint (S-A). */
+function copyName(name: string, hex6: string): string {
+  const suffix = ` (conflict ${hex6})`;
+  return `${name.slice(0, NAME_MAX - suffix.length).trimEnd()}${suffix}`;
 }
 
 /**
@@ -31,15 +199,64 @@ export function joinDef(
  * the loser's fingerprint, identical across devices (S-A). The copy is a fresh entry minted by
  * this device: `hlc = mint.hlc`, `basis = null`, `vv = { [mint.self]: mint.counter }` where
  * `counter` is a fresh `vvCounter` value the caller consumed. `null` when the copy id is in
- * `taken` (live or tombstoned).
+ * `taken` (live or tombstoned), and for kinds that are never copied (def, setting, run), a
+ * tombstone, or an entry this build cannot interpret.
  */
-export function copyOf(
-  _loser: SyncEntry,
-  _taken: ReadonlySet<string>,
-  _mint: { hlc: Hlc; self: DeviceId; counter: number },
+export async function copyOf(
+  loser: SyncEntry,
+  taken: ReadonlySet<string>,
+  mint: { hlc: Hlc; self: DeviceId; counter: number },
 ): Promise<SyncEntry | null> {
-  return notImplementedAsync('S2a', 'copyOf');
+  if (!COPY_KINDS.has(loser.kind) || isDeleted(loser) || loser.value === null) return null;
+  if (opaqueReason(loser) !== undefined || loser.hash === '') return null;
+  const hex6 = loser.hash.slice(0, 6);
+  const copyId = `${slugBase(loser.id)}-${hex6}`;
+  if (taken.has(copyId)) return null;
+  const src = loser.value as unknown as Record<string, unknown>;
+  switch (loser.kind) {
+    case 'strategy': {
+      const strat = src.strategy as Record<string, unknown>;
+      const strategy = {
+        ...strat,
+        id: copyId,
+        name: copyName(nameOf(strat.name, loser.id), hex6),
+      };
+      const hash = toHex(sha256Pure(utf8Encode(canonicalJson(strategy))));
+      return entryOf(
+        'strategy',
+        copyId,
+        { ...src, id: copyId, strategy, hash } as never,
+        mint.hlc,
+        undefined,
+        mint.self,
+        mint.counter,
+      );
+    }
+    case 'layout': {
+      const layout = src.layout as Record<string, unknown>;
+      const value = {
+        ...src,
+        id: copyId,
+        layout: { ...layout, id: copyId, name: copyName(nameOf(layout.name, loser.id), hex6) },
+      };
+      return entryOf(
+        'layout',
+        copyId,
+        value as never,
+        mint.hlc,
+        undefined,
+        mint.self,
+        mint.counter,
+      );
+    }
+    default: {
+      const value = { ...src, id: copyId, name: copyName(nameOf(src.name, loser.id), hex6) };
+      return entryOf('group', copyId, value as never, mint.hlc, undefined, mint.self, mint.counter);
+    }
+  }
 }
+
+// ------------------------------------------------------------------ resolve
 
 export type Resolution =
   | { do: 'skip-older' }
@@ -50,10 +267,36 @@ export type Resolution =
 
 /** foldEntries over remote ∪ {base} ∪ {local candidate}, mapped to an action; losers → copies. */
 export function resolve(
-  _remote: readonly SyncEntry[],
-  _base: SyncIndexRecord | undefined,
-  _localCandidate: SyncEntry | undefined,
-  _deletedRuns: ReadonlySet<string>,
+  remote: readonly SyncEntry[],
+  base: SyncIndexRecord | undefined,
+  localCandidate: SyncEntry | undefined,
+  deletedRuns: ReadonlySet<string>,
 ): { res: Resolution; losers: SyncEntry[]; seen: Record<DeviceId, number> } {
-  return notImplemented('S2a', 'resolve');
+  const published = base ? [...remote, base.entry] : [...remote];
+  const seen = joinVv([...published.map((e) => e.vv), base?.seen ?? {}]);
+  const all = localCandidate ? [...published, localCandidate] : published;
+  if (all.length === 0) return { res: { do: 'skip-older' }, losers: [], seen };
+
+  const f = foldEntries(all, deletedRuns);
+  const w = f.winner;
+  const reason = opaqueReason(w);
+  const losers = f.losers.filter((l) => opaqueReason(l) === undefined);
+  if (reason !== undefined) return { res: { do: 'opaque', reason }, losers, seen };
+
+  if (localCandidate && equivalent(w, localCandidate)) {
+    const twins = published.filter((e) => equivalent(e, localCandidate));
+    // our edit already exists on the remote: take that entry as published, and drop the mark
+    if (twins.length > 0) {
+      const entry = foldEntries(twins, deletedRuns).winner;
+      return { res: { do: 'apply', entry }, losers, seen };
+    }
+    return { res: { do: 'keep-local' }, losers, seen };
+  }
+  if (!localCandidate && base && equivalent(w, base.entry)) {
+    return { res: { do: 'skip-older' }, losers, seen };
+  }
+  if (w.kind === 'def' && !all.some((e) => equivalent(e, w))) {
+    return { res: { do: 'join', entry: w }, losers, seen };
+  }
+  return { res: { do: 'apply', entry: w }, losers, seen };
 }

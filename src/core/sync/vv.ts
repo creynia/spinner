@@ -1,12 +1,12 @@
-// Version vectors (sync.md §7.4). STUB from WP-S0; WP-S2a writes the bodies.
+// Version vectors (sync.md §7.4).
 import type { SyncEntry } from '../contracts/sync';
-import { notImplemented } from './stub';
 
 /** A descends from B iff vv(A) >= vv(B) pointwise (equal vectors descend from each other). */
-export function descends(_a: SyncEntry, _b: SyncEntry): boolean {
-  return notImplemented('S2a', 'descends');
+export function descends(a: SyncEntry, b: SyncEntry): boolean {
+  for (const [d, n] of Object.entries(b.vv)) if ((a.vv[d] ?? 0) < n) return false;
+  return true;
 }
 /** Neither descends from the other. */
-export function concurrent(_a: SyncEntry, _b: SyncEntry): boolean {
-  return notImplemented('S2a', 'concurrent');
+export function concurrent(a: SyncEntry, b: SyncEntry): boolean {
+  return !descends(a, b) && !descends(b, a);
 }

@@ -27,3 +27,4 @@ export { downloadRun, evictRun, uploadPendingRuns } from './runs';
 export { runGc } from './gc';
 export { beginFirst, previewFirst, reseed } from './first';
 export { eraseRemote, resetLocalSyncState } from './erase';
+export { LibFileError, LIB_MAX_BYTES, type LibFileErrorCode } from './libfile';
