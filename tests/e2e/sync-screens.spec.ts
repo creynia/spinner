@@ -184,5 +184,23 @@ test('a run made on device A is remote on B: Analyze downloads it, Remove downlo
   });
   await screenCheck(bp, b.guard, 'B: analyzed after the re-upload');
   await shot(bp, '7-analyze-after-reupload');
+
+  // ---- Compare while B is offline: the failure names the run and the reason; Retry works online
+  await bp.goto('./?e2e#/library?tab=runs');
+  await bp.getByRole('button', { name: `Remove download of ${NAME}` }).click();
+  await expect(libRow()).toHaveCount(1, { timeout: 30_000 });
+  await b.ctx.setOffline(true);
+  await bp.evaluate((h) => void (location.hash = h), `#/compare?runs=${runA},${runB}`);
+  const failure = bp.locator('[data-download-failed]');
+  await expect(failure).toContainText(`Couldn't download ${NAME} from Drive: you're offline.`, {
+    timeout: 30_000,
+  });
+  await expect(bp.locator('.compare')).toHaveCount(0); // the baseline never silently changes
+  await screenCheck(bp, b.guard, 'B: compare offline names the failed download');
+  await shot(bp, '8-compare-offline');
+  await b.ctx.setOffline(false);
+  await bp.getByRole('button', { name: 'Retry' }).click();
+  await expect(bp.locator('.compare')).toBeVisible({ timeout: 60_000 });
+  await expect(failure).toHaveCount(0);
   await b.ctx.close();
 });

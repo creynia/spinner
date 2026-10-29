@@ -22,6 +22,7 @@ import {
   encodeRunBundleWithDigest,
   evictRunResults,
   loadRun,
+  resultsDigest,
   writeCompacted,
   type Backend,
 } from '../store';
@@ -202,9 +203,11 @@ export async function reuploadRun(ctx: SyncCtx, runId: string): Promise<'uploade
     throw new Error("This run's results differ from the copy in Drive, so they were not uploaded.");
   const data = await loadRun(raw, runId);
   if (!data) throw new Error(here);
-  const enc = await encodeRunBundleWithDigest(data, { gzip: true });
-  if (enc.resultsDigest !== meta.resultsDigest)
+  // The bundle writer trusts `meta.resultsDigest`, so re-hash the stored rows themselves: rows
+  // that no longer produce the digest must never replace the copy in Drive.
+  if ((await resultsDigest(data)) !== meta.resultsDigest)
     throw new Error("This run's results do not match its digest, so they were not uploaded.");
+  const enc = await encodeRunBundleWithDigest(data, { gzip: true });
   const name = runBundleName(runId, enc.resultsDigest);
   const sha = await sha256Hex(enc.bytes);
   const files = (await remote.list(sigOf(ctx))).filter((f) => f.name === name);

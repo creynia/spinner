@@ -16,7 +16,6 @@ import {
   bundleFiles,
   finishRun,
   newLog,
-  putStubRun,
   recording,
   runStubs,
   tinyRun,
@@ -164,7 +163,11 @@ describe.each([false, true])('reuploadRun (idb %s)', (idb) => {
     const cases: [string, (a: Dev, runId: string) => Promise<void>, RegExp][] = [
       [
         'a run that is not done',
-        async (a, id) => putStubRun(a, (await a.raw.get<RunMeta>('runs', id))!, 'paused'),
+        async (a, id) => {
+          // status alone: the digest stays, so only the status guard can refuse it
+          const m = (await a.raw.get<RunMeta>('runs', id))!;
+          await a.raw.tx(['runs'], 'readwrite', (t) => t.put('runs', { ...m, status: 'paused' }));
+        },
         /not on this device/,
       ],
       [
@@ -241,6 +244,58 @@ describe.each([false, true])('reuploadRun (idb %s)', (idb) => {
     active = false;
     expect(await reuploadRun(await w.a.ctx(), made.runId)).toBe('uploaded');
     expect(await driveSha(w.inner)).toBe(good);
+  });
+
+  it('refuses when the local result rows were tampered so they re-hash to another digest', async () => {
+    const { inner, log, a, made } = await uploaded(idb, 8);
+    const bad = await damage(inner);
+    // the meta still carries the stub's digest; the stored rows no longer produce it
+    const rec = (await a.raw.get<{ columns: { data: Int32Array & { [i: number]: number } }[] }>(
+      'summaries',
+      made.runId,
+    ))!;
+    const col = rec.columns[0]!.data;
+    const copy = col.slice();
+    copy[0] = copy[0]! + 1;
+    await a.raw.tx(['summaries'], 'readwrite', (t) =>
+      t.put('summaries', {
+        ...rec,
+        columns: [{ ...rec.columns[0]!, data: copy }, ...rec.columns.slice(1)],
+      }),
+    );
+    expect((await a.raw.get<RunMeta>('runs', made.runId))!.resultsDigest).toBeDefined();
+    const before = log.ops.length;
+    await expect(reuploadRun(await a.ctx(), made.runId)).rejects.toThrow(/do not match its digest/);
+    expect(log.ops.slice(before).filter((o) => o === 'update' || o.startsWith('create'))).toEqual(
+      [],
+    );
+    expect(await driveSha(inner)).toBe(bad);
+    expect(await marks(a)).toEqual([]);
+  });
+
+  it('write, crash before the record, call again: the second call only records (no second update or create)', async () => {
+    let armed = false;
+    const { inner, log, a, b, made, data } = await skewed(idb, 9, {
+      fault: (op, n, ph) =>
+        armed && op === 'update' && n?.startsWith('run.') && ph === 'after' ? crash() : undefined,
+    });
+    const enc = await encodeRunBundleWithDigest(data, { gzip: true });
+    const want = await sha256Hex(enc.bytes);
+    armed = true;
+    await expect(reuploadRun(await a.ctx(), made.runId)).rejects.toThrow();
+    armed = false;
+    expect(await driveSha(inner)).toBe(want); // the write landed; the record did not
+    expect(await marks(a)).toEqual([]);
+    const writes = () =>
+      log.ops.filter((o) => o === 'update' || o.startsWith('create run.')).length;
+    const before = writes();
+    expect(await reuploadRun(await a.ctx(), made.runId)).toBe('uploaded');
+    expect(writes()).toBe(before); // recorded only
+    expect(await marks(a)).toContain(`run:${made.runId}`);
+    await a.cycle();
+    await b.cycle();
+    expect(await stubSha(b, made.runId)).toBe(want);
+    expect(await downloadRun(await b.ctx(), made.runId)).toBe('ok');
   });
 
   describe('crash injection: one fault, then a retry; the file and the stub end up in step', () => {

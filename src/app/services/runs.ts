@@ -250,6 +250,27 @@ export async function remoteRunName(runId: string): Promise<string | null> {
   }
 }
 
+/** Why a run could not be downloaded from Drive (Compare and Sweep say it in plain words). */
+export type DownloadFailure = 'offline' | 'needs-auth' | 'missing' | 'corrupt' | 'full' | 'error';
+
+export const DOWNLOAD_FAILURE_TEXT: Record<DownloadFailure, string> = {
+  offline: "you're offline",
+  'needs-auth': 'you need to sign in to Google again',
+  missing: 'its file is missing from Drive',
+  corrupt: 'its file in Drive is damaged',
+  full: "there isn't enough space on this device",
+  error: 'something went wrong',
+};
+
+/** Downloads a run that is only in Drive; never throws. */
+export async function downloadForView(runId: string): Promise<'ok' | DownloadFailure> {
+  try {
+    return await (await syncApi()).downloadRun(runId);
+  } catch (e) {
+    return e instanceof Error && e.name === 'QuotaExceededError' ? 'full' : 'error';
+  }
+}
+
 export async function refreshRuns(): Promise<void> {
   try {
     recentRuns.set(await listRecentRuns(5));

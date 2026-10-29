@@ -1,6 +1,6 @@
 // WP-S5b (B4): the Compare picker lists runs from other devices; picking a remote done run
 // downloads it first ("Downloading 1 run…"), then compares.
-import { cleanup, render, screen, waitFor } from '@testing-library/preact';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeRun } from '../../../core/store/__fixtures__/synth';
 
@@ -67,4 +67,50 @@ describe('Compare with runs from another device', () => {
     // after the download the run is on this device
     await expect((await getCoreRepo()).getRun(s.remote.runId)).resolves.toBeDefined();
   }, 30_000);
+
+  it.each([
+    ['offline', "you're offline"],
+    ['missing', 'its file is missing from Drive'],
+    ['corrupt', 'its file in Drive is damaged'],
+    ['needs-auth', 'you need to sign in to Google again'],
+  ] as const)(
+    'a failed download (%s) is named with its reason and Retry, and nothing compares',
+    async (result, words) => {
+      clearRunCache();
+      const s = await seedRemote(20);
+      const local = await makeRun({
+        sessions: 12,
+        maxRounds: 20,
+        chunkSize: 4,
+        samples: 2,
+        seed: 61,
+        name: 'Local three',
+      });
+      await (await getCoreRepo()).importRun(local);
+      world.downloadResult = () => result;
+      // the remote run is the BASELINE: it must not silently become the second run
+      const { container } = render(
+        <Compare
+          params={{}}
+          query={new URLSearchParams(`runs=${s.remote.runId},${local.meta.runId}`)}
+        />,
+      );
+      const alert = await waitFor(() => {
+        const el = container.querySelector('[data-download-failed]');
+        if (!el) throw new Error('no failure');
+        return el;
+      });
+      expect(alert.textContent).toContain(`Couldn't download ${s.name} from Drive: ${words}.`);
+      expect(alert.textContent).not.toContain(s.remote.runId);
+      expect(container.textContent).not.toContain('is not in this browser');
+      expect(container.querySelector('.compare')).toBeNull();
+
+      // Retry once the problem is gone: the comparison renders
+      world.downloadResult = null;
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await waitFor(() => expect(container.querySelector('.compare')).not.toBeNull());
+      expect(container.querySelector('[data-download-failed]')).toBeNull();
+    },
+    20_000,
+  );
 });

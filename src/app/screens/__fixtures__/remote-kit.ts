@@ -20,6 +20,9 @@ export interface RemoteWorld {
   /** What a successful download does (the test puts the results on the device). */
   onDownload: (runId: string) => Promise<void>;
   evictError: string | null;
+  /** What `downloadRun` answers (default 'ok'; anything else downloads nothing). */
+  downloadResult:
+    ((runId: string) => 'ok' | 'offline' | 'needs-auth' | 'missing' | 'corrupt') | null;
 }
 
 export const world: RemoteWorld = {
@@ -30,6 +33,7 @@ export const world: RemoteWorld = {
   reuploaded: [],
   onDownload: () => Promise.resolve(),
   evictError: null,
+  downloadResult: null,
 };
 
 export function resetWorld(): void {
@@ -40,6 +44,7 @@ export function resetWorld(): void {
   world.reuploaded = [];
   world.onDownload = () => Promise.resolve();
   world.evictError = null;
+  world.downloadResult = null;
 }
 
 /** The mock of `services/sync`: everything real except the five calls that need a Drive. */
@@ -56,8 +61,9 @@ export function syncMock<T extends object>(orig: T): T {
     remoteRun: (id: string) => Promise.resolve(world.stubs.find((s) => s.runId === id) ?? null),
     downloadRun: async (id: string) => {
       world.downloads.push(id);
-      await world.onDownload(id);
-      return 'ok' as const;
+      const r = world.downloadResult?.(id) ?? 'ok';
+      if (r === 'ok') await world.onDownload(id);
+      return r;
     },
     evictRun: async (id: string) => {
       world.evictCalls++;

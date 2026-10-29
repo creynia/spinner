@@ -15,7 +15,14 @@ import {
   type CompareRun,
 } from '@core/ui';
 import { navigate } from '../../router';
-import { getCoreRepo, listRunRows, type RunRow } from '../../services/runs';
+import { DownloadFailure } from '../../components/DownloadFailure';
+import {
+  downloadForView,
+  getCoreRepo,
+  listRunRows,
+  type DownloadFailure as Reason,
+  type RunRow,
+} from '../../services/runs';
 import * as sync from '../../services/sync';
 import { settingsStore } from '../../services/settings';
 import { useStore } from '../../state/store';
@@ -44,6 +51,8 @@ export function Compare({ query }: ScreenProps) {
   const [datas, setDatas] = useState<(RunData | null)[] | null>(null);
   const [library, setLibrary] = useState<RunRow[]>([]);
   const [downloading, setDownloading] = useState(0);
+  const [failed, setFailed] = useState<{ id: string; name: string; reason: Reason }[]>([]);
+  const [attempt, setAttempt] = useState(0);
   const [defs, setDefs] = useState<Map<string, DefinitionRecord>>(new Map());
   const now = useNow();
   const [add, setAdd] = useState('');
@@ -51,6 +60,7 @@ export function Compare({ query }: ScreenProps) {
   useEffect(() => {
     let on = true;
     setDatas(null);
+    setFailed([]);
     // A run that is only in Drive downloads first, inline; then the runs compare (sync.md §8.4).
     void (async () => {
       const first = await Promise.all(ids.map((id) => loadRunData(id).catch(() => null)));
@@ -60,30 +70,40 @@ export function Compare({ query }: ScreenProps) {
         const stub = await sync.remoteRun(ids[i]!).catch(() => null);
         if (stub?.status === 'done' && stub.bundle) need.push(i);
       }
+      const fails: { id: string; name: string; reason: Reason }[] = [];
       if (need.length > 0) {
         if (on) setDownloading(need.length);
-        const got = await Promise.all(
-          need.map((i) => sync.downloadRun(ids[i]!).catch(() => 'missing' as const)),
-        );
-        need.forEach((i, k) => {
-          if (got[k] !== 'ok') first[i] = null;
-        });
+        const got = await Promise.all(need.map((i) => downloadForView(ids[i]!)));
         const again = await Promise.all(
           need.map(async (i, k) =>
             got[k] === 'ok' ? await loadRunData(ids[i]!).catch(() => null) : null,
           ),
         );
-        need.forEach((i, k) => (first[i] = again[k] ?? null));
+        for (const [k, i] of need.entries()) {
+          first[i] = again[k] ?? null;
+          if (first[i] === null) {
+            const stub = await sync.remoteRun(ids[i]!).catch(() => null);
+            const rec = stub
+              ? await (await getCoreRepo()).getDefinition(stub.definitionId)
+              : undefined;
+            fails.push({
+              id: ids[i]!,
+              name: rec ? experimentName(rec) : 'a run',
+              reason: got[k] === 'ok' ? 'missing' : (got[k] as Reason),
+            });
+          }
+        }
       }
       if (on) {
         setDownloading(0);
+        setFailed(fails);
         setDatas(first);
       }
     })();
     return () => {
       on = false;
     };
-  }, [key]);
+  }, [key, attempt]);
   useEffect(() => {
     void Promise.all([listRunRows(), getCoreRepo().then((r) => r.listDefinitions())])
       .then(([l, d]) => {
@@ -94,7 +114,8 @@ export function Compare({ query }: ScreenProps) {
   }, []);
 
   const loaded = (datas ?? []).filter((d): d is RunData => d !== null);
-  const missing = datas ? ids.filter((_, i) => datas[i] === null) : [];
+  const failedIds = new Set(failed.map((f) => f.id));
+  const missing = datas ? ids.filter((id, i) => datas[i] === null && !failedIds.has(id)) : [];
   const labels = loaded.map((d) => experimentName(d));
   const runs: CompareRun[] = loaded.map((d, i) => {
     const same = loaded.filter((_, k) => labels[k] === labels[i]);
@@ -171,6 +192,14 @@ export function Compare({ query }: ScreenProps) {
       {missing.length ? (
         <NotFoundCard what="Run" message={`${missing.join(', ')} is not in this browser.`} />
       ) : null}
+      {failed.map((f) => (
+        <DownloadFailure
+          key={f.id}
+          name={f.name}
+          reason={f.reason}
+          onRetry={() => setAttempt((n) => n + 1)}
+        />
+      ))}
       {ids.length < MIN_RUNS ? (
         <p class="muted">
           Pick at least {MIN_RUNS} runs (up to {MAX_RUNS}). The first is the baseline.
@@ -181,7 +210,7 @@ export function Compare({ query }: ScreenProps) {
             ? `Downloading ${downloading} ${downloading === 1 ? 'run' : 'runs'}…`
             : 'Loading the runs...'}
         </p>
-      ) : runs.length >= MIN_RUNS && sameGame ? (
+      ) : failed.length > 0 ? null : runs.length >= MIN_RUNS && sameGame ? (
         <CompareView
           runs={runs}
           framing={framing}
