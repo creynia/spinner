@@ -91,7 +91,7 @@ export interface SyncEngine {
   downloadAllRemote(o?: DownloadRunOptions): Promise<{ done: number; skipped: number }>;
   evict(runId: string): Promise<void>;
   /** Uploads this device's copy of a done run over its bundle in Drive (Library → Re-upload). */
-  reupload(runId: string): Promise<void>;
+  reupload(runId: string): Promise<'uploaded' | 'unchanged'>;
   eraseRemote(): Promise<void>;
   resetLocalSyncState(): Promise<void>;
 }

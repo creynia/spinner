@@ -67,7 +67,7 @@ export function syncMock<T extends object>(orig: T): T {
     },
     reuploadRun: (id: string) => {
       world.reuploaded.push(id);
-      return Promise.resolve();
+      return Promise.resolve('uploaded' as const);
     },
   };
 }

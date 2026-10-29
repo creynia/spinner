@@ -159,5 +159,29 @@ test('a run made on device A is remote on B: Analyze downloads it, Remove downlo
   await bp.goto('./?e2e#/library?tab=runs');
   await expect(bp.getByRole('button', { name: `Remove download of ${NAME}` })).toBeVisible();
   await expect(libRow()).toHaveCount(0); // it is on this device now
+
+  // ---- Re-upload on A repairs a damaged bundle in Drive; B then downloads it and analyzes it
+  await bp.goto('./?e2e#/library?tab=runs');
+  await bp.getByRole('button', { name: `Remove download of ${NAME}` }).click();
+  await expect(libRow()).toHaveCount(1, { timeout: 30_000 });
+  const bundleFile = () => [...drive.files.values()].find((f) => f.name.startsWith('run.'))!;
+  const goodBytes = Buffer.from(bundleFile().bytes);
+  bundleFile().bytes = new Uint8Array(goodBytes.length).fill(7); // same size, other bytes
+  await bp.goto(`./?e2e#/analyze/${runA}`);
+  await expect(bp.locator('[data-remote-run="missing"]')).toBeVisible({ timeout: 30_000 });
+  await screenCheck(bp, b.guard, 'B: the damaged bundle is explained');
+  await shot(bp, '6-analyze-damaged');
+  await page.goto('./?e2e#/library?tab=runs');
+  await page.getByRole('button', { name: `Re-upload ${NAME}` }).click();
+  await expect(page.getByText(`Uploaded ${NAME} to your Google Drive again.`)).toBeVisible({
+    timeout: 30_000,
+  });
+  expect(Buffer.compare(Buffer.from(bundleFile().bytes), goodBytes)).toBe(0);
+  await bp.goto(`./?e2e#/analyze/${runA}`);
+  await expect(bp.getByRole('heading', { level: 1, name: `Analyze: ${NAME}` })).toBeVisible({
+    timeout: 60_000,
+  });
+  await screenCheck(bp, b.guard, 'B: analyzed after the re-upload');
+  await shot(bp, '7-analyze-after-reupload');
   await b.ctx.close();
 });

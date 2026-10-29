@@ -170,35 +170,69 @@ export async function uploadPendingRuns(ctx: SyncCtx, deadline: number): Promise
 }
 
 /**
- * Library → Runs "Re-upload" (§7.9 step 5, corrupt files): writes this device's copy of a done run
- * over the bundle in Drive (same name), takes its sha256 and marks the stub for the next push.
+ * Library → Runs "Re-upload" (§7.9 step 5, corrupt files): puts this device's copy over a bundle
+ * in Drive that is damaged or missing. It never makes Drive worse:
+ * - it refuses unless the local run is done, complete, not trimmed or partial, and its results
+ *   hash to the digest the stub carries (a lesser copy never replaces a bundle);
+ * - a bundle in Drive whose bytes match the stub's sha256 is good: nothing is written
+ *   (`'unchanged'`);
+ * - otherwise the file of that name is replaced in place (or created), and the new sha256 is
+ *   recorded with a dirty mark so the next cycle pushes the stub. A crash between the write and
+ *   the record leaves the stub's old sha next to the new bytes: no worse than the damaged state it
+ *   started from, and calling this again finds bytes equal to the new sha and only records it.
  */
-export async function reuploadRun(ctx: SyncCtx, runId: string): Promise<void> {
+export async function reuploadRun(ctx: SyncCtx, runId: string): Promise<'uploaded' | 'unchanged'> {
   const raw = internalOf(ctx).raw;
   const { deps, remote } = ctx;
-  const meta = await raw.get<RunMeta>('runs', runId);
-  if (!meta || meta.status !== 'done' || !meta.resultsDigest)
-    throw new Error('This run is not on this device, so it cannot be uploaded from here.');
+  const here = 'This run is not on this device, so it cannot be uploaded from here.';
   if (deps.isRunActive(runId)) throw new Error('The run is still going.');
+  const meta = await raw.get<RunMeta>('runs', runId);
+  if (!meta || meta.status !== 'done' || !meta.resultsDigest) throw new Error(here);
+  if (meta.completedSessions !== meta.sessions)
+    throw new Error('This run is not complete, so it cannot replace the copy in Drive.');
+  if (meta.imported?.trimmed || meta.imported?.partial)
+    throw new Error(
+      'This run was imported trimmed or partial, so it cannot replace the copy in Drive.',
+    );
+  const base = await raw.get<SyncIndexRecord>('syncIndex', `run:${runId}`);
+  const stub = base && !base.entry.deleted ? (base.entry.value as RunStub | null) : null;
+  if (!stub?.bundle)
+    throw new Error('This run is not in Drive yet; it uploads on its own at the next sync.');
+  if (stub.resultsDigest !== meta.resultsDigest)
+    throw new Error("This run's results differ from the copy in Drive, so they were not uploaded.");
   const data = await loadRun(raw, runId);
-  if (!data) throw new Error('This run is not on this device, so it cannot be uploaded from here.');
+  if (!data) throw new Error(here);
   const enc = await encodeRunBundleWithDigest(data, { gzip: true });
   if (enc.resultsDigest !== meta.resultsDigest)
     throw new Error("This run's results do not match its digest, so they were not uploaded.");
   const name = runBundleName(runId, enc.resultsDigest);
-  const files = await remote.list(sigOf(ctx));
-  const existing = files.find((f) => f.name === name);
-  const bytes = existing
-    ? (await remote.update(existing.id, enc.bytes, sigOf(ctx))).bytes
-    : (
-        await remote.create(name, enc.bytes, {
-          appProperties: { kind: 'run', runId, digest16: digest16(enc.resultsDigest) },
-          contentType: 'application/gzip',
-          resumeKey: `run:${runId}`,
-          ...(deps.signal ? { signal: deps.signal } : {}),
-        })
-      ).bytes;
-  await recordBundle(ctx, runId, { name, bytes, sha256: await sha256Hex(enc.bytes) });
+  const sha = await sha256Hex(enc.bytes);
+  const files = (await remote.list(sigOf(ctx))).filter((f) => f.name === name);
+  let bytes = enc.bytes.length;
+  let hit: RemoteFile | undefined;
+  for (const f of files) {
+    const there = await sha256Hex(await remote.download(f.id, sigOf(ctx)));
+    if (there === stub.bundle.sha256) return 'unchanged'; // Drive has the good copy
+    if (there === sha) {
+      hit = f; // an earlier attempt wrote our bytes; only the record is missing
+      bytes = f.bytes;
+    }
+  }
+  if (!hit) {
+    const target = files[0];
+    bytes = target
+      ? (await remote.update(target.id, enc.bytes, sigOf(ctx))).bytes
+      : (
+          await remote.create(name, enc.bytes, {
+            appProperties: { kind: 'run', runId, digest16: digest16(enc.resultsDigest) },
+            contentType: 'application/gzip',
+            resumeKey: `run:${runId}`,
+            ...(deps.signal ? { signal: deps.signal } : {}),
+          })
+        ).bytes;
+  }
+  await recordBundle(ctx, runId, { name, bytes, sha256: sha });
+  return 'uploaded';
 }
 
 // ------------------------------------------------------------------ download

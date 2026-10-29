@@ -232,8 +232,12 @@ export function Library({ query }: ScreenProps) {
   const reupload = async (r: RunRow, name: string) => {
     setBusyRun(r.runId);
     try {
-      await sync.reuploadRun(r.runId);
-      showToast(`Uploaded ${name} to your Google Drive again.`);
+      const res = await sync.reuploadRun(r.runId);
+      showToast(
+        res === 'uploaded'
+          ? `Uploaded ${name} to your Google Drive again.`
+          : `Your Google Drive already has a good copy of ${name}.`,
+      );
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not upload.', { tone: 'error' });
     }

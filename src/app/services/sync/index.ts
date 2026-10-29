@@ -158,7 +158,7 @@ export function downloadRun(
 export function evictRun(runId: string): Promise<void> {
   return svc().evictRun(runId);
 }
-export function reuploadRun(runId: string): Promise<void> {
+export function reuploadRun(runId: string): Promise<'uploaded' | 'unchanged'> {
   return svc().reuploadRun(runId);
 }
 export function markConflictsRead(): void {

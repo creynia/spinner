@@ -196,7 +196,7 @@ export interface SyncService {
   ): Promise<{ done: number; skipped: number }>;
   evictRun(runId: string): Promise<void>;
   /** Library → Runs "Re-upload": writes this device's copy over the run's file in Drive. */
-  reuploadRun(runId: string): Promise<void>;
+  reuploadRun(runId: string): Promise<'uploaded' | 'unchanged'>;
   markConflictsRead(): void;
   /** Reads Drive's account/storage and the device list into their stores (throttled). */
   refreshAccountInfo(force?: boolean): Promise<void>;
@@ -1470,11 +1470,12 @@ export function createSyncService(env: SyncEnv): SyncService {
     env.channel.post({ type: 'changed', from: env.tabId, kinds: ['run'] });
   }
 
-  async function reuploadRun(runId: string): Promise<void> {
+  async function reuploadRun(runId: string): Promise<'uploaded' | 'unchanged'> {
     await started;
-    if (disabled || !raw) return;
-    await engine().reupload(runId);
-    await syncNow();
+    if (disabled || !raw) return 'unchanged';
+    const r = await engine().reupload(runId);
+    if (r === 'uploaded') await syncNow();
+    return r;
   }
 
   function markConflictsRead(): void {
