@@ -25,6 +25,7 @@ Each entry is a question the orchestrator would have asked the user. It was deci
 | 19 | 2026-10-29 | sync.md rev 2 | How are conflicted copies named? | "<name> (<device name>)"; you set each device's name in Settings → Account. | "(conflict, <date>)". | Low. |
 | 20 | 2026-10-29 | sync.md rev 2 | How do other devices' paused, cancelled or errored runs show? | Greyed, with their status; you can't open their full data. | Hide them. | Low. |
 | 21 | 2026-10-29 | sync.md rev 2 | Do conflicted strategy copies need action? | No. Definitions carry their own strategy, so runs are unaffected; tidy the Library when convenient. | Prompt to merge. | Low. |
+| 22 | 2026-10-29 | sync.md rev 3 | A device left unsynced for more than 180 days comes back. | Its sync history is kept and only its library file is rewritten, so newer edits from other devices still win. One edge case remains: a record deleted on another device while this one was away more than 180 days reappears. | Wipe and fully re-download that device, so nothing reappears but local unsynced edits become conflicted copies. | Low. |
 
 ## Checks only you can do
 
