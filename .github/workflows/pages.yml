@@ -21,6 +21,9 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+        env:
+          # Optional override of the committed client id (public by design); empty = use the default.
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }
