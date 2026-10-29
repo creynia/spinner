@@ -93,7 +93,7 @@ export async function errorOf(res: Response): Promise<RemoteError> {
   if (res.status === 401) code = 'auth';
   else if (res.status === 429) code = 'rate';
   else if (res.status === 403)
-    code = /rateLimit/i.test(reason)
+    code = /rateLimit|dailyLimit/i.test(reason)
       ? 'rate'
       : reason === 'storageQuotaExceeded'
         ? 'quota'

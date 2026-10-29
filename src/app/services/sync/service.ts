@@ -37,6 +37,7 @@ import { createStore, type Store } from '../../state/store';
 import type { DriveOptions } from './drive';
 import type { AuthFlow } from './flow';
 import { AuthError } from './gis';
+import { chooseFlow } from './redirect';
 import { backoffDelay, QUOTA_RETRY_MS } from './backoff';
 import type { SyncChannel, SyncMessage } from './channel';
 import type { SyncLock } from './lock';
@@ -280,6 +281,8 @@ export function createSyncService(env: SyncEnv): SyncService {
   /** A sign-in step or first sync that waits for the active run to finish. */
   let waitingFirst: null | (() => Promise<void>) = null;
   /** The account the sign-in is about; kept while a sheet is open. */
+  /** Set by `applyFailure` when Drive was erased from another device; `settle` resets durably. */
+  let pendingErase: string | null = null;
   let candidate: { accountId: string; email: string } | null = null;
   let engineRef: SyncEngine | null = null;
   let controller: AbortController | null = null;
@@ -546,7 +549,16 @@ export function createSyncService(env: SyncEnv): SyncService {
     );
   }
 
-  const ready = (): boolean => !stopped && !disabled && !!raw && prefs.enabled && hasLast && !halt;
+  /** Automatic syncing may run: not while a sign-in sheet (first sync, account switch) is open. */
+  const ready = (): boolean =>
+    !stopped &&
+    !disabled &&
+    !!raw &&
+    prefs.enabled &&
+    hasLast &&
+    !halt &&
+    !candidate &&
+    stores.accountSwitchPrompt.get() === null;
 
   /** Fire-and-forget for timers and events: a failure here must never be an unhandled rejection. */
   const fireCycle = (reason: Trigger, force = false): void =>
@@ -682,6 +694,11 @@ export function createSyncService(env: SyncEnv): SyncService {
     } else {
       applyFailure(r);
     }
+    if (pendingErase !== null) {
+      const why = pendingErase;
+      pendingErase = null;
+      await handleErased(why);
+    }
     await refreshLocal();
     if (r.changed.length > 0) env.refresh(r.changed);
     if (r.copies > 0 && ok) {
@@ -700,6 +717,40 @@ export function createSyncService(env: SyncEnv): SyncService {
     // Edits made while the cycle ran stay marked: look again.
     if (ok && dirtyDuringCycle && reason !== 'start') scheduleDirty();
   }
+
+  const ERASED_KEY = 'spinner:sync:erased';
+  const ERASED_MSG = 'Your Drive data was removed from another device. Sync is off here.';
+
+  /**
+   * Drive was erased from another device (§7.10): start over durably, now, so a reload cannot bring
+   * the stale binding back. The sync state is reset, the account binding dropped and sync switched
+   * off; only the notice survives (a small flag) until the next sign-in.
+   */
+  async function handleErased(message: string): Promise<void> {
+    halt = { code: 'erased', message };
+    try {
+      local()?.setItem(ERASED_KEY, '1');
+    } catch {
+      // storage blocked: the notice lasts until the reload
+    }
+    try {
+      await engine().resetLocalSyncState();
+    } catch {
+      // the sign-in resets again if this failed
+    }
+    await delMeta('account');
+    account = undefined;
+    hasLast = false;
+    lastSynced = undefined;
+    await disableSync();
+  }
+  const clearErasedFlag = (): void => {
+    try {
+      local()?.removeItem(ERASED_KEY);
+    } catch {
+      // storage blocked
+    }
+  };
 
   function applyFailure(r: CycleResult): void {
     const code = r.error?.code ?? 'unknown';
@@ -720,10 +771,8 @@ export function createSyncService(env: SyncEnv): SyncService {
       return;
     }
     if (r.outcome === 'off') {
-      if (code === 'erased') {
-        halt = { code: 'erased', message };
-        void disableSync();
-      } else void reloadMeta();
+      if (code === 'erased') pendingErase = message;
+      else void reloadMeta();
       return;
     }
     // outcome 'error' (a `rate` or `server` error arrives here as code 'network')
@@ -796,6 +845,9 @@ export function createSyncService(env: SyncEnv): SyncService {
   const dirtyBatch = new Set<SyncKey>();
   function onLocalDirty(keys: SyncKey[]): void {
     if (disabled || !prefs.enabled) return;
+    // an active run rewrites its own row all the time; the engine defers it, so it is no trigger
+    keys = keys.filter((k) => !(k.startsWith('run:') && env.isRunActive(k.slice(4))));
+    if (keys.length === 0) return;
     pending = Math.max(pending, 1);
     if (!holding) publish();
     for (const k of keys) dirtyBatch.add(k);
@@ -824,6 +876,8 @@ export function createSyncService(env: SyncEnv): SyncService {
     }
     if (m.type === 'changed') {
       void reloadMeta().then(() => {
+        if (ready()) startTimers();
+        else if (!prefs.enabled) stopTimers();
         if (m.kinds.length > 0) env.refresh(m.kinds);
         if (!holding) publish();
       });
@@ -967,7 +1021,8 @@ export function createSyncService(env: SyncEnv): SyncService {
     }
     let acquiring: Promise<string> | null = null;
     if (!auth.source.current()) {
-      markSignIn();
+      // only a redirect leaves the page, so only a redirect needs a marker for the reload
+      if (chooseFlow(opts.mode ?? 'auto') === 'redirect') markSignIn();
       acquiring = acquire(opts.mode ?? 'auto', auth.source.state.state === 'expired');
     }
     signingIn = true;
@@ -995,14 +1050,9 @@ export function createSyncService(env: SyncEnv): SyncService {
     verified = { token: auth.source.current() ?? '', accountId: about.accountId };
     lastAbout = { ...about, deviceBytes: lastAbout?.deviceBytes ?? 0 };
     await reloadMeta();
-    if (halt?.code === 'erased') {
-      // Drive was erased from another device: this device starts over (§7.10 step 5)
-      await withLock(() => engine().resetLocalSyncState());
-      await delMeta('account');
-      account = undefined;
-      hasLast = false;
-    }
+    if (halt?.code === 'erased' && hasLast) await handleErased(halt.message);
     halt = null;
+    clearErasedFlag();
     candidate = { accountId: about.accountId, email: about.email };
     if (account && account.accountId !== about.accountId) {
       stores.accountSwitchPrompt.set({ from: account.email, to: about.email });
@@ -1015,10 +1065,19 @@ export function createSyncService(env: SyncEnv): SyncService {
       await savePrefs(raw, prefs);
       stores.syncPrefs.set(prefs);
       phase = 'idle';
+      candidate = null; // nothing to ask: automatic syncing may run
       startTimers();
       publish();
       env.channel.post({ type: 'changed', from: env.tabId, kinds: [] });
-      await cycle('sign-in', true);
+      const res = await cycle('sign-in', true);
+      if (res?.outcome === 'off' && res.error?.code === 'erased') {
+        // this very cycle found the Drive erased: it has reset; start over with the sheet
+        halt = null;
+        clearErasedFlag();
+        candidate = { accountId: about.accountId, email: about.email };
+        await offerFirstSync();
+        return;
+      }
       void refreshInfo(true);
       return;
     }
@@ -1053,6 +1112,7 @@ export function createSyncService(env: SyncEnv): SyncService {
   async function withLock<T>(
     fn: () => Promise<T>,
   ): Promise<{ ok: true; value: T } | { ok: false }> {
+    if (running) await running.catch(() => undefined); // our own cycle: wait for it
     const r = await env.lock.run(fn);
     return r.held ? { ok: true, value: r.value } : { ok: false };
   }
@@ -1103,6 +1163,7 @@ export function createSyncService(env: SyncEnv): SyncService {
     progress = undefined;
     attempts = 0;
     const got: { res: CycleResult | null; failure: string | null } = { res: null, failure: null };
+    if (running) await running.catch(() => undefined);
     const held = await env.lock.run(async () => {
       holding = true;
       publish();
@@ -1272,6 +1333,7 @@ export function createSyncService(env: SyncEnv): SyncService {
     stores.firstSyncError.set(null);
     stores.signInError.set(null);
     halt = null;
+    clearErasedFlag();
     phase = 'idle';
     phaseError = undefined;
     retryAt = undefined;
@@ -1544,6 +1606,13 @@ export function createSyncService(env: SyncEnv): SyncService {
     await reloadMeta();
     // `enabled` without a finished first sync (a crash mid-begin) is not a state to resume
     if (prefs.enabled && !hasLast) await disableSync();
+    // the "removed from another device" notice outlives a reload (the reset itself is durable)
+    try {
+      if (local()?.getItem(ERASED_KEY) && !prefs.enabled && !hasLast)
+        halt = { code: 'erased', message: ERASED_MSG };
+    } catch {
+      // storage blocked
+    }
     offs.push(backend.onDirty(onLocalDirty));
     offs.push(env.channel.onMessage(onMessage));
     offs.push(

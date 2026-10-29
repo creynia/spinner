@@ -686,7 +686,7 @@ describe('sign-in, binding and the first sync (§7.10, §8.3)', () => {
     ).not.toContain('erased');
   });
 
-  it('a device that was told its Drive was erased starts over on sign-in', async () => {
+  it('a device that was told its Drive was erased starts over on sign-in, even after a reload', async () => {
     const a = await synced();
     const w2 = otherDevice(world);
     const b = makeTab(w2);
@@ -696,12 +696,111 @@ describe('sign-in, binding and the first sync (§7.10, §8.3)', () => {
     await a.svc.removeDriveData();
     await b.svc.syncNow();
     expect(b.stores.syncStatus.get().error?.code).toBe('erased');
-    await b.svc.signIn(); // the card's "Sign in" for an erased Drive
-    await until(() => b.stores.firstSyncPrompt.get() !== null, 'the first-sync sheet');
-    expect(b.stores.firstSyncPrompt.get()?.remoteEmpty).toBe(true);
-    await b.svc.chooseFirstSync('merge');
-    await until(() => state(b) === 'idle', 'B synced');
+    // the reset is durable: the binding and the sync state are gone at once
+    expect(await w2.raw.get('syncMeta', 'account')).toBeUndefined();
+    expect(await w2.raw.get('syncMeta', 'last')).toBeUndefined();
+    expect(await w2.raw.getAllKeys('syncIndex')).toHaveLength(0);
+    b.stop();
+    const b2 = makeTab(w2); // the page reloads: a new service on the same storage
+    await b2.svc.start();
+    expect(b2.stores.syncStatus.get()).toMatchObject({ state: 'error', error: { code: 'erased' } });
+    await b2.svc.signIn(); // the card's "Sign in" for an erased Drive
+    await until(() => b2.stores.firstSyncPrompt.get() !== null, 'the first-sync sheet');
+    expect(b2.stores.firstSyncPrompt.get()?.remoteEmpty).toBe(true);
+    await b2.svc.chooseFirstSync('merge');
+    await until(() => state(b2) === 'idle', 'B synced');
     expect(await layoutIds(w2.raw)).toContain('lay-b');
+    expect(w2.storage.getItem('spinner:sync:erased')).toBeNull();
+  });
+
+  it('a sign-in whose own cycle finds the Drive erased resets and offers the first-sync sheet', async () => {
+    const a = await synced();
+    const w2 = otherDevice(world);
+    const b = makeTab(w2);
+    await putLayout(b, 'lay-b', '2');
+    await signInAndSync(b);
+    await b.svc.signOut(); // keeps the binding and the index
+    await advance(5000, 1000);
+    await a.svc.removeDriveData();
+    await b.svc.signIn();
+    await until(() => b.stores.firstSyncPrompt.get() !== null, 'the sheet after the erased cycle');
+    expect(await w2.raw.get('syncMeta', 'account')).toBeUndefined();
+  });
+});
+
+describe('guards between sheets and timers (review F7-F12)', () => {
+  it('F7: an open account-switch sheet is not undermined by a timer cycle (no revoke)', async () => {
+    const t = await synced();
+    world.drive.set('permissionId', 'B-account');
+    world.drive.set('email', 'other@example.com');
+    t.env.auth.source.expireNow();
+    await t.svc.signIn();
+    expect(t.stores.accountSwitchPrompt.get()).not.toBeNull();
+    const revoked = world.gis.revoked.length;
+    await putLayout(t, 'lay-f7', '1');
+    await advance(6 * 60_000, 30_000);
+    expect(world.gis.revoked).toHaveLength(revoked);
+    expect(t.stores.syncAuth.get().state).toBe('signed-in');
+    expect(t.stores.accountSwitchPrompt.get()).not.toBeNull();
+  });
+
+  it('F8: a tab that was off starts its timers when another tab turns sync on', async () => {
+    const a = makeTab(world);
+    await a.svc.start();
+    const p = a.svc.signIn();
+    await until(() => a.stores.firstSyncPrompt.get() !== null, 'the sheet');
+    const b = makeTab(world); // opened meanwhile: signed in (shared token), sync off
+    await b.svc.start();
+    expect(b.stores.syncPrefs.get().enabled).toBe(false);
+    await a.svc.chooseFirstSync('merge');
+    await p;
+    await until(() => b.stores.syncPrefs.get().enabled === true, 'tab B to see sync on');
+    await flush();
+    a.knobs.visible = false; // so only tab B's own interval can fire
+    const before = b.requests;
+    await advance(5 * 60_000 + 2000, 30_000);
+    expect(b.requests).toBeGreaterThan(before); // its 5 min interval is running
+  });
+
+  it('F9: a popup sign-in leaves no redirect marker, even when the popup is closed', async () => {
+    const t = makeTab(world);
+    await t.svc.start();
+    world.gis.mode = 'closed';
+    await t.svc.signIn();
+    expect(world.storage.getItem(SIGNIN_KEY)).toBeNull();
+    world.gis.mode = 'hang';
+    void t.svc.signIn();
+    await flush();
+    expect(world.storage.getItem(SIGNIN_KEY)).toBeNull();
+  });
+
+  it("F12: removeDriveData waits for this tab's own cycle instead of saying another tab is syncing", async () => {
+    const t = await synced();
+    const release = holdDrive(world);
+    const cycle = t.svc.syncNow();
+    await until(() => state(t) === 'syncing', 'syncing');
+    const removing = t.svc.removeDriveData();
+    await flush();
+    release();
+    await cycle;
+    await removing;
+    expect(t.notices.join(' ')).not.toMatch(/Another tab/);
+    expect(t.notices.join(' ')).toMatch(/Removed spinner data/);
+    expect([...world.drive.files.values()].map((f) => f.name)).toEqual(['spinner-sync.json']);
+  });
+
+  it('F10: an active run rewriting its row makes no cycles beyond the 5 min interval', async () => {
+    const t = await synced();
+    t.knobs.runActive = true;
+    const lists = t.lists();
+    for (let i = 0; i < 100; i++) {
+      await t.tracked.tx(['runs'], 'readwrite', (tx) =>
+        tx.put('runs', { runId: 'run-live', status: 'running', completedSessions: i }),
+      );
+      await advance(2000, 1000);
+    }
+    expect(t.lists()).toBe(lists); // 200 s of row writes, no cycle
+    expect(t.stores.syncStatus.get().pending).toBeLessThanOrEqual(1);
   });
 });
 
