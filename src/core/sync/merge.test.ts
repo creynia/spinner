@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest';
 import type { DefinitionRecord } from '../contracts/experiment';
 import type { SyncEntry, SyncIndexRecord } from '../contracts/sync';
 import { entryOf } from './fingerprint';
-import { copyIdOf, copyOf, equivalent, foldEntries, joinDef, resolve } from './merge';
+import {
+  copyIdChain,
+  copyIdOf,
+  copyOf,
+  isCopyOf,
+  equivalent,
+  foldEntries,
+  joinDef,
+  resolve,
+} from './merge';
 import { bare, DEVICES, deepFreeze, foldSig, hlcOf, perms, rng } from './testkit';
 import { concurrent, descends } from './vv';
 
@@ -517,6 +526,27 @@ describe('copyOf', () => {
     expect(await copyOf(loser, new Set(['other']), mint(B, 1))).not.toBeNull();
   });
 
+  it('copyIdChain lists every id copyOf can return; isCopyOf recognises the copy and a tombstone', async () => {
+    const loser = await mk('group', A, 'N');
+    const chain = copyIdChain(loser);
+    expect(chain).toHaveLength(10);
+    expect(chain[0]).toBe(copyIdOf(loser));
+    expect(chain[1]).toBe(`big-${loser.hash.slice(0, 12)}`);
+    const c0 = (await copyOf(loser, none, mint(B, 1)))!;
+    const c1 = (await copyOf(loser, new Set([chain[0]!]), mint(B, 2)))!;
+    expect(c1.id).toBe(chain[1]);
+    expect(c0.hash).not.toBe(c1.hash); // each copy embeds its own id
+    expect(await isCopyOf(loser, c0)).toBe(true);
+    expect(await isCopyOf(loser, c1)).toBe(true);
+    expect(await isCopyOf(loser, { ...c0, hash: 'other' })).toBe(false); // unrelated content
+    expect(await isCopyOf(loser, { ...c1, id: chain[0]!, key: `group:${chain[0]}` })).toBe(false);
+    const tomb = await entryOf('group', chain[1]!, null, hlcOf(9, B), undefined, B, 3);
+    expect(await isCopyOf(loser, tomb)).toBe(true); // a deleted copy
+    const elsewhere = await entryOf('group', 'zzz', null, hlcOf(9, B), undefined, B, 4);
+    expect(await isCopyOf(loser, elsewhere)).toBe(false);
+    expect(copyIdChain(bare('setting', 'framing', A, 1, { [A]: 1 }, 'p'))).toEqual([]);
+  });
+
   it('the name never ends in a lone surrogate', async () => {
     const loser = await mk('group', A, '😀'.repeat(60));
     const name = ((await copyOf(loser, none, mint(B, 1)))!.value as { name: string }).name;
@@ -613,6 +643,25 @@ describe('resolve', () => {
       expect(r.res.entry.hlc).toBe(pub.hlc);
       expect(r.res.entry.vv).toEqual(pub.vv); // the candidate's counter is not absorbed
     }
+  });
+
+  it('twin-apply guard: a published twin that does not descend every published entry is not applied', () => {
+    // E (live) was deleted locally; the remote has a tombstone T1 concurrent with E, so applying T1
+    // would let E win again. The candidate (a tombstone that descends E) is pushed instead.
+    const e = g(A, 5, { [A]: 3 }, 'E');
+    const t1 = g(B, 6, { [A]: 2, [B]: 1 }, null);
+    const cand = g(A, 9, { [A]: 4 }, null);
+    const r = resolve([e, t1], rec(e, { [A]: 3 }), cand, none);
+    expect(r.res.do).toBe('keep-local');
+    // the same for a live candidate with a live twin
+    const l1 = g(B, 6, { [A]: 2, [B]: 1 }, 'same');
+    const lc = g(A, 9, { [A]: 4 }, 'same');
+    expect(resolve([e, l1], rec(e, { [A]: 3 }), lc, none).res.do).toBe('keep-local');
+    // a twin that does descend everything is still applied
+    const t2 = g(B, 6, { [A]: 3, [B]: 1 }, null);
+    expect(resolve([e, t2], rec(e, { [A]: 3 }), g(A, 9, { [A]: 4 }, null), none).res.do).toBe(
+      'apply',
+    );
   });
 
   it('an edit survives a concurrent delete (candidate live, remote tombstone)', () => {

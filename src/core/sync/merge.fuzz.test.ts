@@ -6,7 +6,7 @@ import type { ExperimentGroup } from '../contracts/experiment';
 import type { DeviceId, SyncEntry, SyncIndexRecord } from '../contracts/sync';
 import { entryOf } from './fingerprint';
 import { createClock, hlcWall, type HlcClock } from './hlc';
-import { copyIdOf, copyOf, foldEntries, resolve } from './merge';
+import { copyIdChain, copyOf, foldEntries, isCopyOf, resolve } from './merge';
 import { rng } from './testkit';
 import { descends } from './vv';
 
@@ -53,8 +53,8 @@ class Device {
   needsPull = false;
   /** Every (device, counter) ever minted, across all devices of the world. */
   static minted = new Set<string>();
-  /** Published entries that a later local edit or delete (on top of them) superseded. */
-  static superseded = new Set<string>();
+  /** Every entry any device minted (candidates and pushes), published or not. */
+  static mintedEntries: SyncEntry[] = [];
   readonly clock: HlcClock;
   constructor(
     readonly id: DeviceId,
@@ -73,18 +73,11 @@ class Device {
     return n;
   }
 
-  private supersede(id: string): void {
-    const base = this.index.get(`group:${id}`)?.entry;
-    if (base) Device.superseded.add(`${base.key}|${base.hlc}`);
-  }
-
   edit(id: string, body: string): void {
-    this.supersede(id);
     this.store.set(id, { name: this.store.get(id)?.name ?? id, body });
     this.dirty.set(id, this.now());
   }
   del(id: string): void {
-    this.supersede(id);
     this.store.delete(id);
     this.dirty.set(id, this.now());
   }
@@ -104,10 +97,10 @@ class Device {
     this.needsPull = true;
   }
 
-  private mint(id: string, at: number): Promise<SyncEntry> {
+  private async mint(id: string, at: number): Promise<SyncEntry> {
     const row = this.index.get(`group:${id}`);
     const v = this.store.get(id);
-    return entryOf(
+    const e = await entryOf(
       'group',
       id,
       v ? toGroup(id, v) : null,
@@ -116,6 +109,8 @@ class Device {
       this.id,
       this.next(),
     );
+    Device.mintedEntries.push(e);
+    return e;
   }
 
   async pull(): Promise<void> {
@@ -156,21 +151,27 @@ class Device {
           throw new Error('unexpected opaque');
       }
       for (const l of losers) {
-        const first = copyIdOf(l);
-        if (first === null || this.copies.has(first)) continue; // a copy we made stays made
-        const mint = () => ({
+        // the engine contract (sync.md §7.7, copyOf JSDoc)
+        const chain = copyIdChain(l);
+        if (chain.length === 0) continue;
+        if (chain.some((id) => this.copies.has(id))) continue; // rule 2
+        let exists = false;
+        const taken = new Set<string>();
+        for (const id of chain) {
+          // the index, and the remote entries of this cycle that are not applied yet (§7.7)
+          const held = [this.index.get(`group:${id}`)?.entry, ...(byKey.get(`group:${id}`) ?? [])];
+          const present = held.filter((e): e is SyncEntry => e !== undefined);
+          let related = false;
+          for (const e of present) if (await isCopyOf(l, e)) related = true; // rule 3
+          if (related) exists = true;
+          else if (present.length > 0 || this.store.has(id)) taken.add(id); // rule 4
+        }
+        if (exists) continue;
+        const c = await copyOf(l, taken, {
           hlc: this.clock.tickAt(hlcWall(l.hlc)),
           self: this.id,
           counter: this.next(),
         });
-        // the engine's contract: an id that already holds this very copy (made by another device)
-        // is not "taken"; an id that holds unrelated content (live or tombstone) is.
-        const ideal = (await copyOf(l, none, mint()))!;
-        const held = this.index.get(ideal.key)?.entry;
-        if (held && held.hash === ideal.hash) continue;
-        const taken = new Set<string>();
-        if (this.store.has(first) || this.index.has(`group:${first}`)) taken.add(first);
-        const c = taken.size ? await copyOf(l, taken, mint()) : ideal;
         if (!c) continue;
         this.copies.add(c.id);
         this.store.set(c.id, fromGroup(c.value as ExperimentGroup));
@@ -194,7 +195,7 @@ class Device {
 
 function world(n: number) {
   Device.minted = new Set();
-  Device.superseded = new Set();
+  Device.mintedEntries = [];
   let t = 1000;
   const now = () => (t += 1);
   const remote = new Remote();
@@ -311,6 +312,55 @@ describe('merge model on the real functions', () => {
     expect(a.store.size).toBe(1);
   });
 
+  it('forced collision: an unrelated record at <slug>-<hex6>; no copy is duplicated or recreated', async () => {
+    const conflict = async (preseed?: string) => {
+      const w = world(3);
+      const [a, b, c] = w.devs as [Device, Device, Device];
+      a.edit('x', 'v0');
+      await a.push();
+      await b.pull();
+      await c.pull();
+      a.edit('x', 'A');
+      b.edit('x', 'B');
+      if (preseed) {
+        c.edit(preseed, 'unrelated');
+        await c.push();
+      }
+      await a.push();
+      await b.push();
+      return w;
+    };
+    // find the copy id in a clean world (it depends only on the loser's fingerprint)
+    const clean = await conflict();
+    await clean.settle();
+    const copyIds = [...clean.devs[0]!.store.keys()].filter((k) => k !== 'x');
+    expect(copyIds).toHaveLength(1);
+    const first = copyIds[0]!;
+
+    const { devs, settle, dump } = await conflict(first);
+    await settle();
+    const keys = [...devs[0]!.store.keys()].sort();
+    expect(keys).toHaveLength(3); // x, the unrelated record, and the copy at the longer id
+    expect(devs[0]!.store.get(first)!.body).toBe('unrelated');
+    const longer = keys.find((k) => k !== 'x' && k !== first)!;
+    expect(longer.length).toBeGreaterThan(first.length);
+    expect(longer.startsWith(first)).toBe(true);
+    expect(devs[0]!.store.get(longer)!.name).toMatch(/^x \(conflict [0-9a-f]{6}\)$/);
+    const snapshot = dump(devs[0]!);
+    for (const d of devs) expect(dump(d)).toBe(snapshot);
+    // many more cycles: nothing is duplicated, recreated or changed
+    for (let i = 0; i < 4; i++) await settle();
+    for (const d of devs) expect(dump(d)).toBe(snapshot);
+    // the user deletes the copy; it stays deleted on every device, those that never made it included
+    const maker = devs.find((d) => d.copies.has(longer))!;
+    maker.del(longer);
+    for (let i = 0; i < 4; i++) await settle();
+    for (const d of devs) {
+      expect(d.store.has(longer)).toBe(false);
+      expect([...d.store.keys()].sort()).toEqual(['x', first].sort());
+    }
+  });
+
   it('N3: three devices create the same conflicted copy: one copy, no copy of a copy', async () => {
     const { devs, settle } = world(3);
     const [a, b, c] = devs as [Device, Device, Device];
@@ -417,19 +467,30 @@ describe('merge model on the real functions', () => {
           .map(([, v]) => `${v.name}|${v.body}`);
         expect(new Set(copyBodies).size, `seed ${seed}`).toBe(copyBodies.length);
         copiesSeen += copyBodies.length;
-        // no published edit is lost: every maximal live entry ever published (read by anyone) has its
-        // body in the final stores, as itself or as a copy. Without Replace nothing legitimately
-        // discards a published edit that no later entry descends from.
+        // No edit is lost and no delete is undone. Over every entry ever published OR minted: each
+        // live maximal entry has its body in the final stores (as itself or a copy), and a key whose
+        // maximal entries are all tombstones is alive in no store. Without Replace nothing else
+        // legitimately discards a minted entry that no later entry descends from.
         if (!withReplace) {
-          const log = [...devs[0]!.remote.log.values()];
-          for (const e of log) {
-            if (e.deleted || Device.superseded.has(`${e.key}|${e.hlc}`)) continue;
-            const dominated = log.some(
-              (o) => o.key === e.key && o !== e && descends(o, e) && !descends(e, o),
-            );
-            if (dominated) continue;
+          const entries = new Map<string, SyncEntry>();
+          for (const e of [...devs[0]!.remote.log.values(), ...Device.mintedEntries])
+            entries.set(`${e.key}|${e.hlc}|${e.hash}|${JSON.stringify(e.vv)}`, e);
+          const log = [...entries.values()];
+          const maximal = log.filter(
+            (e) => !log.some((o) => o.key === e.key && descends(o, e) && !descends(e, o)),
+          );
+          for (const e of maximal) {
+            if (e.deleted) continue;
             const body = fromGroup(e.value as ExperimentGroup).body;
-            expect(all.has(body), `seed ${seed} lost published ${e.key} ${body}`).toBe(true);
+            expect(all.has(body), `seed ${seed} lost ${e.key} ${body}`).toBe(true);
+          }
+          for (const key of new Set(maximal.map((e) => e.key))) {
+            if (!maximal.filter((e) => e.key === key).every((e) => e.deleted)) continue;
+            for (const d of devs)
+              expect(
+                d.store.has(key.slice('group:'.length)),
+                `seed ${seed} resurrected ${key}`,
+              ).toBe(false);
           }
         }
         // no vv value is ever reused: each device's counter is >= its component anywhere

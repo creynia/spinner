@@ -5,10 +5,12 @@ export { createClock, cmpHlc, hlcDevice, hlcWall, type HlcClock } from './hlc';
 export { entryOf, fingerprintValue, SUPPORTED_V, verifyEntry } from './fingerprint';
 export { concurrent, descends } from './vv';
 export {
+  copyIdChain,
   copyIdOf,
   copyOf,
   equivalent,
   foldEntries,
+  isCopyOf,
   joinDef,
   resolve,
   type Folded,

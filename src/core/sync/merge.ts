@@ -233,14 +233,46 @@ const copyable = (loser: SyncEntry): boolean =>
   opaqueReason(loser) === undefined &&
   loser.hash !== '';
 
-/**
- * The first-choice id of `loser`'s copy (`<slug>-<hex6>`), or null when the loser is never copied.
- * The engine checks it against `syncMeta.copies` and tombstones BEFORE calling `copyOf`, so a copy
- * the user deleted stays deleted (the accepted behaviour: if the user deletes a copy and the
- * identical content comes back, no new copy is made).
- */
+/** The first-choice id of `loser`'s copy (`<slug>-<hex6>`), or null when it is never copied. */
 export function copyIdOf(loser: SyncEntry): string | null {
   return copyable(loser) ? copyIdAt(loser, 0) : null;
+}
+
+/**
+ * Every id `copyOf` can return for `loser`, in order: `<slug>-<hex6>`, then 12, 18, ... hex digits
+ * (empty when the loser is never copied).
+ */
+export function copyIdChain(loser: SyncEntry): string[] {
+  const out: string[] = [];
+  if (!copyable(loser)) return out;
+  for (let n = 0; ; n++) {
+    const id = copyIdAt(loser, n);
+    if (id === null) return out;
+    out.push(id);
+  }
+}
+
+/**
+ * Whether `existing` (an index entry) is the copy of `loser` already made, on this device or
+ * another one: its id is in the chain and its fingerprint equals the copy that id would get; or it
+ * is a tombstone at a chain id (a deleted copy).
+ * (A copy at the 12-digit id embeds that id, so its hash differs from the 6-digit copy's.)
+ */
+export async function isCopyOf(loser: SyncEntry, existing: SyncEntry): Promise<boolean> {
+  const chain = copyIdChain(loser);
+  const n = chain.indexOf(existing.id);
+  if (n < 0) return false;
+  // A tombstone at a chain id is taken to be a deleted copy (its content is gone, so it cannot be
+  // told apart from an unrelated deleted record): it keeps the copy deleted on every device, also
+  // those that never made it. The cost is a lost edit only if an unrelated record that lived at
+  // exactly this id was deleted (about 2^-24).
+  if (isDeleted(existing)) return true;
+  const c = await copyOf(loser, new Set(chain.slice(0, n)), {
+    hlc: loser.hlc,
+    self: 'aaaaaaaaaa',
+    counter: 1,
+  });
+  return c !== null && c.id === existing.id && c.hash === existing.hash;
 }
 
 /**
@@ -249,12 +281,20 @@ export function copyIdOf(loser: SyncEntry): string | null {
  * this device: `hlc = mint.hlc`, `basis = null`, `vv = { [mint.self]: mint.counter }` where
  * `counter` is a fresh `vvCounter` value the caller consumed.
  *
- * `taken` holds the ids that hold UNRELATED content (live records and tombstones in the store and
- * the index). When the first-choice id (`copyIdOf`) is taken, the id grows by the next 6 hex digits
- * of the fingerprint (12, 18, ...) until it is free (§7.7); the name always keeps hex6. The caller
- * must NOT put a copy it already made in `taken` expecting `null`: it checks `copyIdOf` against
- * `syncMeta.copies` itself (see `copyIdOf`). `null` for kinds that are never copied (def, setting,
- * run), a tombstone, or an entry this build cannot interpret.
+ * When the first-choice id is taken, the id grows by the next 6 hex digits of the fingerprint
+ * (12, 18, ...) until it is free (§7.7); the name always keeps hex6. `null` for kinds that are
+ * never copied (def, setting, run), a tombstone, an entry this build cannot interpret, or when
+ * every id of the chain is taken.
+ *
+ * ENGINE CONTRACT (sync.md §7.7), for each loser `l`, with `chain = copyIdChain(l)`:
+ *  1. The id `copyOf` returns is what goes into `syncMeta.copies`.
+ *  2. Skip `l` if any id of `chain` is in `copies`. This keeps a deleted copy deleted (accepted: if
+ *     the user deletes a copy and the identical content comes back, no new copy is made).
+ *  3. Skip `l` if any id of `chain` has an index entry, or a not-yet-applied remote entry of this
+ *     cycle, for which `isCopyOf(l, entry)` holds (the copy exists, made here or by another device).
+ *  4. `taken` holds only chain ids that have an index, store or incoming remote entry with other
+ *     content (a live record that is not the copy). A tombstone at a chain id counts as a deleted copy (rule 3).
+ * Without rules 2-3 a copy at the 12-digit id would be recreated every cycle.
  */
 export async function copyOf(
   loser: SyncEntry,
@@ -349,7 +389,13 @@ export function resolve(
     // our edit already exists on the remote: take that entry as published, and drop the mark
     if (twins.length > 0) {
       const entry = foldEntries(twins, deletedRuns).winner;
-      return { res: { do: 'apply', entry }, losers, seen };
+      // ... but only if that entry descends every published entry. Otherwise applying it would
+      // let a concurrent published entry win again (a deleted record would come back): our
+      // candidate, which descends all of them, is pushed instead.
+      if (published.every((o) => descends(entry, o))) {
+        return { res: { do: 'apply', entry }, losers, seen };
+      }
+      return { res: { do: 'keep-local' }, losers, seen };
     }
     return { res: { do: 'keep-local' }, losers, seen };
   }
