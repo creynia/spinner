@@ -18,6 +18,7 @@ import { navigate } from '../../router';
 import { dryRunDefinitionIds, getCoreRepo } from '../../services/runs';
 import { settingsStore } from '../../services/settings';
 import { useStore } from '../../state/store';
+import { pickerLabels } from '../pickerLabels';
 import { NotFoundCard, loadRunData, tableMaxFor } from '../Analyze/data';
 import type { ScreenProps } from '../types';
 
@@ -30,29 +31,6 @@ export function parseRuns(q: URLSearchParams): string[] {
     .map((s) => s.trim())
     .filter(Boolean);
   return [...new Set(ids)].slice(0, MAX_RUNS);
-}
-
-interface Pick {
-  name: string;
-  when: string;
-  sessions: number;
-  seed: number | undefined;
-}
-
-/** Names, then " · N sessions" where name and time collide, then " · seed S" if still tied. */
-export function pickerLabels(items: Pick[]): string[] {
-  const base = items.map((i) => `${i.name} · ${i.when}`);
-  const count = (xs: string[], x: string) => xs.filter((y) => y === x).length;
-  const withN = items.map((i, k) =>
-    count(base, base[k]!) > 1
-      ? `${base[k]!} · ${i.sessions.toLocaleString('en-US')} sessions`
-      : base[k]!,
-  );
-  return items.map((i, k) =>
-    count(withN, withN[k]!) > 1 && i.seed !== undefined
-      ? `${withN[k]!} · seed ${i.seed}`
-      : withN[k]!,
-  );
 }
 
 const go = (ids: string[]) =>

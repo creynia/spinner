@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickerLabels } from './index';
+import { pickerLabels } from './pickerLabels';
 
 describe('pickerLabels', () => {
   it('shows only name and time when they differ', () => {
@@ -17,12 +17,12 @@ describe('pickerLabels', () => {
         { ...t, sessions: 1000, seed: 1 },
         { ...t, sessions: 2000, seed: 1 },
       ]),
-    ).toEqual(['A · just now · 1,000 sessions', 'A · just now · 2,000 sessions']);
+    ).toEqual(['A · 1,000 sess. · just now', 'A · 2,000 sess. · just now']);
     expect(
       pickerLabels([
         { ...t, sessions: 1000, seed: 1 },
         { ...t, sessions: 1000, seed: 2 },
       ]),
-    ).toEqual(['A · just now · 1,000 sessions · seed 1', 'A · just now · 1,000 sessions · seed 2']);
+    ).toEqual(['A · 1,000 sess. · seed 1 · just now', 'A · 1,000 sess. · seed 2 · just now']);
   });
 });

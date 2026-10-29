@@ -16,7 +16,7 @@ async function finished(page: Page, opts: string): Promise<string> {
   return id;
 }
 
-test('Compare picker shows names and relative times, no hashes', async ({ page, guard }) => {
+test('Compare picker shows names and relative times, no hashes', async ({ page, guard }, info) => {
   test.setTimeout(120_000);
   await page.goto('./?e2e#/');
   await page.waitForFunction('window.__results !== undefined');
@@ -32,7 +32,9 @@ test('Compare picker shows names and relative times, no hashes', async ({ page, 
   const rest = options.slice(1);
   expect(rest).toHaveLength(2);
   for (const o of rest) {
-    expect(o).toMatch(/^Picker twin · (just now|\d+ seconds? ago|\d+ minutes? ago)/);
+    expect(o).toMatch(
+      /^Picker twin( · [\d,]+ sess\.)?( · seed \d+)? · (just now|\d+ seconds? ago|\d+ minutes? ago)$/,
+    );
     expect(o).not.toMatch(/[0-9a-f]{8,}/);
   }
   // same name, possibly the same label: either way every option is distinguishable
@@ -47,6 +49,11 @@ test('Compare picker shows names and relative times, no hashes', async ({ page, 
   expect(body).not.toMatch(/[0-9a-f]{16,}/);
   await screenCheck(page, guard, 'compare picker');
 
+  await select.selectOption(c);
+  if (process.env.SHOTS_DIR)
+    await select.screenshot({
+      path: `${process.env.SHOTS_DIR}/compare-picker-${info.project.name}.png`,
+    });
   await select.selectOption(b);
   await page.getByRole('button', { name: 'Add to comparison' }).click();
   await expect(page.getByRole('list', { name: 'Runs being compared' })).toContainText(

@@ -38,7 +38,7 @@ import {
   type TypedArray,
 } from './columns';
 import { decodeArray, defaultEncoding, encodeArray, type EncodedArray } from './codec';
-import type { StoredRunData } from './definitions';
+import { sanitizeImportedName, type StoredRunData } from './definitions';
 import { resultsDigest } from './digest';
 
 export const APP_ID = 'spinner';
@@ -424,8 +424,8 @@ async function parseBundle(
   } catch (e) {
     return fail(e instanceof DefinitionFormatError ? e.message : 'file damaged: definition');
   }
-  if (b.displayName !== undefined && !isStr(b.displayName)) fail('file damaged: displayName');
-  if (b.displayNameAt !== undefined && !isStr(b.displayNameAt)) fail('file damaged: displayNameAt');
+  // a bad name or time is dropped, never fatal: the definition and the results are still good
+  const nameMeta = sanitizeImportedName(b.displayName, b.displayNameAt);
   if ((await hashDefinition(definition)) !== b.definitionId)
     fail('file damaged: definitionId does not match');
 
@@ -550,10 +550,10 @@ async function parseBundle(
   const data: StoredRunData = {
     meta,
     definition,
-    ...(b.displayName !== undefined && b.displayName !== definition.name
-      ? { displayName: b.displayName }
+    ...(nameMeta.displayName !== undefined && nameMeta.displayName !== definition.name
+      ? { displayName: nameMeta.displayName }
       : {}),
-    ...(b.displayNameAt !== undefined ? { displayNameAt: b.displayNameAt } : {}),
+    ...(nameMeta.displayNameAt !== undefined ? { displayNameAt: nameMeta.displayNameAt } : {}),
     sessions,
     summary,
     checkpoints: { schedule: Int32Array.from(b.schedule), equity },

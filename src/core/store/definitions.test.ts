@@ -7,6 +7,8 @@ import {
   decodeRunBundle,
   DEFINITION_NAME_MAX,
   encodeRunBundle,
+  mergeDisplayName,
+  parseNameTime,
   validateDefinitionName,
   type RunBundleV1,
 } from './index';
@@ -218,5 +220,69 @@ describe('exports after a rename', () => {
       trimForGallery: true,
     });
     expect(await decodeRunBundle(t, 'roulette')).toHaveProperty('data');
+  });
+});
+
+describe('imported names are validated', () => {
+  const T = '2026-01-01T00:00:00.000Z';
+  async function decodeWith(fields: Record<string, unknown>) {
+    const { repo, id, runId } = await seeded();
+    await repo.renameDefinition(id, 'Seed');
+    const b = plain(await encodeRunBundle((await repo.loadRun(runId))!, { gzip: false }));
+    const edited = { ...b, displayName: undefined, displayNameAt: undefined, ...fields };
+    return decodeRunBundle(new TextEncoder().encode(JSON.stringify(edited)), 'roulette');
+  }
+  const pick = (r: Awaited<ReturnType<typeof decodeWith>>) => {
+    if ('error' in r) throw new Error(r.error);
+    const d = r.data as { displayName?: string; displayNameAt?: string };
+    return { displayName: d.displayName, displayNameAt: d.displayNameAt };
+  };
+
+  it('keeps a valid, trimmed name and time', async () => {
+    expect(pick(await decodeWith({ displayName: '  Fine ', displayNameAt: T }))).toEqual({
+      displayName: 'Fine',
+      displayNameAt: T,
+    });
+  });
+  it('drops an empty, blank or over-long name but keeps the definition and the run', async () => {
+    for (const name of ['', '   ', 'x'.repeat(DEFINITION_NAME_MAX + 1), 7]) {
+      const r = await decodeWith({ displayName: name, displayNameAt: T });
+      expect(pick(r)).toEqual({ displayName: undefined, displayNameAt: undefined });
+      expect('data' in r && r.data.definition).toEqual(run.definition);
+    }
+  });
+  it('ignores a time that is far in the future or not ISO', async () => {
+    for (const at of ['9999-01-01T00:00:00Z', 'yesterday', '2026-01-01', '', 5]) {
+      expect(pick(await decodeWith({ displayName: 'X', displayNameAt: at }))).toEqual({
+        displayName: undefined,
+        displayNameAt: undefined,
+      });
+    }
+  });
+  it('accepts a time up to 24 h ahead (clock skew)', () => {
+    const now = Date.parse('2026-06-01T00:00:00Z');
+    expect(parseNameTime('2026-06-01T20:00:00Z', now)).not.toBeNull();
+    expect(parseNameTime('2026-06-02T01:00:00Z', now)).toBeNull();
+  });
+  it('mergeDisplayName compares parsed times, not strings, and never stores a bad name', async () => {
+    const { repo, id } = await seeded();
+    const rec = (await repo.getDefinition(id))!;
+    const local = { ...rec, displayName: 'Local', displayNameAt: '2026-05-01T12:00:00+02:00' };
+    // 11:00Z is older than 10:00Z+... : string order says newer ("2026-05-01T11" < "…T12" is older), time says newer
+    const newer = mergeDisplayName(local, {
+      displayName: 'Remote',
+      displayNameAt: '2026-05-01T11:00:00Z',
+    });
+    expect(newer?.displayName).toBe('Remote');
+    expect(
+      mergeDisplayName(local, { displayName: 'Old', displayNameAt: '2026-05-01T09:00:00Z' }),
+    ).toBeNull();
+    expect(
+      mergeDisplayName(local, { displayName: '', displayNameAt: '2026-06-01T00:00:00Z' }),
+    ).toBeNull();
+    expect(
+      mergeDisplayName(local, { displayName: 'F', displayNameAt: '9999-01-01T00:00:00Z' }),
+    ).toBeNull();
+    expect(mergeDisplayName(local, { displayName: 'F', displayNameAt: 'soon' })).toBeNull();
   });
 });

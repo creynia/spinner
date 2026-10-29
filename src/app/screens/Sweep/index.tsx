@@ -5,7 +5,18 @@ import { experimentName } from '@core';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { DefinitionRecord, ExperimentGroup } from '@core/contracts/experiment';
 import type { RunData, RunMeta } from '@core/contracts/run';
-import { Button, Card, Field, relativeTime, Select, SweepView, TextInput, useNow } from '@core/ui';
+import {
+  Button,
+  Card,
+  Field,
+  relativeTime,
+  runTimestamp,
+  Select,
+  SweepView,
+  TextInput,
+  useNow,
+} from '@core/ui';
+import { pickerLabels } from '../pickerLabels';
 import { navigate } from '../../router';
 import { getCoreRepo } from '../../services/runs';
 import { settingsStore } from '../../services/settings';
@@ -27,6 +38,7 @@ import {
 
 function NewSweep({ query }: { query: URLSearchParams }) {
   const [defs, setDefs] = useState<DefinitionRecord[] | null>(null);
+  const [lastRun, setLastRun] = useState<Map<string, string>>(new Map());
   const now = useNow();
   const [baseId, setBaseId] = useState(query.get('definition') ?? '');
   const [path, setPath] = useState('');
@@ -38,6 +50,12 @@ function NewSweep({ query }: { query: URLSearchParams }) {
     void (async () => {
       const repo = await getCoreRepo();
       const list = await repo.listDefinitions();
+      const latest = new Map<string, string>();
+      for (const r of await repo.listRuns()) {
+        const at = runTimestamp(r);
+        if (at > (latest.get(r.definitionId) ?? '')) latest.set(r.definitionId, at);
+      }
+      setLastRun(latest);
       setDefs(list);
       const runId = query.get('run');
       if (!baseId && runId) {
@@ -51,6 +69,14 @@ function NewSweep({ query }: { query: URLSearchParams }) {
     if (defs && !baseId && defs[0]) setBaseId(defs[0].id);
   }, [defs]);
 
+  const optionLabels = pickerLabels(
+    (defs ?? []).map((d) => ({
+      name: experimentName(d),
+      when: relativeTime(lastRun.get(d.id) ?? d.createdAt, now),
+      sessions: d.definition.run.sessions,
+      seed: d.definition.run.seed,
+    })),
+  );
   const base = defs?.find((d) => d.id === baseId) ?? null;
   const leaves = useMemo(() => (base ? leafPaths(base.definition) : []), [base]);
   const leaf = leaves.find((l) => l.path === path);
@@ -118,10 +144,7 @@ function NewSweep({ query }: { query: URLSearchParams }) {
             setBaseId(v);
             setPath('');
           }}
-          options={defs.map((d) => ({
-            value: d.id,
-            label: `${experimentName(d)} · ${relativeTime(d.updatedAt, now)}`,
-          }))}
+          options={defs.map((d, k) => ({ value: d.id, label: optionLabels[k]! }))}
         />
       </Field>
       <Field

@@ -53,6 +53,9 @@ export {
 export { createRunSink, loadRun, writeCompacted, type StoreRunSink } from './sink';
 export {
   DEFINITION_NAME_MAX,
+  mergeDisplayName,
+  parseNameTime,
+  sanitizeImportedName,
   renameDefinitionRecord,
   validateDefinitionName,
   type NameCheck,
