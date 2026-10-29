@@ -117,6 +117,7 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
   - Dry and benchmark runs are excluded.
   - Every run list shows remote-only runs, and Sweep reuses remote runs.
 - **Sign-in gate:** after the sign-in package, the owner tests "Test Google sign-in" on the Pixel before the sync service is built. Android standalone defaults to the redirect flow. The token is kept in localStorage until it expires.
+  - **The test sign-in does not revoke at the end** (it differs from sync.md D23's wording). A revoked grant would bring the account chooser back, so "Expire token now" then Reconnect could not be tested. The session stays, and "End test" (`endTestSignIn`) revokes instead.
 - **Integrity:** every download is verified (file sha256, recomputed `resultsDigest`, definition-id rehash) before one atomic write. Newer-format data is kept, never dropped.
 - **Downloads:** every run is uploaded. Phones download a run when it is opened; desktops download everything in the background.
 - **No `CORE_VERSION` bump.** The only contract change to existing types is the additive `RunMeta.synced?`.

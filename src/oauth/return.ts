@@ -21,6 +21,12 @@ export const RETURN_KEYS = {
 } as const;
 const FALLBACK_RETURN = './#/settings?account=1';
 
+/** Same rule as gis.ts `ttlSeconds` (this entry cannot import src/app): finite and positive, else 3599. */
+function ttlSeconds(v: string | null): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 3599;
+}
+
 export type ReturnOutcome =
   { ok: true; goTo: string; email: string } | { ok: false; message: string };
 
@@ -84,10 +90,11 @@ export async function processReturn(env: ReturnEnv): Promise<ReturnOutcome> {
     );
   const token = params.get('access_token');
   if (!token) return fail('Google did not return an access token.');
+  // "Includes", not "equals": include_granted_scopes makes Google list every scope granted so far.
   if (!(params.get('scope') ?? '').split(/[ ,]+/).includes(SCOPE))
     return fail('spinner needs permission to keep its own data in your Drive.');
 
-  const expiresAt = env.now + (Number(params.get('expires_in')) || 3599) * 1000;
+  const expiresAt = env.now + ttlSeconds(params.get('expires_in')) * 1000;
   let email = '';
   try {
     const res = await env.fetchImpl(ABOUT, {

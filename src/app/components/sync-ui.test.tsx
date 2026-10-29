@@ -24,6 +24,9 @@ const spies = vi.hoisted(() => ({
   markConflictsRead: vi.fn(),
   testSignIn: vi.fn(() => Promise.resolve({ email: 'a@b.c', files: 3 })),
   expireTokenForTest: vi.fn(),
+  resumeTestSignIn: vi.fn(() => Promise.resolve<{ email: string; files: number } | null>(null)),
+  endTestSignIn: vi.fn(() => Promise.resolve()),
+  preloadSignIn: vi.fn(),
   downloadRun: vi.fn(),
   remoteRun: vi.fn(() => Promise.resolve(null)),
   downloadAllRemote: vi.fn(() => Promise.resolve({ done: 2, skipped: 0 })),
@@ -305,6 +308,59 @@ describe('Account card', () => {
     setStatus({ state: 'needs-auth', pending: 1 });
     void act(() => sync.syncAuth.set({ state: 'expired', email: 'owner@gmail.com' }));
     expect(b.getByText('Reconnect')).toBeTruthy();
+  });
+});
+
+describe('Account: gate redirect return and End test', () => {
+  it('on mount, shows the redirect-return result exactly as the popup path does', async () => {
+    cfg.id = 'client.apps.googleusercontent.com';
+    setStatus({ state: 'idle' });
+    spies.resumeTestSignIn.mockResolvedValueOnce({ email: 'owner@gmail.com', files: 1 });
+    const a = render(<Account />);
+    await waitFor(() =>
+      expect(a.container.querySelector('[data-sync-test-result]')?.textContent).toBe(
+        'Signed in as owner@gmail.com. 1 file in the app folder.',
+      ),
+    );
+    expect(spies.preloadSignIn).toHaveBeenCalled();
+  });
+
+  it('shows nothing when no gate redirect was in flight, and an error when the check fails', async () => {
+    cfg.id = 'client.apps.googleusercontent.com';
+    setStatus({ state: 'idle' });
+    const a = render(<Account />);
+    await act(() => Promise.resolve());
+    expect(a.container.querySelector('[data-sync-test-result]')?.textContent).toBe('');
+    a.unmount();
+    spies.resumeTestSignIn.mockRejectedValueOnce(new Error('Drive said no'));
+    const b = render(<Account />);
+    await waitFor(() =>
+      expect(b.container.querySelector('[data-sync-test-result]')?.textContent).toContain(
+        'Sign-in test failed: Drive said no',
+      ),
+    );
+  });
+
+  it('does not resume without a client id', async () => {
+    cfg.id = '';
+    spies.resumeTestSignIn.mockClear();
+    setStatus({ state: 'idle' });
+    render(<Account />);
+    await act(() => Promise.resolve());
+    expect(spies.resumeTestSignIn).not.toHaveBeenCalled();
+  });
+
+  it('End test revokes through endTestSignIn', async () => {
+    cfg.id = 'client.apps.googleusercontent.com';
+    setStatus({ state: 'idle' });
+    const a = render(<Account />);
+    fireEvent.click(a.getByText('End test'));
+    expect(spies.endTestSignIn).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(a.container.querySelector('[data-sync-test-result]')?.textContent).toContain(
+        'Test ended',
+      ),
+    );
   });
 });
 
