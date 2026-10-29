@@ -350,6 +350,72 @@ describe.each([false, true])('engine (idb %s)', (idb) => {
     }
   });
 
+  it('opaque: a newer-schema entry concurrent with a v1 entry stays the base; nothing dominates it, nothing is lost after the upgrade', async () => {
+    const { devs, inner } = await world(1, idb);
+    const [a] = devs as [Dev];
+    const lib = async (dev: string, e: SyncEntry) =>
+      inner.create(
+        LIB_NAME(dev),
+        await encodeLib({
+          format: 'spinner-sync-lib',
+          version: 1,
+          device: { id: dev, name: dev, appVersion: '2', coreVersion: '1' },
+          hlc: e.hlc,
+          writtenAt: new Date().toISOString(),
+          entries: [e],
+        }),
+        {},
+      );
+    const v2 = await entryOf(
+      'group',
+      'g',
+      { ...group('g', 'FUTURE'), v: 2 } as never,
+      hlcOf(100, B),
+      undefined,
+      B,
+      1,
+    );
+    const v1 = await entryOf(
+      'group',
+      'g',
+      group('g', 'THEIRS') as never,
+      hlcOf(200, C),
+      undefined,
+      C,
+      1,
+    );
+    await lib(B, v2);
+    await lib(C, v1);
+    await userPut(a, 'group', group('g', 'MINE'));
+    const r = await a.cycle();
+    expect(r.outcome).toBe('ok');
+    const idx = (await indexOf(a)).get('group:g')!;
+    expect(idx.local).toBe(0);
+    expect(idx.entry.v).toBe(2); // the opaque entry is the base, not the HLC-best v1 entry
+    expect(idx.seen).toEqual({}); // not advanced past it
+    expect(await marks(a)).toEqual(['group:g']);
+    expect(groupBody((await records(a, 'group')).get('g'))).toBe('MINE');
+    // what A published for g is the v2 entry, as is: no entry of A's dominates it
+    const mine = (await inner.list()).find((f) => f.name === LIB_NAME(A))!;
+    const published = (await decodeLib(await inner.download(mine.id))).entries.find(
+      (x) => x.key === 'group:g',
+    )!;
+    expect(published).toEqual(v2);
+    // more cycles change nothing; C's file is read again each time but never applied over it
+    for (let i = 0; i < 2; i++) expect((await a.cycle()).outcome).toBe('ok');
+    expect((await indexOf(a)).get('group:g')!.entry.v).toBe(2);
+    // the app upgrades: v2 is understood, the whole set (v2, THEIRS, MINE) is folded
+    SUPPORTED_V.group = 2;
+    try {
+      for (let i = 0; i < 3; i++) expect((await a.cycle()).outcome).toBe('ok');
+      const bodies = [...(await records(a, 'group')).values()].map(groupBody).sort();
+      expect(bodies).toEqual(['FUTURE', 'MINE', 'THEIRS']);
+      expect(await marks(a)).toEqual([]);
+    } finally {
+      SUPPORTED_V.group = 1;
+    }
+  });
+
   it('a bad entry (hash does not match) is skipped with a notice, the rest applies', async () => {
     const { devs, inner } = await world(1, idb);
     const [a] = devs as [Dev];

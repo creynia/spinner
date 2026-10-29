@@ -38,10 +38,23 @@ async function dropMarks(
   drops: readonly { key: SyncKey; n: string }[],
 ): Promise<void> {
   if (drops.length === 0) return;
-  await st.raw.update(['syncDirty'], async (r, w) => {
+  await st.raw.update(['syncDirty', 'syncIndex', 'runs'], async (r, w) => {
     for (const d of drops) {
       const cur = await r.get<SyncDirtyRecord>('syncDirty', d.key);
-      if (cur && cur.n === d.n) w.delete('syncDirty', d.key);
+      if (!cur || cur.n !== d.n) continue;
+      w.delete('syncDirty', d.key);
+      // a run re-saved unchanged that exists here: the index must say it is local
+      if (d.key.startsWith('run:')) {
+        const idx = await r.get<SyncIndexRecord>('syncIndex', d.key);
+        if (
+          idx &&
+          idx.local === 0 &&
+          !idx.entry.deleted &&
+          (await r.get('runs', d.key.slice(4))) !== undefined
+        ) {
+          w.put('syncIndex', { ...idx, local: 1 } satisfies SyncIndexRecord);
+        }
+      }
     }
   });
 }
@@ -169,7 +182,12 @@ export async function uploadLib(
 
 /** The lib files of other devices (and ours) that changed since they were applied. */
 export const changedLibs = (st: Internal, files: readonly RemoteFile[]): RemoteFile[] =>
-  files.filter((f) => libDevice(f.name) !== null && st.seen[f.id] !== f.version);
+  files.filter(
+    (f) =>
+      libDevice(f.name) !== null &&
+      st.seen[f.id] !== f.version &&
+      st.deferredFiles.get(f.id) !== f.version,
+  );
 
 export interface Commit {
   pending: ReadonlyMap<SyncKey, Pending>;

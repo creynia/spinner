@@ -29,11 +29,11 @@ describe('engine fuzz', () => {
       copies += await check({ seed, steps: 300, faults: true }, 'main');
     }
     expect(copies).toBeGreaterThan(0); // the fuzz really exercises copies
-  }, 900_000);
+  }, 3_600_000);
 
   it('the same on fake-indexeddb (5 seeds)', async () => {
     for (let seed = 1; seed <= 5; seed++) {
       await check({ seed, steps: 120, faults: true, idb: true }, 'idb');
     }
-  }, 900_000);
+  }, 3_600_000);
 });

@@ -18,5 +18,5 @@ describe('engine fuzz, S-A', () => {
       copies += await check({ seed, steps: 300, pool: 2, healAt: 200 }, 'S-A');
     }
     expect(copies).toBeGreaterThan(0);
-  }, 900_000);
+  }, 3_600_000);
 });

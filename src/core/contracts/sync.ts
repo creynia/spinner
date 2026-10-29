@@ -306,6 +306,7 @@ export type SyncErrorCode =
   | 'network'
   | 'quota'
   | 'auth'
+  | 'local-full' // IndexedDB quota on this device
   | 'unknown';
 
 export interface SyncStatus {
@@ -431,7 +432,8 @@ export type SyncMetaKey =
   | 'gcAt'
   | 'libSha'
   | 'copies'
-  | 'vvCounter';
+  | 'vvCounter'
+  | 'bundles';
 
 /** This device's account binding (sync.md §7.10). */
 export interface SyncAccountRecord {
@@ -471,6 +473,8 @@ export interface SyncMetaValues {
   copies: string[];
   /** Monotone, never reset by any reset path (N1). */
   vvCounter: number;
+  /** Bundle refs of this device's done runs, written by the run upload (S2c), read by the engine. */
+  bundles: Record<string, RunBundleRef>;
 }
 
 /** `syncMeta` record: a typed key/value row. */
