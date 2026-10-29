@@ -89,3 +89,34 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 - **Limits follow the existing table rule** (cut to max per spot, fund in placement order), previewed in the editor through the real `reconcile` (D7).
 - **Presets are not migrated;** goldens and definitionId vectors stay unchanged. Any chip-shaped stage can be converted on request (D11).
 - **No `CORE_VERSION` or roulette version bump.** Simulation output does not change, and a bump would stop resume and Watch re-simulation of every existing run. The `version.ts` comment is read as "bump when results change" and is reworded in WP-L0 (orchestrator decision).
+
+## Google Drive sync (owner request 2026-10-28; design: `docs/design/sync.md`)
+
+- **Owner decisions:**
+  - Sync goes to the owner's own Google Drive `appDataFolder`, using Google sign-in in the browser. There is no server and no Firebase.
+  - Everything syncs, including full run data.
+- **Auth:** the GIS token flow with the `drive.appdata` scope only. Tokens last about 1 h, and the client gets no refresh token. On expiry, sync pauses until a one-tap Reconnect. A redirect fallback (`oauth-return.html`) covers installed apps that block popups. The GIS script loads on demand from accounts.google.com, a documented exception to version pinning.
+- **Drive layout:**
+  - one root marker;
+  - one library file per device, written only by that device, because Drive has no compare-and-swap;
+  - one file per run, in the existing gzip bundle format.
+- **Local-first:**
+  - IndexedDB stays the source of truth.
+  - Change tracking wraps the store backend, with a dirty mark written in the same transaction.
+  - DB v3 adds `syncIndex`, `syncDirty` and `syncMeta`, following the v2 upgrade discipline.
+- **Merge (rev 2):**
+  - Each entry carries an HLC minted at edit time, a parent pointer `basis` and a per-key version vector.
+  - Entries in an ancestor chain take the descendant. Concurrent edits keep both: the loser becomes a deterministic conflicted copy "… (device)", with a notice. An edit beats a delete.
+  - A re-pull and recheck run just before each library-file write.
+  - Definitions are content-addressed. Their `runIds` merge as a sorted union, and `displayName` merges by `displayNameAt`.
+  - Compare and sweep groups are whole-record, never unioned.
+  - Merges preserve unknown keys.
+- **Runs:**
+  - Only done runs get bundles; paused, cancelled and errored runs sync as stubs.
+  - The same run imported on several devices (gallery or file) is one shared entry, uploaded once.
+  - Dry and benchmark runs are excluded.
+  - Every run list shows remote-only runs, and Sweep reuses remote runs.
+- **Sign-in gate:** after the sign-in package, the owner tests "Test Google sign-in" on the Pixel before the sync service is built. Android standalone defaults to the redirect flow. The token is kept in localStorage until it expires.
+- **Integrity:** every download is verified (file sha256, recomputed `resultsDigest`, definition-id rehash) before one atomic write. Newer-format data is kept, never dropped.
+- **Downloads:** every run is uploaded. Phones download a run when it is opened; desktops download everything in the background.
+- **No `CORE_VERSION` bump.** The only contract change to existing types is the additive `RunMeta.synced?`.
