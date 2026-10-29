@@ -12,6 +12,8 @@
   --felt: #0d3b2e;
   --focus: #1f5fbf;
   --danger: #b42318;
+  --amber: #8a4b00;
+  --amber-on-felt: #ffc857;
   --gutter: 16px;
   --tap: 44px;
   font-family:
@@ -33,6 +35,7 @@
     --felt: #0d3b2e;
     --focus: #8ab8ff;
     --danger: #ff8a80;
+    --amber: #f5b942;
   }
 }
 :root[data-theme='dark'] {
@@ -46,4 +49,5 @@
   --felt: #0d3b2e;
   --focus: #8ab8ff;
   --danger: #ff8a80;
+  --amber: #f5b942;
 }

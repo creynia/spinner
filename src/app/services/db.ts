@@ -5,7 +5,15 @@
 import type { DefinitionRecord } from '@core/contracts/experiment';
 import type { LayoutRecord } from '@core/contracts/layout';
 import type { RunMeta } from '@core/contracts/run';
-import { openStore, STORE_DEFS, STORE_NAMES, type Backend, type StoreName } from '@core';
+import {
+  createTrackedBackend,
+  openStore,
+  STORE_DEFS,
+  STORE_NAMES,
+  type Backend,
+  type StoreName,
+  type TrackedBackend,
+} from '@core';
 import { createStore } from '../state/store';
 
 export interface StorageUsage {
@@ -151,8 +159,28 @@ export function keyOf(store: StoreName, rec: Record<string, unknown>): IDBValidK
   return (Array.isArray(kp) ? kp.map((k) => rec[k]) : rec[kp]) as IDBValidKey;
 }
 
-/** Repo over a `core/store` backend (IndexedDB, or its own memory fallback). */
-export function createBackendRepo(backend: Backend): Repo {
+/**
+ * `syncMeta` rows that survive "Delete everything on this device" (sync.md D7, D19): the device id,
+ * the never-reset `vvCounter`, and the settings that describe this device or account. The rest
+ * (`seen`, `libSha`, `uploads`, `conflicts`) describes data that is gone, so the next sync pulls
+ * Drive's copy back as new.
+ */
+const KEEP_SYNC_META = new Set([
+  'device',
+  'vvCounter',
+  'prefs',
+  'account',
+  'clock',
+  'files',
+  'copies',
+]);
+
+/**
+ * Repo over a `core/store` backend (IndexedDB, or its own memory fallback). `raw` is the
+ * undecorated backend that `deleteAll` writes through, so the wipe leaves no sync marks and Drive
+ * keeps its copy; it defaults to `backend`.
+ */
+export function createBackendRepo(backend: Backend, raw: Backend = backend): Repo {
   return {
     kind: backend.kind,
     listRuns: async () => (await backend.getAll<RunMeta>('runs')).sort(newestFirst),
@@ -194,11 +222,16 @@ export function createBackendRepo(backend: Backend): Repo {
     async deleteAll() {
       const all = await Promise.all(
         STORE_NAMES.map(
-          async (name) => [name, await backend.getAll<Record<string, unknown>>(name)] as const,
+          async (name) => [name, await raw.getAll<Record<string, unknown>>(name)] as const,
         ),
       );
-      await backend.tx([...STORE_NAMES], 'readwrite', (t) => {
-        for (const [name, recs] of all) recs.forEach((r) => t.delete(name, keyOf(name, r)));
+      await raw.tx([...STORE_NAMES], 'readwrite', (t) => {
+        for (const [name, recs] of all) {
+          for (const r of recs) {
+            if (name === 'syncMeta' && KEEP_SYNC_META.has(String(r.k))) continue;
+            t.delete(name, keyOf(name, r));
+          }
+        }
       });
     },
   };
@@ -207,10 +240,24 @@ export function createBackendRepo(backend: Backend): Repo {
 let repoPromise: Promise<Repo> | null = null;
 let current: Repo | null = null;
 let currentBackend: Backend | null = null;
+let currentRaw: Backend | null = null;
 
-/** The raw backend behind the repo, when there is one (the run sink needs it). */
+/**
+ * The backend behind the repo, when there is one (the run sink needs it). On a persistent store
+ * this is the tracked backend: every write through it leaves a sync mark (sync.md D8).
+ */
 export function getBackend(): Backend | null {
   return currentBackend;
+}
+
+/** The undecorated backend: writes through it leave no sync marks (the sync engine, erase). */
+export function getRawBackend(): Backend | null {
+  return currentRaw;
+}
+
+/** The tracked backend, or null on the memory backend or the in-memory repo: sync stays off. */
+export function getTrackedBackend(): TrackedBackend | null {
+  return currentBackend && 'onDirty' in currentBackend ? (currentBackend as TrackedBackend) : null;
 }
 
 /** The app's repo; opens the store once, falls back to memory and says so. Never rejects. */
@@ -219,8 +266,11 @@ export function getRepo(): Promise<Repo> {
     try {
       const { backend, persistent } = await openStore('spinner');
       if (!persistent || backend.kind === 'memory') setStorageState('memory');
-      currentBackend = backend;
-      current = createBackendRepo(backend);
+      // Sync is disabled on a memory backend (sync.md §7.13): no tracking there.
+      const tracked = backend.kind === 'idb' ? createTrackedBackend(backend) : backend;
+      currentRaw = backend;
+      currentBackend = tracked;
+      current = createBackendRepo(tracked, backend);
     } catch {
       // core/store not ready, or IndexedDB blocked
       setStorageState('memory');
@@ -235,6 +285,7 @@ export function getRepo(): Promise<Repo> {
 export function setRepoForTests(r: Repo | null): void {
   current = r;
   currentBackend = null;
+  currentRaw = null;
   repoPromise = r ? Promise.resolve(r) : null;
   storageStatus.set({ state: r?.kind === 'memory' ? 'memory' : 'ok', dismissed: false });
 }

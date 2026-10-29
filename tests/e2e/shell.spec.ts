@@ -71,8 +71,8 @@ test('Settings: theme applies and persists; framing persists; disclaimer shown',
 
 test('Settings: delete-all asks for confirmation in a dialog', async ({ page }) => {
   await page.goto('./?e2e#/settings');
-  await page.getByRole('button', { name: 'Delete all data' }).click();
-  const dlg = page.getByRole('dialog', { name: 'Delete all data?' });
+  await page.getByRole('button', { name: 'Delete everything on this device' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Delete everything on this device?' });
   await expect(dlg).toBeVisible();
   await expectAxeClean(page, 'dialog');
   await page.keyboard.press('Escape');

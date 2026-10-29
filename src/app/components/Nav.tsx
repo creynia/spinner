@@ -1,6 +1,7 @@
 // Navigation (architecture.md §6.1): the bottom TabBar on phones, the NavRail from 768px.
 // CSS decides which one shows; the other is display:none. Owned by app-shell.
 import type { JSX } from 'preact';
+import { SyncIndicator } from './SyncIndicator';
 
 interface NavItem {
   href: string;
@@ -89,6 +90,7 @@ export function NavRail({ path }: { path: string }) {
   return (
     <nav class="navrail" aria-label="Main rail">
       <Items path={path} />
+      <SyncIndicator place="rail" />
     </nav>
   );
 }

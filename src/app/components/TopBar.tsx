@@ -4,6 +4,8 @@ import { goBack, parentOf } from '../router';
 import { useStore } from '../state/store';
 import { activeRun } from '../services/runs';
 import { RunningChip } from './RunningChip';
+import { SyncIndicator } from './SyncIndicator';
+import { SyncSheets } from './SyncSheets';
 
 const TITLES: Record<string, string> = {
   '': 'spinner',
@@ -39,6 +41,8 @@ export function TopBar({ path }: { path: string }) {
         spinner
       </a>
       <p class="topbar-title">{atRoot ? '' : titleFor(path)}</p>
+      <SyncIndicator place="top" />
+      <SyncSheets />
       {run ? <RunningChip progress={run} /> : null}
     </header>
   );

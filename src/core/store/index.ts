@@ -9,7 +9,9 @@ export {
   openStore,
   STORE_DEFS,
   STORE_NAMES,
+  SYNCED_STORES,
   V1_STORE_NAMES,
+  V2_STORE_NAMES,
   DB_UPGRADES,
   type Backend,
   type OpenFailure,
@@ -73,3 +75,4 @@ export {
   layoutHash,
   type LayoutFileErrorCode,
 } from './layouts';
+export { createTrackedBackend, evictRunResults, type TrackedBackend } from './tracking';
