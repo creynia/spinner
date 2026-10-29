@@ -36,8 +36,6 @@ export const SYNCED_SETTING_KEYS = ['framing', 'pace'] as const;
 export interface RunStub {
   runId: string;
   definitionId: string;
-  /** The definition's name, for lists that have not got the definition yet. */
-  name: string;
   status: RunStatus;
   sessions: number;
   completedSessions: number;
@@ -60,16 +58,23 @@ export interface RunStub {
     roundsPerSession: number;
     roundsPerHour: number;
   };
-  /** Device that made (and alone rewrites) this run. */
-  owner: DeviceId;
+  /**
+   * Device that made (and alone rewrites) this run. Absent for a run imported from a file or the
+   * gallery: same runId + same digest is one shared entry any device may write (review B6).
+   */
+  owner?: DeviceId;
   /** `RunMeta` fields a bundle does not carry, restored after download. */
   extra: {
     device: { cores: number; workers: number; ua: string };
     timing: { startedAt?: string; finishedAt?: string; elapsedMs: number };
     resumes: { at: string; completedSessions: number }[];
-    imported?: { appVersion: string; importedAt: string; fileSha256: string; trimmed: boolean; partial: boolean };
+    /** Copied verbatim, unknown keys included (e.g. `trimInfo`). */
+    imported?: { appVersion: string; importedAt: string; fileSha256: string; trimmed: boolean; partial: boolean; [k: string]: unknown };
   };
-  /** The results file on the remote; absent while the run is not done (or cancelled, see §6.5). */
+  /** `RunMeta.error` of an errored run (stub only). */
+  error?: { code: string; message: string };
+  interrupted?: boolean;
+  /** The results file on the remote: done runs only (review B3). */
   bundle?: RunBundleRef;
 }
 
@@ -77,10 +82,8 @@ export interface RunBundleRef {
   /** `run.<runId>.<resultsDigest first 16>.spinner.json.gz` */
   name: string;
   bytes: number;
-  /** sha256 hex of the gzip bytes as uploaded (checked before decoding). */
+  /** sha256 hex of the gzip bytes this entry's writer uploaded (checked before decoding). */
   sha256: string;
-  /** Prefix-only bundle of a cancelled run (`partial.of` in the bundle). */
-  partial?: true;
 }
 
 /** The value an entry carries, by kind. `null` for a tombstone. */
@@ -99,8 +102,16 @@ export interface SyncEntry<K extends SyncKind = SyncKind> {
   kind: K;
   /** Store id (definition id, slug, run id, setting key). */
   id: string;
+  /** Minted from the edit time (`syncDirty.at`), not the push time (review B5). */
   hlc: Hlc;
-  /** sha256 hex of canonicalJson(value); `''` for a tombstone. */
+  /** HLC of the entry this one was edited from (its parent); null when created fresh. */
+  basis: Hlc | null;
+  /**
+   * Per-key version vector: edits per device along this entry's history. The transitive form of
+   * the parent pointers: A descends from B iff vv(A) >= vv(B) pointwise (sync.md §7.4).
+   */
+  vv: Record<DeviceId, number>;
+  /** Fingerprint (sync.md §7.2): sha256 of canonicalJson(value minus volatile fields); `''` for a tombstone. */
   hash: string;
   /** Tombstone. */
   deleted?: true;

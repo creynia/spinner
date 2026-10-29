@@ -1,20 +1,29 @@
-# Sync across devices with Google Drive (design spike)
+# Sync across devices with Google Drive (design spike, rev 2)
 
 Owner request (2026-10-28): *"I would also like to be able to share experiments and other data
 across devices seamlessly by logging into my google account."*
 
-Owner decisions (fixed inputs to this design):
+The owner has fixed two inputs:
 
-- **Store:** the owner's own **Google Drive `appDataFolder`**. Sign in with Google in the browser.
-  No backend, no Firebase.
+- **Store:** the owner's own **Google Drive `appDataFolder`**, with Google sign-in in the browser.
+  There is no backend and no Firebase.
 - **Scope:** sync **everything**: definitions, strategies, layouts, groups, settings, run meta and
   full run results.
 
-This doc is written for the Sonnet swarm. §13 has the work packages. §4 holds the contracts that
-WP-S0 freezes. The prototype in `docs/design/sync-prototype/` (§15) runs the GIS token flow and the
-Drive client against fakes. Run it with
-`npx vitest run --root docs/design/sync-prototype`; it typechecks with
-`npx tsc -p docs/design/sync-prototype`.
+**Rev 2** applies the PR #36 review: B1–B6, should-fixes 1–12 and the nits. §16 lists the changes.
+
+- `decisions.md` ("Google Drive sync") and open questions 13–18 are already recorded.
+- Where rev 2 refines a recorded decision, §1 says so. The two refinements are merging by version
+  vectors and bundles for done runs only. The orchestrator updates `decisions.md`.
+
+How to use this doc:
+
+- §13 splits the work into **ten work packages**, at most four at once.
+- A **sign-in gate** after wave 2 has the owner test Google sign-in on the Pixel before the engine
+  is wired in.
+- §4 holds the contracts that WP-S0 freezes.
+- The prototype in `docs/design/sync-prototype/` (§15) passes all its tests (10, including the B1
+  model). Run it with `npx vitest run --root docs/design/sync-prototype`.
 
 ---
 
@@ -22,460 +31,397 @@ Drive client against fakes. Run it with
 
 | # | Topic | Decision | Main alternative (rejected because) |
 |---|---|---|---|
-| D1 | Auth | **Google Identity Services (GIS) token model** (`google.accounts.oauth2.initTokenClient`), scope **`drive.appdata` only**. A popup is the primary flow. A redirect fallback (`oauth-return.html`, OAuth implicit grant) is used when the popup cannot open (§5.4). | PKCE code flow: Google's *Web application* clients need the client secret at the token endpoint. A browser-only app would have to embed that secret, and it would keep a long-lived refresh token in browser storage. |
-| D2 | Tokens | An **access token only** (about 1 h). There is **no refresh token** client-side. The token is kept in memory plus `sessionStorage` (this tab only). `localStorage` keeps only the email used as the login hint. When the token expires, the user gets a **one-tap Reconnect**, because a silent popup needs a user gesture. | Background refresh needs a backend or a hidden iframe. Third-party-cookie blocking breaks the iframe. |
-| D3 | Account email | From Drive `about.get` (`user.emailAddress`, `permissionId`), which works with `drive.appdata`. No `openid email` scope is requested. | Add `openid email`: a second consent line for no gain. |
-| D4 | GIS script | Loaded **lazily at runtime** from `https://accounts.google.com/gsi/client`, only when the Account card renders or on sign-in or reconnect. It is **not** an npm dependency and has no SRI. Google forbids self-hosting it and does not version it. This is a documented exception to the pinning rule, like a browser API. | Self-host or pin: not allowed or not possible. |
-| D5 | Drive layout | **One "lib" file per device** (`lib.<deviceId>.json.gz`), holding that device's whole merged state. Only that device writes it. Each finished run is stored as **one immutable bundle file** (`run.<runId>.<digest16>.spinner.json.gz`), byte-for-byte the existing gzip run-bundle export. A root marker `spinner-sync.json` sits beside them (§6). | One file per record: thousands of requests on first sync, plus write races. A single shared manifest: Drive v3 has no compare-and-swap, so two devices would overwrite each other. |
-| D6 | Merge model | A **state-based CRDT**: each record is a last-writer-wins register ordered by a **hybrid logical clock (HLC)**, with tombstones. Merging the lib files is commutative, associative and idempotent, so any read order converges. A **3-way check** against the last synced hash detects true concurrent edits (§7.4). | `updatedAt` LWW: device clock skew silently loses edits. |
-| D7 | Change tracking | A **tracking `Backend` decorator** writes a `syncDirty` mark **in the same IndexedDB transaction** as every put or delete on a synced store. The sync engine writes through the **raw** backend, so applying remote data never re-marks it. | Instrument each call site: 15+ writers today (§3.3), and new ones would forget. |
-| D8 | Schema | **DB v3** adds `syncIndex`, `syncDirty` and `syncMeta`. It follows the v2 discipline: `V2_STORE_NAMES` is frozen, and upgrade 3 creates only its own stores, each guarded by `contains`. The existing record shapes are unchanged. The only contract change is the additive `RunMeta.synced?`. | Add fields to existing records: touches frozen contracts and every writer. |
-| D9 | Definitions | Content-addressed and immutable (`id = sha256(normalized)`), so they **never conflict on content**. The record metadata merges field by field: `runIds` is unioned (minus deleted runs), `displayName` (from the rename work) is LWW by HLC, `createdAt` takes the minimum, `updatedAt` the maximum. | n/a |
-| D10 | Strategies, layouts | Both have **mutable content under a stable user slug id**: `saveStrategy` and `saveLayout` overwrite by id. A true concurrent edit, including the same new slug created on two devices with different content, becomes a **conflicted copy**: the remote keeps the id, and the local copy gets a new id and the name "… (this device's name)". A notice is shown. Stages hold frozen copies (`x-chips`), so re-keying a layout breaks nothing. | Plain LWW: silently loses a whole strategy. |
-| D11 | Runs | **Only the device that made a run writes its entry.** Running and queued runs are not pushed. A paused or errored run is pushed as a **stub** (meta and progress, no results). A cancelled run is pushed as a stub plus a **prefix bundle**. A done run is pushed as a stub plus its **full bundle**. Done runs are immutable. Resuming another device's run is not in v1 (§14 Q3). | Sync run parts while running: heavy, racy, and needs shared Web Locks. |
-| D12 | Run download | **Every run is uploaded** (owner: "everything"). Downloads follow a per-device setting: **`onOpen`** (the default on phones) or **`all`** (the default on desktops). A run that is not downloaded still appears in every list with its verdict line, because the stub carries it. Opening it downloads it with progress. | Pull everything everywhere: a phone would be forced to fetch gigabytes. |
-| D13 | Settings | **Synced:** `framing`, `pace` (`SYNCED_SETTING_KEYS`). **Per device:** `theme`, everything else in `settings`, and all sync preferences (`syncMeta`). Worker count and perf are already per-device (not in the store). | Sync theme too: see Q1. |
-| D14 | Integrity | A downloaded bundle is checked three times: the sha256 of the gzip bytes against the stub, the bundle `resultsDigest` recomputed by `decodeRunBundle`, and the digest against the stub. Each lib entry's `hash` is recomputed, and a definition id is recomputed from its content. A failed check writes nothing and shows a notice. All local writes are single transactions, so a partial download never touches IndexedDB. | n/a |
-| D15 | Atomicity on Drive | A bundle is uploaded **before** the lib entry that references it. A Drive upload becomes visible only when it completes. A lib file update is a single media `PATCH`, so readers see the old or the new content. Bundle uploads are idempotent by name. GC removes orphans (§7.9). | n/a |
-| D16 | Triggers | Sync runs on sign-in, on app start (when a token is valid), when the app becomes visible (if more than 60 s since the last sync), 5 s after the last local change (at most 30 s), every 5 min while visible, on the `online` event, and on **Sync now**. Retryable errors back off exponentially. One tab syncs at a time (Web Lock `spinner:sync`). | Background Sync / Periodic Sync: needs a token in the SW; unreliable on Android. |
-| D17 | Delete on this device | Settings → "Delete all data" becomes **"Delete everything on this device"**. It writes through the raw backend and resets the sync state, so Drive keeps its copy. Removing Drive data is a separate, explicit action that leaves an **erase marker**, so other devices stop syncing instead of re-uploading. | A tracked delete-all: would erase every device. |
-| D18 | Client ID | The client ID is public by design. Build-time `VITE_GOOGLE_CLIENT_ID` comes from a GitHub repository **variable**, with a committed fallback in `src/app/services/sync/config.ts`. With no ID, the Account card says "Sync is not set up in this build". | Secret: it isn't one. |
-| D19 | CSP | Add a **meta CSP to production builds** (a build plugin). It allows Google only where needed (§5.5). The SW already ignores cross-origin requests; this stays and is tested. Drive calls use `cache: 'no-store'`. | No CSP: we now hold an access token in the page. |
-| D20 | Code location | Pure engine in a new core module **`src/core/sync`** (allowed edges: `contracts`, `experiment`, `store`). Browser adapters (GIS, Drive fetch, redirect, service orchestration) live in **`src/app/services/sync/`**. | All in app: the engine would not be testable in node without the DOM. |
+| D1 | Auth | **Google Identity Services (GIS) token model** (`initTokenClient`), scope **`drive.appdata` only**.<br>• **Popup** on desktop and in browser tabs.<br>• **Redirect** (`oauth-return.html`, OAuth implicit grant) is the default in an **installed Android app** (`display-mode: standalone` on Android). It is also used when `acquire()` times out or the popup cannot open.<br>• The redirect's `state` lives in localStorage, so it survives a Custom Tab hop.<br>• Both are implicit-style flows, which OAuth 2.1 discourages. Accepted: no secret, a token of about 1 h, a narrow scope, a CSP, and Google documents the flow for browser apps. | PKCE code flow: Google *Web* clients need the client secret at the token endpoint, and the refresh token would sit in browser storage. |
+| D2 | Tokens | **An access token only** (about 1 h); **no refresh token exists client-side**.<br>• Token and expiry live in **localStorage**, so restarting the app within the hour needs no prompt. The CSP is the defence.<br>• On expiry, one tap on **Reconnect** (a silent popup needs a user gesture).<br>• **No amber nag when nothing is pending.** | sessionStorage: every app restart would need a reconnect. |
+| D3 | Account email | From Drive `about.get` (`emailAddress`, `permissionId`); no `openid email` scope. | An extra consent line for no gain. |
+| D4 | GIS script | Loaded lazily from `accounts.google.com/gsi/client`, only when the Account card renders or on sign-in. Not an npm dependency, no SRI: Google forbids self-hosting it and does not version it. A documented exception to pinning. | Not allowed or not possible. |
+| D5 | Drive layout | A root marker, **one lib file per device** (written only by that device), and **one bundle per done run** (`run.<runId>.<digest16>.spinner.json.gz`, the existing gzip export format). | One file per record: thousands of requests. One shared manifest: Drive v3 has no compare-and-swap. |
+| D6 | Merge (B1) | A state-based CRDT. **Each entry carries `basis`** (the HLC of the entry it was edited from) **and a per-key version vector `vv`**, the transitive form of the parent pointers: A descends from B iff `vv(A) ≥ vv(B)`.<br>• **Concurrent** (neither descends): keep both and post a notice.<br>• **Winner:** an edit beats a delete; otherwise the higher HLC.<br>• **Loser:** a deterministic conflicted copy, so every device makes the same single copy.<br>• The engine **re-lists and re-pulls just before writing its lib file** and re-runs `resolve`. | A bare `basis` pointer: a transitive chain (A → C → D) would look concurrent and resurrect stale copies. Plain LWW: loses an edit when both devices push before either pulls (rev 1's bug). |
+| D7 | Clocks (B5) | HLC per device. **Entries are minted from the edit time** (`syncDirty.last`), not the push time. Entries whose HLC device is this device are ordered (our own history), never a conflict. | Push time: LWW would reflect who synced last, not who edited last. |
+| D8 | Change tracking | A **tracking `Backend` decorator** writes a `syncDirty` mark **in the same IndexedDB transaction** as each tracked write. The engine writes through the raw backend. Other tabs broadcast their marks to the tab holding the sync lock. | Instrumenting each of the 15+ writers. |
+| D9 | Schema | **DB v3** adds `syncIndex`, `syncDirty` and `syncMeta`. `V2_STORE_NAMES` is frozen and the upgrade is guarded by `contains`. Existing records are unchanged. The only changes to existing types are additive: `RunMeta.synced?`, and the encoder now returns its digest. | Fields on existing records: touches frozen contracts and every writer. |
+| D10 | Fingerprints | `hash = sha256(canonicalJson(fingerprintValue(kind, value)))`, defined per type (§7.2). It **excludes `updatedAt`** and other volatile fields, so a re-save that changes nothing pushes nothing. | A hash of the raw record: every save churns. |
+| D11 | Definitions (B5) | Content-addressed and immutable, so they **never conflict on content**. The record metadata is a **join**:<br>• `runIds`: union, **sorted**, minus deleted runs;<br>• `displayName`: field-level LWW **by `displayNameAt`** (from rename PR #37); a rename-back keeps `displayNameAt` as a tombstone;<br>• `createdAt`: min; `updatedAt`: max;<br>• **unknown keys are preserved**.<br>The join takes the max HLC and the joined `vv`, and mints nothing, so devices cannot ping-pong. | Entry-level LWW: a rename and a new run on another device would lose one of them. |
+| D12 | Strategies, layouts, groups | All three have **mutable whole records under stable ids** (strategy and layout slugs; group random ids). They use **entry-level LWW plus the D6 concurrency rule**.<br>• A concurrent loser becomes a conflicted copy with id `<id-base>-<6 hex of its fingerprint>` and name "… (device name)".<br>• A strategy copy re-keys `strategy.id` and recomputes `hash`. A layout copy keeps `layoutHash`, which ignores id and name.<br>• Groups are **never unioned** (B4): `runIds` is ordered (sweep index, compare baseline first). | A union of group `runIds`: breaks sweep and compare order. |
+| D13 | Runs (B3, B6) | **Only `done` runs get a bundle.**<br>• Paused, cancelled and errored runs sync as **stubs only** (status, counts, error).<br>• Running and queued runs are not pushed.<br>• A run made here has `owner` = this device; only the owner writes its entry.<br>• A **run imported** (file or gallery) with the same runId and digest on several devices is **one shared entry with no owner**: any device may write it, the upload is skipped when a remote stub already has the digest, and LWW decides with no notice.<br>• **Dry runs and benchmark runs** (`DRY_RUN_TAG`) are never synced.<br>• No resume on another device in v1. | Partial bundles for cancelled runs: cancelled is terminal, never compacted, and has no `resultsDigest` (`controller.ts`). |
+| D14 | Run download | Every done run is uploaded. Downloads are a per-device setting: `onOpen` (default on phones) or `all` (default on desktops). Remote-only runs appear **in every run list and picker** with their verdict line and a "☁ In Drive" badge, and Sweep reuses them instead of re-running. | Pulling everything on phones. |
+| D15 | Settings | **Synced:** `framing` and `pace`. `pace` only seeds the pace of new drafts; existing definitions carry `roundsPerHour` explicitly, so their ids never change.<br>**Per device:** `theme` and everything else. | (open question 13: theme stays per device) |
+| D16 | Integrity | A downloaded bundle is verified **before one atomic write**:<br>• the file's sha256 against the stub;<br>• `resultsDigest` recomputed by the decoder (except for trimmed bundles, §7.6) and compared with the stub.<br>Lib entries are fingerprint-checked, and definition ids are re-hashed. Newer-format data is kept opaquely, never dropped.<br>**No byte-identity claim:** bundles may now carry `displayName`. Reuse is keyed on **runId + digest**. | n/a |
+| D17 | Atomicity on Drive | The bundle is written before the lib entry that references it. An upload becomes visible only when complete. A lib update is one media `PATCH`. GC removes orphans and duplicates (§7.9). | n/a |
+| D18 | Triggers | Sync runs on:<br>• sign-in;<br>• start, when a token is valid;<br>• the app becoming visible, if the last sync was over 60 s ago;<br>• 5 s after a local change (30 s at most);<br>• every 5 min while visible;<br>• `online`;<br>• **Sync now**.<br>Backoff is exponential, and one tab syncs at a time (Web Lock). **First sync and Replace wait until no run is active.** | Background Sync: needs a token in the SW. |
+| D19 | Delete on this device | "Delete all data" becomes **"Delete everything on this device"**. It writes raw, so Drive keeps its copy. **Remove my data from Drive** is separate and leaves an erase marker. | A tracked delete-all would erase every device. |
+| D20 | Client ID and config | The ID is public. It is set at build time as `VITE_GOOGLE_CLIENT_ID` from the repo variable `GOOGLE_CLIENT_ID`, with a committed fallback in `config.ts`. Local development uses `.env.local`; `*.local` is gitignored from S0. | n/a |
+| D21 | CSP, early | **A production meta CSP lands in S0, and the whole existing e2e suite runs under it** from then on. `oauth-return` is a **Vite multi-page entry**, so it is bundled and falls under the same CSP. The SW keeps ignoring cross-origin requests, and Drive calls use `cache: 'no-store'`. | Adding the CSP last (S6): late surprises. |
+| D22 | Code location | The pure engine goes in **`src/core/sync`**, with allowed edges `contracts`, `experiment` and `store`. **No `money`** (fixes rev 1's inconsistency). Browser adapters go in `src/app/services/sync/`. | n/a |
+| D23 | Sign-in gate | S3 ships a small **"Test Google sign-in"** button in Settings, shown only when a client ID is configured. It signs in, calls `about.get`, lists the app folder and revokes. **The owner checks it on the Pixel, in the installed app, before wave 4 (S5a) starts.** | Finding out in S6, after everything is built. |
 
 ---
 
 ## 2. Architecture
 
 ```
-                        ┌───────────────────────────── browser tab (one per device) ─────────────────────────────┐
-                        │                                                                                         │
-  screens (Define,      │  services/db.ts  getRepo()/getBackend() ──► TrackedBackend ──► IDB Backend (spinner v3)  │
-  Library, Run, …) ─────┼──► writes ──────────────────────────────┐   │ adds syncDirty marks   │                    │
-                        │                                         │   │ in the same tx         │  definitions …     │
-                        │                                         ▼   ▼                        │  layouts           │
-                        │                                  ┌──────────────┐  raw backend      │  syncIndex  (new)  │
-                        │  services/sync/service.ts ───────► │ core/sync    │ ─────────────────►│  syncDirty  (new)  │
-                        │   triggers, Web Lock, backoff,     │  engine      │  (no marks)       │  syncMeta   (new)  │
-                        │   status store, run download       │  hlc, merge, │                   └────────────────────┘
-                        │        │            ▲              │  libfile, gc │
-                        │        │ token      │ status       └──────┬───────┘
-                        │        ▼            │                     │ RemoteStore (interface)
-                        │  services/sync/gis.ts               services/sync/drive.ts  (fetch, cache:no-store)
-                        │   TokenSource (memory+session)            │
-                        └────────┼──────────────────────────────────┼────────────────────────────────────────────┘
-                                 │ popup / redirect                 │ HTTPS, Bearer token (SW does not intercept)
-                                 ▼                                  ▼
-                     accounts.google.com (GIS)        www.googleapis.com/drive/v3 … appDataFolder
-                                                       ├─ spinner-sync.json            root marker / erase marker
-                                                       ├─ lib.<deviceA>.json.gz        A's merged state (A writes)
-                                                       ├─ lib.<deviceB>.json.gz        B's merged state (B writes)
-                                                       └─ run.<runId>.<digest16>.spinner.json.gz   immutable bundles
+                 ┌──────────────────────────────── browser tab (one per device) ───────────────────────────────┐
+  screens ──────►│ services/db.ts getRepo()/getBackend() ──► TrackedBackend ──► IDB Backend `spinner` v3        │
+  (Define,       │                                  marks syncDirty in the same tx │ definitions … layouts       │
+  Library, …)    │                                           │ onDirty ──► BroadcastChannel ──► lock holder     │
+                 │                                           ▼                     │ syncIndex syncDirty syncMeta│
+                 │ services/sync/service.ts ──► core/sync engine ── raw backend ───►└─────────────────────────────┘
+                 │  triggers, Web Lock, backoff,    hlc · fingerprint · vv · resolve/merge · libfile · runs · gc
+                 │  status store, downloads              │ RemoteStore
+                 │        │ token                        ▼
+                 │ services/sync/gis.ts  ◄── redirect ── oauth-return (Vite entry)   services/sync/drive.ts (fetch, no-store)
+                 └────────┼──────────────────────────────────────────────────────────────────┼───────────────────────────┘
+                          ▼ popup / redirect                                                  ▼ HTTPS Bearer (SW passes through)
+              accounts.google.com                         googleapis.com/drive/v3 … appDataFolder
+                                                          ├─ spinner-sync.json             root / erase marker
+                                                          ├─ lib.<devA>.json.gz             A's merged state (A writes)
+                                                          ├─ lib.<devB>.json.gz             B's merged state (B writes)
+                                                          └─ run.<runId>.<digest16>.spinner.json.gz   done runs
 ```
 
-Tests swap the bottom row for fakes: `MemoryRemoteStore` in node, a fake Drive HTTP handler behind
-Playwright `page.route` in e2e, and a stub GIS script.
+Tests replace the bottom row with:
+
+- `createMemoryRemote()` in node;
+- a typed fake Drive handler (`tests/e2e/fakes/drive-server.ts`) behind Playwright `page.route`,
+  shared by two browser contexts;
+- a fake GIS script.
 
 ---
 
 ## 3. What exists today (findings)
 
-### 3.1 Stores, ids, timestamps and hashes
+### 3.1 Stores, ids and mutability
 
-| Store | Key | `updatedAt` | Hash | Id unique across devices? | Mutable under the same id? |
-|---|---|---|---|---|---|
-| `definitions` | `id` = sha256(normalized) | yes | the id *is* the hash | **yes** (content-addressed) | metadata only: `runIds`, `updatedAt`, the new `displayName` (rename work) |
-| `strategies` | `id` = the strategy's own slug (`s.id`) | yes | `hash` (sha256 canonical) | **no**: two devices can save `my-mart` with different content | **yes**: `saveStrategy` overwrites |
-| `layouts` | `id` = slug from the name (`allocLayoutId`) | yes | `hash` = `layoutHash` (ignores id, name, notes) | **no**: two devices can allocate the same slug | **yes**: `saveLayout`, rename |
-| `groups` | `newRunId(base)` (40 random bits) | yes | none | yes | yes: `runIds`, name |
-| `runs` (+ `runParts`, `summaries`, `checkpoints`, `breakdowns`, `samples`) | `runId` = def16 + 40 random bits | no (`createdAt`, `timing`) | `resultsDigest` when done | yes (collision about 2⁻⁴⁰) | while running, paused or cancelled; **immutable once done** |
-| `settings` | `key` | no | none | n/a | yes |
+| Store | Key | Mutable content under the same id? | Unique across devices? |
+|---|---|---|---|
+| `definitions` | `id` = sha256(normalized), name included | **no**: `definition` is immutable. Only record metadata changes: `runIds`, `updatedAt`, and (PR #37) `displayName` and `displayNameAt` | **yes** |
+| `strategies` | `id` = the strategy's own slug (`saveStrategy` keys by `s.id`) | **yes** (overwritten) | **no**: two devices can create the same slug |
+| `layouts` | slug from `allocLayoutId(name)` | **yes** (`saveLayout`, rename) | **no** |
+| `groups` | `newRunId(base.id)` (40 random bits) | **yes**: `runIds` (**ordered**) and name, written whole | yes |
+| `runs` + 5 result stores | `runId` = def16 + 40 random bits | until `done`; `resultsDigest` exists **only for done** runs (`controller.ts` ~L586). Cancelled runs are not compacted and are terminal | yes (collision ≈ 2⁻⁴⁰) |
+| `settings` | `key` | yes | n/a |
 
-There is **no store-level version or HLC** today, and deletes leave no trace. Adding per-record
-fields would change frozen contracts and every writer. So v3 keeps all sync bookkeeping in new
-side stores (§4.2), and the existing records stay untouched.
+There is no record version or HLC today, and deletes leave no trace. All sync bookkeeping therefore
+goes in new side stores.
 
-### 3.2 Platform facts
+### 3.2 Platform
 
-- **No CSP** today (`index.html` has none; GitHub Pages cannot send headers, so a CSP must be a
-  `<meta>` tag).
-- **The SW ignores cross-origin requests** (`if (url.origin !== own) return;` in `src/pwa/sw.ts`),
-  so Drive and Google requests are never cached. Keep it so; §11 adds a test.
-- Hash routing; `base: './'`; served at `https://creynia.github.io/spinner/`; e2e uses
-  `vite preview --base /spinner/ --port 4173`.
-- Measured bundle sizes (`bundle-size.test.ts`, 10,000 × 500, 128 checkpoints): **1.1–2.1 MB**
-  untrimmed gzip. With the maximum `auto` checkpoint budget, or 100k sessions, expect 5–20 MB. So
-  resumable uploads are needed.
+- **No CSP** today. Pages cannot send headers, so it must be a meta tag.
+- The **SW ignores cross-origin requests**.
+- e2e uses `vite preview --base /spinner/ --port 4173`.
+- **Measured bundle sizes:** a 10,000 × 500 run is **1.1–2.1 MB** gzipped. Large runs reach
+  5–20 MB, which needs resumable upload.
 
-### 3.3 Every writer goes through `getBackend()`
+### 3.3 Writers and readers
 
-These writers all reach IndexedDB through `services/db.ts → getBackend()` or `getRepo()`:
+- **Every writer** goes through `services/db.ts → getBackend()`/`getRepo()`:
+  - `Define/data.ts`, `services/layouts.ts`, `services/runs.ts` (sink);
+  - `Sweep/sweep.ts`, `Import/*`, `Library/*`;
+  - `Settings/benchmark.ts`, `settings.ts`, and `db.ts` itself.
 
-- `Define/data.ts` (definitions, strategies, deletes);
-- `services/layouts.ts`;
-- `services/runs.ts` (sink, `putDefinition`);
-- `Sweep/sweep.ts` (definitions, groups);
-- `Import/*` (`importRun`, `putDefinition`);
-- `Library/*` (deletes);
-- `Settings/benchmark.ts`;
-- `settings.ts` (`setSetting`);
-- `db.ts` (`importDefinitions`, `deleteAll`).
-
-**Wrapping the backend once in `getRepo()` therefore tracks all of them.** The exception is
-`deleteAll`, which must switch to the raw backend (D17).
+  Wrapping the backend once tracks them all. `deleteAll` moves to the raw backend.
+- **Every reader of `repo.listRuns()`** must also see remote-only runs (B4); S5b covers them:
+  - `services/runs.ts` (`listRecentRuns` → Home);
+  - `Sweep/sweep.ts:187` (reuse by `simKey`);
+  - `Compare/index.tsx:45` (picker);
+  - `Define/index.tsx:212` (compare sheet);
+  - `Library/index.tsx:132`;
+  - Analyze (`data.tsx`) and Watch (`deps.ts`), when they open a run.
+- **Dry runs:** definitions tagged `DRY_RUN_TAG` (`'dry-run'`, in `services/runs.ts`). Define purges
+  their runs on the next dry run. Settings → Benchmark uses the same tag.
 
 ---
 
 ## 4. Contracts (WP-S0 freezes these)
 
-### 4.1 `src/core/contracts/sync.ts` (new)
-
-The full text is `docs/design/sync-prototype/contracts-sync.mts`; WP-S0 copies it and fixes the
-imports. The key types:
+### 4.1 `src/core/contracts/sync.ts` (new; full text in `sync-prototype/contracts-sync.mts`)
 
 ```ts
-export type DeviceId = string;               // 10 chars Crockford base32
-export type Hlc = string;                    // `<ms base36 ×9>.<counter base36 ×4>.<deviceId>`, string order = causal order
+export type DeviceId = string;                 // 10 chars Crockford base32
+export type Hlc = string;                      // `<ms b36 ×9>.<ctr b36 ×4>.<deviceId>`; string order = HLC order
 export type SyncKind = 'def' | 'strategy' | 'layout' | 'group' | 'setting' | 'run';
 export type SyncKey = `${SyncKind}:${string}`;
 export const SYNCED_SETTING_KEYS = ['framing', 'pace'] as const;
 
 export interface SyncEntry<K extends SyncKind = SyncKind> {
   key: SyncKey; kind: K; id: string;
-  hlc: Hlc;
-  hash: string;            // sha256(canonicalJson(value)); '' for a tombstone
+  hlc: Hlc;                        // minted from the edit time (syncDirty.last)
+  basis: Hlc | null;               // parent: the entry this was edited from; null = created fresh
+  vv: Record<DeviceId, number>;    // per-key version vector (transitive parent pointers)
+  hash: string;                    // fingerprint (§7.2); '' for a tombstone
   deleted?: true;
-  v: number;               // record schema; readers keep (never drop) entries newer than they know
+  v: number;                       // record schema; newer than known → kept opaquely
   value: SyncValueByKind[K] | null;
 }
-// SyncValueByKind: def → DefinitionRecord, strategy → StrategyRecord, layout → LayoutRecord,
-//                  group → ExperimentGroup, setting → { key, value }, run → RunStub
 
 export interface RunStub {
-  runId; definitionId; name; status; sessions; completedSessions; prefixSessions;
-  createdAt; finishedAt?; appVersion; gameId; gameVersion; coreVersion; resultsDigest?;
+  runId; definitionId; simKey; runKey;              // simKey/runKey: Sweep and "already ran" matching
+  status: RunStatus; interrupted?: boolean; error?: { code; message };
+  sessions; completedSessions; prefixSessions; createdAt; finishedAt?;
+  appVersion; gameId; gameVersion; coreVersion; resultsDigest?;          // digest: done only
   verdict?: { meanNet; halfWidth; pAhead; pBust; n; roundsPerSession; roundsPerHour };
-  owner: DeviceId;                               // the only device that writes this entry
-  extra: { device; timing; resumes; imported? }; // RunMeta fields a bundle lacks
-  bundle?: { name: string; bytes: number; sha256: string; partial?: true };
+  owner?: DeviceId;                                 // absent = shared imported run (B6)
+  extra: { device; timing; resumes; imported?: { …; [k: string]: unknown } };   // unknown keys kept (trimInfo)
+  bundle?: { name: string; bytes: number; sha256: string };                    // done only
 }
+// No `name`: lists resolve the name live through the definition record (`experimentName()`, PR #37).
 
-export interface LibFileV1 {
-  format: 'spinner-sync-lib'; version: 1;
-  device: { id: DeviceId; name: string; appVersion: string; coreVersion: string };
-  hlc: Hlc; writtenAt: string;
-  entries: SyncEntry[];                          // sorted by key, tombstones included
-}
-export interface SyncRootV1 { format: 'spinner-sync'; version: 1; createdAt: string; createdBy: DeviceId;
-                              erased?: { at: string; by: DeviceId } }   // §7.10
+export interface LibFileV1 { format: 'spinner-sync-lib'; version: 1;
+  device: { id; name; appVersion; coreVersion }; hlc: Hlc; writtenAt: string; entries: SyncEntry[] }
+export interface SyncRootV1 { format: 'spinner-sync'; version: 1; createdAt; createdBy: DeviceId;
+  erased?: { at: string; by: DeviceId } }
 
-export interface RemoteFile { id; name; bytes; version; md5?; modifiedTime; appProperties: Record<string,string> }
+export interface RemoteFile { id; name; bytes; version; md5?; modifiedTime; appProperties }
 export class RemoteError extends Error { code: 'auth'|'forbidden'|'rate'|'quota'|'not-found'|'server'|'network'|'bad-response'; status; retryAfterMs? }
-
-export interface RemoteStore {
-  readonly kind: 'drive' | 'memory';
-  list(): Promise<RemoteFile[]>;
-  download(fileId, opts?: { onProgress?, signal? }): Promise<Uint8Array>;
-  create(name, bytes, opts?: { appProperties?, contentType?, resumeKey?, onProgress?, signal? }): Promise<RemoteFile>;
-  update(fileId, bytes, opts?: { signal? }): Promise<RemoteFile>;     // atomic content swap
-  delete(fileId): Promise<void>;                                     // 404 is success
-  about(): Promise<{ email; displayName; accountId; usage; limit: number | null }>;
-}
-export const RESUMABLE_THRESHOLD = 5 * 1024 * 1024;
-export const RESUMABLE_CHUNK = 8 * 1024 * 1024;   // multiple of 256 KiB
+export interface RemoteStore { readonly kind: 'drive'|'memory';
+  list(); download(id, o?); create(name, bytes, o?: { appProperties?, contentType?, resumeKey?, onProgress?, signal? });
+  update(id, bytes, o?); delete(id); about() }
+export const RESUMABLE_THRESHOLD = 5 * 1024 * 1024, RESUMABLE_CHUNK = 8 * 1024 * 1024;
 
 export type AuthState = { state: 'unconfigured' } | { state: 'signed-out' }
-  | { state: 'signed-in'; email; expiresAt } | { state: 'expired'; email };
-export interface TokenSource {
-  current(): string | null;                       // never prompts
-  acquire(o: { silent: boolean }): Promise<string>; // MUST be called inside a user gesture
-  revoke(): Promise<void>;
-  subscribe(fn): () => void; readonly state: AuthState;
-}
+  | { state: 'signed-in'; email; expiresAt } | { state: 'expired'; email }
+  | { state: 'redirecting' };
+export interface TokenSource { current(): string | null;
+  acquire(o: { silent: boolean; mode?: 'auto' | 'popup' | 'redirect' }): Promise<string>;  // user gesture only
+  revoke(): Promise<void>; subscribe(fn): () => void; readonly state: AuthState }
 
-export type SyncState = 'off' | 'idle' | 'syncing' | 'needs-auth' | 'offline' | 'backoff'
-  | 'drive-full' | 'error' | 'local-full';
-export interface SyncStatus { state; email?; lastSyncedAt?; pending: number;
-  remoteOnly: { runs: number; bytes: number };
-  progress?: { phase: SyncPhase; done; total; bytes? }; retryAt?; error?: { code; message }; conflicts: number }
+export type SyncState = 'off'|'idle'|'syncing'|'needs-auth'|'offline'|'backoff'|'drive-full'|'error'|'local-full'|'waiting-run';
+export interface SyncStatus { state; email?; lastSyncedAt?; pending: number; remoteOnly: { runs; bytes };
+  progress?; retryAt?; error?; conflicts: number }
 export interface ConflictNotice { id; at; key; kind; message; copyId?; read: boolean }
 export interface SyncDevicePrefs { enabled: boolean; deviceName: string; runDownload: 'all' | 'onOpen' }
 ```
 
-`src/core/contracts/run.ts` gets one additive change: `RunMeta.synced?: { from: DeviceId; fromName: string; at: string }`.
-It is set on runs downloaded from Drive, and Analyze → Overview shows "from Laptop". There is
-**no `CORE_VERSION` bump**: simulation output does not change (same rule as layouts D12).
+Changes to existing contracts (all additive):
+
+- `RunMeta.synced?: { from: DeviceId; fromName: string; at: string }`.
+- `core/store/bundle.ts` (not a contract file, but a frozen signature):
+  `encodeRunBundle(data, opts): Promise<Uint8Array>` gets a sibling that exposes the digest it
+  already computes (`buildRunBundle` takes `meta.resultsDigest ?? resultsDigest(data)`):
+  `encodeRunBundleWithDigest(data, opts): Promise<{ bytes: Uint8Array; resultsDigest: string }>`.
+- **No `CORE_VERSION` bump.**
 
 ### 4.2 Store v3 (`src/core/store/backend.ts`)
 
 ```ts
-export const V2_STORE_NAMES = [...V1_STORE_NAMES, 'layouts'] as const;           // FROZEN
+export const V2_STORE_NAMES = [...V1_STORE_NAMES, 'layouts'] as const;            // FROZEN
 export const STORE_NAMES = [...V2_STORE_NAMES, 'syncIndex', 'syncDirty', 'syncMeta'] as const;
 export const DB_VERSION = 3;
 STORE_DEFS.syncIndex = { keyPath: 'key', indexes: { byKind: 'kind' } };
 STORE_DEFS.syncDirty = { keyPath: 'key', indexes: {} };
 STORE_DEFS.syncMeta  = { keyPath: 'k',   indexes: {} };
 DB_UPGRADES[3] = (db) => createStores(db, ['syncIndex', 'syncDirty', 'syncMeta']);
-/** Kinds of store whose writes are tracked; sync stores never are. */
-export const SYNCED_STORES: Partial<Record<StoreName, SyncKind>> = {
-  definitions: 'def', strategies: 'strategy', layouts: 'layout', groups: 'group', settings: 'setting',
-  runs: 'run', runParts: 'run', summaries: 'run', checkpoints: 'run', breakdowns: 'run', samples: 'run',
-};
-```
+export const SYNCED_STORES: Partial<Record<StoreName, SyncKind>> = { definitions: 'def', strategies: 'strategy',
+  layouts: 'layout', groups: 'group', settings: 'setting', runs: 'run', runParts: 'run', summaries: 'run',
+  checkpoints: 'run', breakdowns: 'run', samples: 'run' };
 
-The record shapes of the new stores:
-
-```ts
-/** syncIndex: the last state agreed with the remote, per key (the base of the 3-way check). */
-interface SyncIndexRecord {
-  key: SyncKey; kind: SyncKind;
-  entry: SyncEntry;              // incl. value: building our lib file needs no other store
-  /** 1 = the record is in the local stores (runs: results downloaded); 0 = remote-only/opaque. */
-  local: 0 | 1;
-}
-/** syncDirty: "something under this key changed locally since the last push". */
-interface SyncDirtyRecord { key: SyncKey; at: number; n: string /* random nonce */ }
-/** syncMeta: k/v. Keys: 'device' {id,name} · 'prefs' SyncDevicePrefs · 'account' {accountId,email,boundAt}
- *  · 'clock' {hlc} · 'seen' {[fileId]: version} · 'files' {root?, ownLib?} · 'uploads' {[resumeKey]: uri}
- *  · 'last' {at, ok, error?} · 'conflicts' ConflictNotice[] (cap 50) · 'gcAt' string · 'libSha' string */
+interface SyncIndexRecord { key: SyncKey; kind: SyncKind; entry: SyncEntry; local: 0 | 1 }  // last agreed state
+interface SyncDirtyRecord { key: SyncKey; last: number /* latest edit time */; n: string /* nonce */ }
 interface SyncMetaRecord { k: string; v: unknown }
+// syncMeta keys: device · prefs · account {accountId,email,boundAt} · clock · seen {fileId: version}
+//   · files {root?, ownLib?} · uploads {resumeKey: uri} · last · conflicts (≤50) · gcAt · libSha · copies
 ```
 
-A new `Backend` method: an atomic read-modify-write. The engine needs it to check "is this key
-dirty?" and apply in one transaction. WP-S0 adds the signature and the memory implementation;
-WP-S1 adds the IDB implementation.
+- The tracker writes `{ key, last: Date.now(), n: random }` on every tracked write.
+- The minted HLC uses `last`, so LWW follows the latest edit of the record.
+- "Pending since" for the UI is the minimum `last` over all marks.
+
+**An atomic read-modify-write on `Backend` (B2)**:
 
 ```ts
 export interface TxReader { get<T>(store: StoreName, key: IDBValidKey): Promise<T | undefined> }
-export interface Backend {
-  // …existing…
-  /**
-   * One readwrite transaction in which `fn` may await `r.get` (requests on the same transaction
-   * only: awaiting anything else lets IndexedDB auto-commit) and queue writes on `w`.
-   * All or nothing; a thrown error aborts.
-   */
+export interface Backend { /* …existing… */
+  /** One readwrite transaction; `fn` may await only `r.get` on this transaction, then queue writes on `w`. */
   update(stores: StoreName[], fn: (r: TxReader, w: TxOps) => Promise<void>): Promise<void>;
 }
 ```
 
-### 4.3 Change tracking (`src/core/store/tracking.ts`, new)
+WP-S0 owns `update` on **both** backends:
+
+- the memory implementation, in full;
+- the IDB implementation: real if it fits, otherwise a stub that rejects with `not implemented`,
+  which S1 completes;
+- the `strictBackend()` helper in `tests/app/shell.test.tsx` (it adds `update`), so typecheck passes
+  after S0.
+
+### 4.3 Change tracking (`src/core/store/tracking.ts`)
 
 ```ts
-export interface TrackedBackend extends Backend {
-  readonly raw: Backend;
-  /** Fires after a committed transaction that marked at least one key. */
-  onDirty(fn: (keys: SyncKey[]) => void): () => void;
-}
-/**
- * Wraps `inner`. For readwrite `tx`/`update` touching any SYNCED_STORES, adds 'syncDirty' to the
- * transaction and, for each put/delete, queues `put('syncDirty', { key, at: Date.now(), n })`:
- *   runParts [runId, n] / summaries / … → `run:<runId>`; settings → only SYNCED_SETTING_KEYS.
- * Reads pass through. An aborted transaction leaves no mark (same transaction).
- */
+export interface TrackedBackend extends Backend { readonly raw: Backend; onDirty(fn: (keys: SyncKey[]) => void): () => void }
+/** Adds 'syncDirty' to readwrite tx/update touching SYNCED_STORES and puts a mark per put/delete:
+ *  runParts [runId,n]/summaries/… → run:<runId>; settings → only SYNCED_SETTING_KEYS. Aborted tx → no mark. */
 export function createTrackedBackend(inner: Backend): TrackedBackend;
-/** Deletes a run's results and meta but leaves `definitions.runIds` (free space, keep on Drive). */
-export function evictRunResults(raw: Backend, runId: string): Promise<void>;
+export function evictRunResults(raw: Backend, runId: string): Promise<void>;  // keeps definitions.runIds
 ```
 
-The sink flushes `runs` and `runParts` every 2 s while a run is going. Each flush re-puts the
-same `run:<id>` mark, which costs one extra small put per flush. The engine skips running runs
-(§7.6).
-
-### 4.4 `src/core/sync` (new core module)
-
-The public entry is `src/core/sync/index.ts`. WP-S0 writes stubs with these frozen signatures:
+### 4.4 `src/core/sync` (WP-S0 writes stubs with these frozen signatures)
 
 ```ts
 // hlc.ts
 export function createClock(device: DeviceId, now: () => number, last?: Hlc): {
-  tick(): Hlc; recv(remote: Hlc): void; readonly last: Hlc };
-export function hlcWall(h: Hlc): number;
-// entries.ts
-export function entryOf<K extends SyncKind>(kind: K, id: string, value: SyncValueByKind[K] | null, hlc: Hlc): Promise<SyncEntry<K>>;
-export function verifyEntry(e: SyncEntry): Promise<'ok' | 'bad-hash' | 'bad-id' | 'unknown-kind' | 'newer'>;
-export const SUPPORTED_V: Record<SyncKind, number>;   // def 1, strategy 1, layout 1, group 1, setting 1, run 1
-// libfile.ts
-export function encodeLib(f: LibFileV1): Promise<Uint8Array>;           // canonical JSON → gzip
-export function decodeLib(b: Uint8Array): Promise<LibFileV1>;           // throws SyncFileError
-export const LIB_NAME = (d: DeviceId) => `lib.${d}.json.gz`;
-export const ROOT_NAME = 'spinner-sync.json';
-export const runBundleName = (runId: string, digest: string) => `run.${runId}.${digest.slice(0, 16)}.spinner.json.gz`;
+  tickAt(editMs: number): Hlc; recv(remote: Hlc): void; readonly last: Hlc };
+export function hlcDevice(h: Hlc): DeviceId; export function hlcWall(h: Hlc): number; export function cmpHlc(a: Hlc, b: Hlc): number;
+// fingerprint.ts
+export function fingerprintValue(kind: SyncKind, value: unknown): Json;          // §7.2
+export function entryOf<K extends SyncKind>(kind: K, id: string, value: SyncValueByKind[K] | null,
+  hlc: Hlc, base: SyncEntry | undefined, self: DeviceId): Promise<SyncEntry<K>>;  // basis = base?.hlc, vv = base.vv + self
+export function verifyEntry(e: SyncEntry): Promise<'ok'|'bad-hash'|'bad-id'|'unknown-kind'|'newer'>;
+export const SUPPORTED_V: Record<SyncKind, number>;
+// vv.ts
+export function descends(a: SyncEntry, b: SyncEntry): boolean;                    // vv(a) ≥ vv(b)
+export function concurrent(a: SyncEntry, b: SyncEntry): boolean;
 // merge.ts
-export function mergeEntries(a: SyncEntry | undefined, b: SyncEntry): SyncEntry;  // max HLC; commutative
-export function mergeDefRecord(local: DefinitionRecord, remote: DefinitionRecord, deletedRuns: ReadonlySet<string>): DefinitionRecord;
-export function mergeGroup(local: ExperimentGroup, remote: ExperimentGroup, deletedRuns: ReadonlySet<string>, localNewer: boolean): ExperimentGroup;
-export type Resolution =
-  | { do: 'apply' } | { do: 'keep-local' } | { do: 'merge' }
-  | { do: 'copy-local'; notice: string } | { do: 'restore-remote'; notice: string } | { do: 'skip'; reason: string };
-export function resolve(kind: SyncKind, base: SyncEntry | undefined, local: SyncEntry | undefined,
-                        localDirty: boolean, remote: SyncEntry, self: DeviceId): Resolution;
-// engine.ts
-export interface SyncEngineDeps {
-  backend: TrackedBackend; remote: RemoteStore; now: () => number;
-  appVersion: string; coreVersion: string; gameId: string;
-  /** App-supplied: the definition name and verdict for a stub (app has runMetrics/verdict). */
-  describeRun(meta: RunMeta): Promise<Pick<RunStub, 'name' | 'verdict'>>;
-  /** Runs currently executing in this tab are never deleted or replaced by a pull. */
-  isRunActive(runId: string): boolean;
-  onProgress(p: NonNullable<SyncStatus['progress']>): void;
-  signal?: AbortSignal;
-}
-export interface FirstSyncPreview { remoteEmpty: boolean; devices: { id; name; writtenAt }[];
-  remote: { defs; strategies; layouts; runs; runBytes }; local: { defs; strategies; layouts; runs; runBytes } }
+export interface MergeOut { winner: SyncEntry; losers: SyncEntry[] }               // losers → conflicted copies
+export function mergeEntries(a: SyncEntry, b: SyncEntry): MergeOut;               // commutative, associative
+export function joinDef(a: SyncEntry<'def'>, b: SyncEntry<'def'>, deletedRuns: ReadonlySet<string>): SyncEntry<'def'>;
+export function copyOf(loser: SyncEntry, deviceName: string, taken: ReadonlySet<string>): Promise<SyncEntry | null>;
+export type Resolution = { do: 'skip-older' } | { do: 'apply'; entry: SyncEntry } | { do: 'keep-local' }
+  | { do: 'join'; entry: SyncEntry } | { do: 'opaque'; reason: string };
+export function resolve(base: SyncEntry | undefined, localDirty: SyncEntry | undefined, remote: SyncEntry): { res: Resolution; losers: SyncEntry[] };
+// libfile.ts
+export function encodeLib(f: LibFileV1): Promise<Uint8Array>; export function decodeLib(b: Uint8Array): Promise<LibFileV1>;
+export const LIB_NAME: (d: DeviceId) => string; export const ROOT_NAME = 'spinner-sync.json';
+export const runBundleName: (runId: string, digest: string) => string;          // run.<runId>.<digest16>.spinner.json.gz
+// engine.ts (S2b), runs.ts / gc.ts / first.ts / erase.ts (S2c)
+export interface SyncEngineDeps { backend: TrackedBackend; remote: RemoteStore; now: () => number;
+  appVersion; coreVersion; gameId; deviceName: () => string;
+  describeRun(meta: RunMeta): Promise<RunStub['verdict'] | undefined>;
+  isDryRun(def: DefinitionRecord): boolean;              // DRY_RUN_TAG
+  isRunActive(runId?: string): boolean;                  // no arg: any run active in this tab
+  onProgress(p): void; signal?: AbortSignal }
 export interface SyncEngine {
-  preview(): Promise<FirstSyncPreview>;                       // list + pull, no writes
+  preview(): Promise<FirstSyncPreview>; begin(c: 'merge' | 'replace'): Promise<CycleResult>;
   cycle(o?: { uploadRuns?: boolean; timeBudgetMs?: number }): Promise<CycleResult>;
-  begin(choice: 'merge' | 'replace'): Promise<CycleResult>;   // first sync on this device/account
-  downloadRun(runId: string, o?: { onProgress?: TransferProgress; signal?: AbortSignal }): Promise<'ok' | 'missing' | 'corrupt'>;
-  remoteRuns(): Promise<RunStub[]>;                           // syncIndex kind 'run', local 0, not deleted
-  evict(runId: string): Promise<void>;                        // free up space; keeps it on Drive
-  eraseRemote(): Promise<void>;                               // §7.10
-  resetLocalSyncState(): Promise<void>;                       // keeps prefs + device
-}
-export interface CycleResult { pulled: number; pushed: number; uploadedRuns: number; conflicts: ConflictNotice[];
-  remoteOnly: { runs: number; bytes: number }; pending: number; more: boolean /* time budget hit */ }
+  downloadRun(runId, o?): Promise<'ok' | 'missing' | 'corrupt'>; remoteRuns(): Promise<RunStub[]>;
+  evict(runId): Promise<void>; eraseRemote(): Promise<void>; resetLocalSyncState(): Promise<void> }
 export function createSyncEngine(d: SyncEngineDeps): SyncEngine;
-// memory-remote.ts — test double, also exported for app/e2e unit tests
-export function createMemoryRemote(o?: { fault?: (op: string, name?: string) => RemoteError | undefined }): RemoteStore & { files: Map<string, …> };
+export function createMemoryRemote(o?: { fault?: (op: string, name?: string) => RemoteError | undefined;
+  /** awaited before every remote call: the fuzz interleaves other devices here (§11.1) */ hook?: (op: string) => Promise<void> }): RemoteStore;
 ```
 
-### 4.5 App service (`src/app/services/sync/index.ts`)
-
-WP-S0 writes this as an inert stub so the UI can build in parallel:
+### 4.5 App service (`src/app/services/sync/index.ts`, an inert stub from WP-S0)
 
 ```ts
-export const syncStatus: Store<SyncStatus>;              // state 'off' in the stub
-export const syncAuth: Store<AuthState>;
-export const conflictNotices: Store<ConflictNotice[]>;
-export const syncPrefs: Store<SyncDevicePrefs>;
-export function signIn(): Promise<void>;                 // click handler only
-export function reconnect(): Promise<void>;              // click handler only (silent popup)
-export function syncNow(): Promise<void>;
-export function chooseFirstSync(c: 'merge' | 'replace' | 'cancel'): Promise<void>;
-export const firstSyncPrompt: Store<FirstSyncPreview | null>;
-export function signOut(): Promise<void>;                // revoke + stop; local data kept
-export function removeDriveData(): Promise<void>;        // §7.10
+export const syncStatus: Store<SyncStatus>, syncAuth: Store<AuthState>, conflictNotices: Store<ConflictNotice[]>,
+  syncPrefs: Store<SyncDevicePrefs>, firstSyncPrompt: Store<FirstSyncPreview | null>;
+export function signIn(): Promise<void>;  export function reconnect(): Promise<void>;   // click handlers only
+export function syncNow(): Promise<void>; export function chooseFirstSync(c: 'merge'|'replace'|'cancel'): Promise<void>;
+export function signOut(): Promise<void>; export function removeDriveData(): Promise<void>;
 export function setPrefs(p: Partial<SyncDevicePrefs>): Promise<void>;
 export function remoteRun(runId: string): Promise<RunStub | null>;
-export function downloadRun(runId: string, onProgress?: TransferProgress, signal?: AbortSignal): Promise<'ok' | 'missing' | 'corrupt' | 'offline' | 'needs-auth'>;
-export function evictRun(runId: string): Promise<void>;
-export function markConflictsRead(): void;
+export function downloadRun(runId, onProgress?, signal?): Promise<'ok'|'missing'|'corrupt'|'offline'|'needs-auth'>;
+export function evictRun(runId: string): Promise<void>; export function markConflictsRead(): void;
+export function testSignIn(): Promise<{ email: string; files: number }>;               // D23 gate (S3 implements)
 // config.ts
-export const GOOGLE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID || COMMITTED_CLIENT_ID; // '' = unconfigured
+export const GOOGLE_CLIENT_ID: string = import.meta.env.VITE_GOOGLE_CLIENT_ID || COMMITTED_CLIENT_ID;  // '' = unconfigured
+```
+
+**A run-row type for every list and picker** (S5b; B4):
+
+```ts
+// services/runs.ts
+export type RunRow = Pick<RunMeta, 'runId'|'definitionId'|'simKey'|'runKey'|'status'|'createdAt'|'sessions'
+  |'completedSessions'|'prefixSessions'|'gameVersion'|'coreVersion'|'resultsDigest'>
+  & { remote?: { bytes: number; owner?: DeviceId; ownerName?: string } };
+export function listRunRows(): Promise<RunRow[]>;   // local RunMeta ∪ remote-only stubs, newest first, dry runs excluded
 ```
 
 ---
 
 ## 5. Auth
 
-### 5.1 Flow (GIS token model)
+### 5.1 Choosing the flow (`acquire({ silent, mode: 'auto' })`)
 
 ```
-Account card renders ── loadGis() preloads https://accounts.google.com/gsi/client (async, no await)
-User taps "Sign in with Google" (user gesture)
-  └─ tokenClient.requestAccessToken({ prompt: 'select_account', login_hint? })
-       popup: account chooser → consent "See, create and delete its own configuration data in your Google Drive"
-  ◄─ callback { access_token, expires_in: 3599, scope }
-  check hasGrantedAllScopes(resp, drive.appdata)   (the user can untick it → AuthError 'scope')
-  about.get → { email, permissionId }               (D3)
-  store { token, expiresAt, email } in memory + sessionStorage['spinner:sync:token'];
-        { email } in localStorage['spinner:sync:hint']
-  account binding (§7.10) → first-sync preview (§8.3) → engine.begin(choice)
+standalone = matchMedia('(display-mode: standalone)').matches
+android    = /Android/i.test(navigator.userAgent)
+if mode=='redirect' || (mode=='auto' && standalone && android) → redirect flow (§5.4)
+else popup flow (§5.2); on AuthError 'popup-blocked' | 'timeout' (120 s) | 2× 'popup-closed' → offer redirect
+     (the Account card switches its button to "Sign in in this window")
+redirect is refused while a run is active ("Finish or pause the run first"): the navigation would pause it
 ```
 
-- **The popup must open inside the click's user activation.** `acquire()` must not await
-  anything slow before `requestAccessToken`. The script is preloaded when the card renders, so
-  `load()` resolves at once. If the script is not loaded yet, the first tap loads it and the button
-  says "Tap again to continue" (rare; tested).
-- **Token lifetime: 3,599 s. No refresh token exists in this model**, so nothing long-lived is
-  stored. `current()` treats a token as expired 2 minutes early.
+### 5.2 Popup (GIS token client)
 
-### 5.2 Expiry and "silent" refresh
+1. When the Account card renders, `loadGis()` preloads the script (not awaited).
+2. On tap, call `requestAccessToken({ prompt: silent ? '' : 'select_account', login_hint })`
+   synchronously inside the click.
+3. The callback returns `{ access_token, expires_in: 3599, scope }`.
+4. Check `hasGrantedAllScopes(drive.appdata)`.
+5. Call `about.get` for the email and `permissionId`.
+6. Store `{ token, expiresAt, email }` in memory and in `localStorage['spinner:sync:token']`.
+7. Then account binding (§7.10), then the first-sync preview (§8.3).
 
-- `requestAccessToken({ prompt: '' , login_hint })` skips the chooser and consent once consent was
-  given. It still **opens a popup that closes itself**, and it needs a **user gesture** (popup
-  blockers). True background refresh is impossible without a backend.
-- **UX:** when the token expires, the state becomes `needs-auth`. The shell indicator turns amber
-  and reads "Reconnect", and the Account card shows a **Reconnect** button. One tap runs
-  `acquire({ silent: true })`: a brief popup flash, no questions. The next cycle starts
-  immediately.
-  - **Sync now**, opening a remote run and Download all also call `acquire({ silent: true })`
-    first when the token is gone, because they are user gestures too.
-- **Expiry mid-sync:** every engine step is idempotent. A 401 aborts the cycle at the current
-  request; nothing local is committed for an unfinished step.
-  - A resumable upload keeps its session URI in `syncMeta.uploads`. It continues after Reconnect
-    with the new token; a session lasts about a week.
-  - The state goes to `needs-auth`; the pending count stays. There are no data-loss paths: the
-    lib file is written last.
-- **Proactive:** when a cycle with run uploads starts and the token has less than 10 min left, the
-  engine sets `uploadRuns: false` for that cycle. The library still syncs, and the indicator shows
-  "Reconnect to finish uploading". A long upload is not cut by an expiry.
-- **Multi-tab:** a tab without a token asks over `BroadcastChannel('spinner-sync')` and a tab that
-  has one answers. The token is held in the receiver's memory only. Same origin, so this adds no
-  new trust boundary.
+Notes on this flow:
+
+- **There is no refresh token in this model.** `current()` treats a token as expired 2 minutes
+  early.
+- **Silent re-acquire** (`prompt: ''`) skips the chooser and consent. It still flashes a popup and
+  needs a user gesture.
+- **When the token expires:**
+  - With **pending changes**, the indicator turns amber and says "Reconnect".
+  - With **nothing pending**, the indicator is muted ("☁ Paused") with no nag; the Account card
+    still offers Reconnect.
+  - Sync now, opening a remote run and Download all each reconnect first, since they are gestures
+    too.
+- **Expiry mid-sync:** every step is idempotent.
+  - A 401 aborts the cycle; nothing is committed for an unfinished step.
+  - Resumable sessions survive in `syncMeta.uploads`.
+  - A cycle that starts with less than 10 min of token left skips bundle uploads
+    (`uploadRuns: false`).
+- **Several tabs** share the token through localStorage; a `storage` event updates the other tabs.
 
 ### 5.3 Drive client
 
-See `sync-prototype/drive.mts`; it is tested against `fake-drive.mts`:
+The prototype's `drive.mts` stands as designed:
 
-- `list`: `GET /drive/v3/files?spaces=appDataFolder&pageSize=1000&fields=nextPageToken,files(id,name,size,version,md5Checksum,modifiedTime,appProperties)`, following every page.
-- `create` ≤ 5 MB: `POST /upload/drive/v3/files?uploadType=multipart` with metadata
-  `{ name, parents: ['appDataFolder'], appProperties }`.
-- `create` > 5 MB: **resumable**.
-  - `POST …?uploadType=resumable` returns `Location`; persist it under `resumeKey`.
-  - `PUT` 8 MiB chunks with `Content-Range`; a `308` answer carries `Range`.
-  - To resume, `PUT` with `Content-Range: bytes */<total>`. A `404`/`410` means the session
-    expired, so start over.
-- `update`: `PATCH /upload/drive/v3/files/{id}?uploadType=media`, an atomic content swap.
-- `download`: `GET /drive/v3/files/{id}?alt=media`, streamed for progress. Bundles are at most
-  about 20 MB, so a failed download restarts from 0 (no Range resume in v1).
-- `delete`: `DELETE /drive/v3/files/{id}`; a 404 counts as success.
-- `about`: `GET /drive/v3/about?fields=user(emailAddress,displayName,permissionId),storageQuota(limit,usage)`.
-- Every request sends `Authorization: Bearer`, `cache: 'no-store'`, and an `AbortSignal` where
-  given.
-- Error mapping (`errorOf`):
-  - 401 → `auth`;
-  - 429, and 403 `rateLimitExceeded`/`userRateLimitExceeded` → `rate`, honouring `Retry-After`;
-  - 403 `storageQuotaExceeded` → `quota`;
-  - other 403 → `forbidden`;
-  - 404 → `not-found`;
-  - 5xx → `server`;
-  - a rejected fetch → `network`.
+- list with paging;
+- multipart upload up to 5 MB;
+- resumable upload above 5 MB: 8 MiB chunks, resume with `bytes */N`, restart on 404 or 410;
+- media `PATCH`, `alt=media` download, delete (404 counts as success), `about`;
+- `cache: 'no-store'`;
+- the error mapping.
 
-### 5.4 Android installed PWA and the redirect fallback
+TS 6 needs request bodies typed `Uint8Array<ArrayBuffer>` (the prototype's `asBody`).
 
-- **Expected behaviour:** Chrome on Android opens a popup from a standalone PWA as a new window or
-  Custom Tab, and GIS returns the token by `postMessage` to the opener. This is the **top manual
-  test risk** (§11.4 step 2).
-- **Fallback:** when the popup cannot complete, the Account card offers **"Sign in in this
-  window"**. That happens when GIS calls `error_callback` with `popup_failed_to_open`, or with
-  `popup_closed` twice in a row without a result. The redirect then works as follows:
-  - Save `state` = 128 random bits and the return route in `sessionStorage`.
-  - `location.assign('https://accounts.google.com/o/oauth2/v2/auth?client_id=…&redirect_uri=<origin><base>oauth-return.html&response_type=token&scope=https://www.googleapis.com/auth/drive.appdata&include_granted_scopes=true&state=…&login_hint=…&prompt=')`.
-  - `public/oauth-return.html` loads `public/oauth-return.js` (a same-origin file, so no inline
-    script under CSP). It parses `#access_token&expires_in&state&scope`, checks `state` against
-    `sessionStorage` (CSRF), stores the token the same way §5.1 does, scrubs the fragment, and
-    `location.replace('./#/settings?account=1')`.
-  - A mismatch or an error shows a plain message with a link back.
-- The fallback **is disabled while a run is active**: the button says "Finish or pause the run
-  first". A navigation would pause the run, although Resume works.
+### 5.4 Redirect
 
-### 5.5 Sign-out, revoke, storage, CSP, SW
+1. Generate a `state` of 128 random bits. Store `{ state, returnTo, at }` in **localStorage**
+   `spinner:sync:oauth`, so it survives a Custom Tab or new-window hop (TTL 10 min).
+2. Navigate:
+   `location.assign('https://accounts.google.com/o/oauth2/v2/auth?client_id&redirect_uri=<origin><base>oauth-return.html&response_type=token&scope=…drive.appdata&include_granted_scopes=true&state&login_hint&prompt=<''|select_account>')`.
+3. `oauth-return.html` is a **Vite multi-page entry** (`build.rollupOptions.input`, with
+   `src/oauth/return.ts`). It is bundled with no inline script, so the CSP covers it. In order, it:
+   1. parses `#access_token&expires_in&state&scope&error`;
+   2. checks `state` against localStorage and the TTL, then deletes the record;
+   3. checks the scope;
+   4. stores the token as in §5.2;
+   5. posts `{ type: 'token' }` on `BroadcastChannel('spinner-sync')`, for when the app window is
+      still open behind the hop;
+   6. scrubs the fragment (`history.replaceState`);
+   7. calls `location.replace(returnTo || './#/settings?account=1')`.
+
+   On a mismatch or an error it shows a plain page with a "Back to spinner" link.
+4. Google documents the implicit grant for browser apps, but OAuth 2.1 discourages it; it is
+   accepted per D1. If Google retires it, desktop keeps the popup. Android would then need GIS
+   popups in standalone mode, which is risk R1 and what the gate tests.
+
+### 5.5 Sign-out, storage, CSP, SW
 
 - **Sign out:**
-  - `google.accounts.oauth2.revoke(token)`; offline, the token dies within the hour anyway.
-  - Clear the sessionStorage token and the localStorage hint.
-  - `prefs.enabled = false`.
-  - **Local data and `syncIndex` are kept**, so signing in again on this device is a cheap
-    incremental sync.
-  - The card states this.
+  1. Revoke the token.
+  2. Clear the token, the email hint and the OAuth state from localStorage.
+  3. Set `prefs.enabled = false`.
+
+  **Local data and `syncIndex` are kept.**
 - **Stored in the browser:**
-  - **memory and sessionStorage:** the access token and its expiry;
-  - **localStorage:** the email hint only;
-  - **IndexedDB `syncMeta`:** device id and name, prefs, account id and email, clock, seen
-    versions, resumable session URIs (useless without a token), conflict notices.
-  - No secrets in the repo; the client id is public.
-- **CSP** (production meta tag, injected by `build/vite-plugin-csp.ts`):
+  - localStorage: the token and its expiry (about 1 h), the email hint, the in-flight redirect
+    state;
+  - IndexedDB `syncMeta`: everything else. Resumable session URIs in it are useless without a
+    token.
+  - Nothing in the repo is secret.
+- **CSP**, from WP-S0's `build/vite-plugin-csp.ts`. It applies to production builds and to both
+  HTML entries:
 
 ```
 default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client;
@@ -484,325 +430,386 @@ frame-src https://accounts.google.com/gsi/; style-src 'self' 'unsafe-inline' htt
 img-src 'self' data: blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
 ```
 
-  `'unsafe-inline'` for styles keeps Preact style attributes and the data-URI favicon working.
-  `frame-ancestors` cannot be set by meta, and Pages cannot set it either. WP-S6 runs the **whole
-  existing e2e suite** with the CSP and fails on any `securitypolicyviolation`. If a sibling
-  feature needs more, the CSP is relaxed there, not dropped.
-- **SW:** cross-origin requests already pass through (`return` before `respondWith`). Add a test
-  that a `googleapis.com` fetch is never put in any cache. `oauth-return.html` is precached like
-  every `dist` file (static, harmless).
+  - The redirect is a top-level navigation, so it needs no CSP directive.
+  - `frame-ancestors` cannot be set in a meta tag.
+  - **From S0 on, every existing e2e spec runs against the CSP build** and fails on any
+    `securitypolicyviolation`.
+- **SW:** cross-origin requests already pass through, and S0 adds a test for that.
+  `oauth-return.html` is precached like the rest of `dist`.
 
 ---
 
 ## 6. Data model on Drive
 
 ```
-appDataFolder/                         (hidden; counts toward the user's Drive quota; only this OAuth client sees it)
-  spinner-sync.json                    SyncRootV1, plain JSON, ~150 B. Created by the first device. version > 1 → refuse (update app).
-                                         `erased` set → other devices stop (§7.10).
-  lib.<deviceId>.json.gz               LibFileV1 → canonical JSON → gzip. appProperties { kind: 'lib', device }.
-                                         Whole merged state as seen by that device. Typical: 50–500 kB gz;
-                                         1,000 definitions + 2,000 run stubs ≈ 6 MB raw ≈ 1 MB gz.
+appDataFolder/
+  spinner-sync.json                     SyncRootV1 (~150 B). version > 1 → refuse ("update the app"); erased → others stop.
+  lib.<deviceId>.json.gz                LibFileV1 → canonical JSON → gzip. appProperties { kind:'lib', device }.
+                                          Typical 50–500 kB gz; 1,000 defs + 2,000 stubs ≈ 1 MB gz.
   run.<runId>.<digest16>.spinner.json.gz
-                                       encodeRunBundle(data, { gzip: true }) — identical to Analyze → Export,
-                                         so a user could even download it from Drive's API and import it.
-                                         appProperties { kind: 'run', runId, digest16, sha32 } (each key+value ≤ 124 B,
-                                         so: first 16 hex of resultsDigest, first 32 hex of sha256(gz bytes)).
-                                         10k×500: 1–2 MB (measured), up to ~20 MB for 100k sessions → resumable.
+                                        encodeRunBundleWithDigest(data, { gzip: true }).bytes — the Export format.
+                                          appProperties { kind:'run', runId, digest16 } (each pair ≤ 124 B).
+                                          Done runs only. 1–2 MB typical, ≤ ~20 MB → resumable above 5 MB.
 ```
 
-- Small records are **inline in the lib file**, not one file each. A library sync is about 3
-  requests (list, a changed peer lib or two, our lib), however large the library.
-- Each device writes only its own lib file, so **there are no write conflicts on Drive**. Drive
-  v3 has no reliable compare-and-swap; this layout does not need one.
-- **Limits:**
-  - Drive file size is not a concern (TB).
-  - The binding limit is Drive's throttling of **rapid writes**. The engine paces writes with a
-    token bucket of **3 writes per second, burst 5**.
-  - Reads run at most 4 in parallel; uploads run 1 at a time.
-  - The documented per-user query quota (thousands per minute) is far above this. Backoff for
-    `rate` follows Google's guidance: `min(2ⁿ s + U(0,1) s, 64 s)`, at most 5 tries per request,
-    then the cycle fails with `backoff`.
+- **Throttling:** a write token bucket (3 per second, burst 5); reads at most 4 in parallel; uploads
+  one at a time.
+- **Rate errors:** back off `min(2ⁿ s + U(0,1) s, 64 s)`, at most 5 tries per request, then the
+  cycle goes to `backoff`.
 
 ---
 
 ## 7. Sync algorithm
 
-### 7.1 Clock
-
-HLC per device, persisted in `syncMeta.clock` at the end of each cycle (and lazily on tick):
+### 7.1 Clock (HLC, minted from the edit time)
 
 ```
-tick():   w = max(now(), last.w); c = (w == last.w) ? last.c + 1 : 0; last = (w, c); return enc(w, c, self)
-recv(h):  w = max(now(), last.w, h.w); c = (w == last.w == h.w) ? max(last.c, h.c) + 1
-                                          : (w == last.w) ? last.c + 1 : (w == h.w) ? h.c + 1 : 0
+tickAt(at): w = max(at, last.w); c = (w == last.w) ? last.c + 1 : 0; last = (w, c); return enc(w, c, self)
+recv(h):    last = max(last, (h.w, h.c))        // keeps later local edits ahead of anything already seen
 ```
 
-- If a remote wall time is more than 24 h ahead of `now()`, it is still accepted (convergence
-  first), and the Account card shows "A device's clock looks wrong (Laptop)".
+- A push mints `tickAt(dirty.last)`, so a record edited at 10:00 and pushed at 10:20 sorts as 10:00.
+- **Our own entries are ordered, not concurrent.** An entry whose HLC device is this device is an
+  ancestor of anything we minted later. `vv[self]` makes this automatic, and the engine asserts it.
+- **Clock skew:** a remote wall time more than 24 h ahead of `now()` is accepted, and the Account
+  card says "A device's clock looks wrong (Laptop)".
 
-### 7.2 Building local entries
+### 7.2 Fingerprints per type (should-fix 3)
 
-`snapshot(key)` reads the current local record and returns `entryOf(kind, id, value, clock.tick())`,
-or `null` when there is nothing to push. Per kind:
+`hash = sha256Hex(canonicalJson(fingerprintValue(kind, value)))`. Volatile fields are left out;
+**every unknown key stays in**, for forward compatibility.
 
-| Kind | Value | Skip when |
-|---|---|---|
-| def | `DefinitionRecord` as stored | none |
-| strategy, layout, group | record as stored | none |
-| setting | `{ key, value }` | key ∉ `SYNCED_SETTING_KEYS` (the tracker already filters) |
-| run | `RunStub` from `RunMeta` + `describeRun`, plus `bundle` (§7.6) | status `running`/`queued` (re-marked by the next flush); run not owned by this device and its digest matches the index; run origin from sync and unchanged |
-| any | `null` (tombstone) when the record is gone | key never synced (no `syncIndex` row): just drop the mark |
+| Kind | Fingerprint value |
+|---|---|
+| def | the record **minus `updatedAt`**, with `runIds` sorted |
+| strategy | the record minus `updatedAt`: `strategy`, `hash`, `createdAt`, `derivedFrom` |
+| layout | the record minus `updatedAt` |
+| group | the record minus `updatedAt`; `runIds` order **kept** (it has meaning) |
+| setting | `{ key, value }` |
+| run | the stub **minus `verdict`** (derived) and minus `extra.imported.importedAt` (differs per device for shared runs) |
 
-If the new hash equals `syncIndex[key].entry.hash` and the deleted flag is the same, the mark is
-cleared with no push. This keeps no-op writes, such as re-saving an identical layout, off Drive.
+When a re-save leaves the fingerprint and the deleted flag equal to `syncIndex[key].entry`, the mark
+is dropped and nothing is pushed.
 
 ### 7.3 One cycle
 
 ```
 cycle({ uploadRuns = true, timeBudgetMs = 120_000 }):
-  lock 'spinner:sync' (ifAvailable) else return 'busy'
-  token? else → needs-auth
-  files ← remote.list()
-  root ← files[ROOT_NAME] ;  if !root → create SyncRootV1     (first device ever)
-         if root.version > 1 → error 'newer-layout' ; if root.erased && erased.at > account.boundAt → off + notice
-  ── PULL ─────────────────────────────────────────────────────────────────
-  libs ← files matching /^lib\.[0-9a-z]{10}\.json\.gz$/
-  changed ← libs where seen[f.id] != f.version            (own file included: recovers after a local reset)
-  remote ← Map<SyncKey, SyncEntry>
-  for f in changed (≤4 parallel): L ← decodeLib(download(f.id))   (bad file → notice, skip, do not mark seen)
-       for e in L.entries: if verifyEntry(e) is 'bad-hash'|'bad-id' → notice, skip
-                           remote[e.key] = mergeEntries(remote[e.key], e)
-  ── APPLY ────────────────────────────────────────────────────────────────
-  deletedRuns ← run keys that are tombstones in remote ∪ syncIndex
-  for e in remote.values() sorted (defs, strategies, layouts, groups, settings, runs):
-       base ← syncIndex[e.key]
-       if base && e.hlc <= base.entry.hlc: continue                    (already have it or newer)
-       clock.recv(e.hlc)
-       raw.update([store(e.kind), 'syncIndex', 'syncDirty', …], async (r, w) => {
-          dirty ← r.get('syncDirty', e.key);  local ← r.get(store, e.id)
-          switch resolve(kind, base?.entry, localEntry(local), !!dirty, e, self):   (table §7.5)
-            apply:          write e.value (or delete) ; syncIndex = { entry: e, local: 1|0 }
-            merge:          write merge(local, e.value) ; syncIndex = { entry: e, local: 1 } ; keep dirty if merged ≠ e.value
-            keep-local:     syncIndex = { entry: e } (new base) ; keep dirty (local pushes with a newer HLC)
-            copy-local:     write local under a new id (+ dirty mark for it) ; write e.value under e.id ; notice
-            restore-remote: write e.value ; delete dirty ; notice
-            skip:           syncIndex = { entry: e, local: 0 }   (newer schema / unknown kind: kept, passed on)
-       })
-  mark seen[f.id] = f.version for files fully applied
-  ── PUSH ─────────────────────────────────────────────────────────────────
-  if uploadRuns && !anyRunActive(): uploadPendingRuns(deadline)           (§7.6, bundles BEFORE lib)
-  dirty ← syncDirty.getAll()
-  for d in dirty: s ← snapshot(d.key) ; if s: pending[d.key] = s
-  lib ← { entries: (syncIndex entries ⊕ pending), sorted by key, hlc: max }
-  bytes ← encodeLib(lib) ; if sha256(bytes) == syncMeta.libSha && ownLib exists → skip upload
-  ownLib ? remote.update(ownLib.id, bytes) : remote.create(LIB_NAME(self), bytes, { appProperties })
-  raw.update(['syncIndex','syncDirty','syncMeta'], …):
-       for each pushed key: syncIndex = { entry: pending[key], local: 1 } ;
-                            delete syncDirty[key] only if its nonce n is unchanged (re-dirtied keys stay)
-       syncMeta.libSha, seen[ownLib.id] = returned version, clock, last = { at: now, ok: true }
-  ── DOWNLOAD (policy 'all') ──────────────────────────────────────────────
-  if prefs.runDownload == 'all': for stub in remoteRuns() newest first, until deadline: downloadRun(stub.runId)
-  ── GC (once per 24 h per device) ───────────────────────────────────────── §7.9
-  emit status { idle, lastSyncedAt, pending, remoteOnly, conflicts }
+  lock 'spinner:sync' (ifAvailable) else return 'busy' ; token? else needs-auth
+  files ← list() ; checkRoot(files)                                  (§7.10: newer layout → error; erased → off)
+  if ownLib missing && syncIndex non-empty && !firstSync → reseed()  (§7.9 step 6)
+  PULL+APPLY(files)                                                   ── below
+  if uploadRuns && !isRunActive(): uploadPendingRuns(deadline)        (§7.6; bundles before lib)
+  SNAPSHOT: for d in syncDirty: s ← snapshot(d) → pending[d.key]       (tickAt(d.last); basis/vv from the base)
+  RECHECK (B1 window): files' ← list() ; if any peer lib version changed since PULL → PULL+APPLY(files') again,
+                       then re-run resolve for every pending key against the new base (a pending key whose
+                       remote moved is re-snapshotted; concurrency → copies, as in APPLY)
+  lib ← syncIndex entries ⊕ pending, sorted ; bytes ← encodeLib(lib)
+  unless sha256(bytes) == libSha → ownLib ? update(ownLib.id, bytes) : create(LIB_NAME(self), bytes)
+  commit (raw.update): syncIndex ← pending ; delete syncDirty[k] iff its nonce n is unchanged ; libSha, seen, clock, last
+  if prefs.runDownload == 'all': download remote-only runs, newest first, until deadline
+  GC if gcAt older than 24 h (§7.9) ; emit status
+
+PULL+APPLY(files):
+  remote ← for each lib whose version ≠ seen[id] (≤4 parallel): decodeLib; verifyEntry each (bad → notice, skip)
+           fold with mergeEntries per key → { winner, losers }      (losers: peers' concurrent entries)
+  deletedRuns ← run tombstones in remote ∪ syncIndex
+  for each key in order (def, strategy, layout, group, setting, run):
+     raw.update([...], async (r, w) => {
+        base ← syncIndex[key]; dirty ← r.get('syncDirty', key); local ← dirty ? snapshotEntry(key) : undefined
+        { res, losers } ← resolve(base?.entry, local, remote[key].winner)
+        apply res:  skip-older | apply (write value / delete; syncIndex ← entry; drop the mark if the local edit lost)
+                    | keep-local (syncIndex ← remote, so the next push descends from it; the mark stays)
+                    | join (def: write the joined record; syncIndex ← joined entry; the mark stays if local ≠ joined)
+                    | opaque (syncIndex ← entry, local 0; never dropped)
+        for l in losers ∪ remote[key].losers: c ← copyOf(l, deviceNameOf(l), taken)  (null when the copy id is in
+              syncMeta.copies or syncIndex, live or tombstone) ; write c's record + a syncDirty mark ; notice
+     })
+  seen[f.id] ← f.version for fully applied files
 ```
 
-**First sync** (`begin`) on this device or after an account change: `preview()` runs list and
-pull without applying. Then:
+**First sync** (`begin`) **waits until no run is active**, in state `waiting-run` ("Waiting for the
+run to finish"). Then:
 
-- **merge:**
-  1. Seed the outbox. Every record in every synced store gets a `syncDirty` mark, through the raw
-     backend.
-  2. Run `cycle()`. Keys that exist on both sides go through the normal resolution. With no base,
-     identical hashes are a no-op, and different hashes follow the per-kind rule (definitions
-     merge; strategies and layouts become conflicted copies).
-- **replace:**
-  1. Raw-delete every record in the synced stores. Prefs and the device id are kept.
-  2. `resetLocalSyncState()`.
-  3. Run `cycle()`. It only pulls, since nothing is dirty.
+- **Merge:**
+  1. Seed a mark for every record in the synced stores (raw writes).
+  2. Run `cycle()`. With no base, an identical fingerprint is a no-op. Different content is
+     concurrent: definitions join; every other kind gets a copy.
+- **Replace:** raw-delete every record in the synced stores, run `resetLocalSyncState()`, then run
+  `cycle()`.
 
-### 7.4 Conflict detection
+### 7.4 Concurrency and resolution (B1)
 
-A **true conflict** needs a dirty local key and a remote entry newer than the base, coming from
-another device. The hash test then decides:
+`resolve(base, local, remote)`. Here `local` is the entry the dirty local record *would* push:
+`basis = base.hlc`, `vv = base.vv + self`, and an HLC taken from its edit time.
 
-- `local.hash == remote.hash`: no conflict; the remote becomes the new base, and the mark is
-  cleared.
-- `base && local.hash == base.hash`: the local side did not really change (a no-op write), so
-  apply the remote.
-- `base && remote.hash == base.hash`: impossible when the remote is newer than the base; treat it
-  as keep-local.
-- Otherwise it is a conflict, handled per kind (§7.5). **No base and both present** is the
-  slug-collision case (same new id created on two devices), and is a conflict too.
+| Case | Result |
+|---|---|
+| `base` descends `remote` (`vv(base) ≥ vv(remote)`) | `skip-older` |
+| no local edit, and remote descends base (or there is no base) | `apply` remote |
+| no local edit, and remote is concurrent with base. This is the both-pushed-before-pulling race: base is **our pushed** entry, and a peer edited from an older one | `mergeEntries(base, remote)`. The winner is applied or kept; the loser becomes a copy |
+| local edit, and remote descends base | `local` and `remote` are concurrent: `mergeEntries(local, remote)` |
+| def, any case | `join` (§7.5). Content is identical by construction, so never a copy |
+| `v > SUPPORTED_V`, or an unknown kind | `opaque` |
+
+`mergeEntries(a, b)`:
+
+```
+if a ≡ b (same hlc) or descends(a, b) → { winner: a }
+if descends(b, a)                      → { winner: b }
+concurrent:
+  winner = (a.deleted ≠ b.deleted) ? the live one : the higher HLC      (an edit beats a delete)
+  loser  = the other
+  winner.vv = join(a.vv, b.vv)          (the winner absorbs the loser's history: later merges see a descendant)
+  losers = loser.deleted ? [] : [loser]                                  (a deleted loser needs no copy)
+  kind 'setting': losers = []           (plain LWW; no copy, no notice)
+  kind 'run': losers = []               (owner-only, or shared with the same digest: LWW, no notice; §7.6)
+```
+
+`mergeEntries` is commutative and associative on the winner, and the losers form a set. The
+prototype's `model.test.mts` checks this, along with:
+
+- the exact race where both devices push before either pulls;
+- a chain A → C → D, which must not count as a conflict;
+- an edit beating a delete;
+- a 30-seed fuzz at step granularity.
+
+**The conflicted copy is deterministic**, so any device produces the same one:
+
+- **id:** `copyId = slugBase(id, 33) + '-' + loser.hash.slice(0, 6)`.
+  - A strategy copy sets `strategy.id = copyId` and recomputes `hash`.
+  - A layout copy sets `layout.id = copyId`; `layoutHash` is unchanged.
+  - A group copy takes `copyId` as its id.
+- **name:** `"<name> (<device name of hlcDevice(loser.hlc)>)"`, trimmed to 80 characters.
+- **entry:** a new key with `basis: null`, `vv: { self: 1 }`, and the loser's edit time.
+- **Two devices may both create the copy.** Their fingerprints are identical, so the entries merge
+  as `skip-older`/`apply` and no second copy appears.
+- **A known copy id is never recreated.** If the id is already in `syncMeta.copies` or `syncIndex`
+  (even as a tombstone), no copy is made, so a deleted copy stays deleted.
+- **Notice:** `“Big Martingale” was changed on two devices. Both are kept: “Big Martingale (Pixel)”.`
+- **Stages are safe.** They hold their own `x-chips` copy of the layout, so nothing dangles.
+  `from.id` keeps pointing at the winner, the same Update / Keep model as today.
 
 ### 7.5 Rules per kind
 
-| Kind | Remote newer, local clean | Both edited (true conflict) | Remote delete, local edited | Local delete (dirty), remote edited | Validation on apply |
-|---|---|---|---|---|---|
-| **def** | `merge` (always: `runIds` union minus deleted runs; `displayName` LWW by HLC; `createdAt` min; `updatedAt` max; `origin`/`derivedFrom` from the earlier `createdAt`) | `merge`: content is identical by construction, metadata merges. Never a notice | keep-local (re-push resurrects) | restore-remote + notice "kept: changed on Laptop" | `definitionId(rec.definition) === id`, else skip + notice |
-| **strategy** | apply | **copy-local**: the local record gets id `allocCopyId(id, taken)` (`<id>-2`…, and `strategy.id` follows), name "… (Pixel)"; the remote takes `id`. Notice | keep-local + notice "kept your edit; deleted on Laptop" | restore-remote + notice | `hash === sha256(canonicalJson(strategy))`, `rec.id === strategy.id` |
-| **layout** | apply | **copy-local** via `allocLayoutId(name + " (Pixel)", taken)`; `layout.id` follows; `hash` unchanged (it ignores id and name). Stages keep their `x-chips` copy, so nothing dangles; `from.id` may now point at the remote version, which is the same as today's "Update / Keep" model | keep-local + notice | restore-remote + notice | `hash === layoutHash(layout)`; built-in ids refused |
-| **group** | `merge` (`runIds` union minus deleted runs; `name`, `sweep`, `variantDefinitionIds` by the newer HLC) | merge, no notice | keep-local | restore-remote | shape check |
-| **setting** | apply (+ `settingsStore` refresh) | keep-local: the local edit is newer by intent and pushes with a newer HLC | n/a (settings are never deleted) | n/a | key ∈ `SYNCED_SETTING_KEYS`; value sanitized by `sanitizeSettings` |
-| **run** | stub only: `syncIndex` `local: 0` (remote-only) and, with policy `all`, a download. If local exists and `owner ≠ self` and the digest differs (cancelled → done): replace on download | only the owner writes, so a conflict means a `runId` collision with a different digest: the local run is re-keyed (`newRunId`) through `importRun`'s rule, + notice | **delete locally**, unless `isRunActive(runId)`: then keep-local and re-push + notice "still running here" | the local tombstone wins (runs are not "edited" by others) | §7.6 download checks |
+| Kind | Concurrent edits | Edit vs delete | Validation on apply |
+|---|---|---|---|
+| **def** | **join**, never a copy:<br>• `runIds` = sorted union minus `deletedRuns`;<br>• `displayName`/`displayNameAt` from the side with the later `displayNameAt` (a missing `displayName` with a later `displayNameAt` is a rename-back);<br>• `createdAt` min, `updatedAt` max;<br>• `origin`/`derivedFrom` from the earlier `createdAt`;<br>• unknown keys: the union, taking the winner-by-HLC's value on a clash.<br>The joined entry has `hlc = max`, `vv = join`, and **no new mint**, so it is identical on every device. | the edit wins (the join of live and deleted is the live record) | `definitionId(rec.definition) === id`; else opaque, with a notice |
+| **strategy** | winner by HLC; the loser becomes a copy | the edit wins | `hash === sha256(canonicalJson(strategy))` and `rec.id === strategy.id` |
+| **layout** | winner by HLC; the loser becomes a copy | the edit wins | `hash === layoutHash(layout)`; built-in ids refused |
+| **group** | **whole-record LWW** (never a union); the loser becomes a copy "Sweep … (Pixel)" | the edit wins | shape check; `runIds` keeps its order |
+| **setting** | LWW, no notice | n/a | key ∈ `SYNCED_SETTING_KEYS`; passed through `sanitizeSettings` |
+| **run** | owner-only, or shared imported runs with the same digest: LWW, no notice. The same runId with a **different digest** (a 2⁻⁴⁰ collision or a hand-edited import): the local run is re-keyed by `importRun`'s rule, with a notice | the delete wins, unless `isRunActive(runId)`: then the run is kept and re-pushed, with a notice. A re-import after a delete descends from the tombstone and lives | §7.6 |
 
-`skip` applies to every kind: when `e.v > SUPPORTED_V[kind]` or the kind is unknown, the entry is
-stored opaquely (`local: 0`) and re-emitted unchanged in our lib file. It is **never dropped**, so
-an older device does not erase data from a newer one. A single notice says "Some data is from a
-newer spinner; update to see it".
+### 7.6 Runs (B3, B6)
 
-### 7.6 Runs pipeline
+**What a device pushes, by local status:**
 
-| Local status | Pushed entry | Bundle |
+| Local status | Entry | Bundle |
 |---|---|---|
-| `queued`, `running` | none | none |
-| `paused` (incl. interrupted), `error` | stub (progress, `completedSessions`) | none. Other devices list "Paused on Laptop · 43%", not openable |
-| `cancelled` | stub | **prefix bundle** (`partial.of`), analyzable elsewhere; replaced if the run is continued |
-| `done` | stub with `resultsDigest` | **full bundle** |
+| `queued`, `running` | none (the next flush marks the run again) | none |
+| `paused` (including `interrupted`), `cancelled`, `error` | stub: status, counts, `interrupted`, `error` | **none**. Other devices list "Paused on Laptop · 43%", "Cancelled on Laptop at 2,048 of 10,000" or "Error on Laptop", greyed and not openable |
+| `done` | stub with `resultsDigest` and `bundle` | the full bundle |
 
-`uploadPendingRuns(deadline)` handles runs whose entry needs a bundle that the index lacks, or
-whose bundle digest differs. It goes **newest first**, one at a time, only while no run is active
-in this tab (`encodeRunBundle` is CPU-heavy on the main thread; moving it to a worker is a chip):
+**Never pushed:**
+
+- runs of a `DRY_RUN_TAG` definition (Define's dry runs and Settings → Benchmark), and the
+  definition itself;
+- marks for purged dry runs: the key was never synced, so the mark is just dropped.
+
+`snapshot()` returns `null` for all of these.
+
+**Ownership:**
+
+- A run created on this device has `owner = self`.
+- A run that entered through `importRun` (it has `meta.imported`) has **no owner**. Two devices
+  importing the same file produce entries with the same runId and digest. Their fingerprints match
+  (`importedAt` is excluded), so they never conflict, and LWW picks one stub.
+
+**Upload** (`uploadPendingRuns`: newest first, one at a time, only while no run is active):
 
 ```
-data   ← loadRun(raw, runId) ; bytes ← encodeRunBundle(data, { gzip: true }) ; sha ← sha256Hex(bytes)
-name   ← runBundleName(runId, data.meta.resultsDigest)
-existing ← listing has `name` with appProperties.sha == sha32 ? reuse its id     (idempotent retry)
-         : remote.create(name, bytes, { resumeKey: 'run:' + runId, appProperties, onProgress })
-pending[run:runId] ← stub with bundle { name, bytes, sha256: sha, partial? }
-every 30 s of uploading (and at the end): write our lib file, so peers see runs appear progressively
-the replaced bundle of the same run (cancelled → done) becomes an orphan → GC
+skip if remote has an entry run:<runId> with the same resultsDigest and a bundle → reuse that stub's bundle ref
+{ bytes, resultsDigest } ← encodeRunBundleWithDigest(loadRun(raw, runId), { gzip: true })
+name ← runBundleName(runId, resultsDigest)
+existing ← listing has `name` with appProperties { runId, digest16 }
+         → take the ref from the remote stub that names it, or download it once to compute its sha256
+         : create(name, bytes, { resumeKey: 'run:' + runId, appProperties }) and use sha256Hex(bytes)
+stub.bundle ← { name, bytes, sha256 }      (always describing THE FILE WE REFERENCE)
+write our lib file every 30 s while uploading, so peers see runs appear progressively
 ```
 
-`downloadRun(runId)` is called on open, by Download all, or by policy `all`:
+**Download** (`downloadRun`, done runs only):
 
-```
-stub ← syncIndex[run:runId].entry.value ; f ← listing file named stub.bundle.name  (else 'missing')
-bytes ← remote.download(f.id, progress) ; sha256Hex(bytes) == stub.bundle.sha256 else 'corrupt'
-r ← decodeRunBundle(bytes, gameId)  (recomputes resultsDigest for untrimmed) ; error → 'corrupt'
-r.data.meta.resultsDigest == stub.resultsDigest else 'corrupt'
-quota pre-check: estimate().quota − usage ≥ 3 × bytes   else state 'local-full'
-meta ← { ...r.data.meta, ...stub.extra, status: stub.status, imported: stub.extra.imported,
-         synced: { from: stub.owner, fromName, at: now } }   (drops the `imported` that decode adds)
-writeCompacted(raw, { ...r.data, meta }, meta, origin)   — one tx; adds runId to the definition
-syncIndex[run:runId].local = 1
-```
+1. **Find the file.** Take the listed files named `stub.bundle.name`. If there are several (two
+   devices uploaded at once), try each until the sha256 matches. If none is listed, return
+   `missing`.
+2. **Check the file:** `sha256Hex(bytes) === stub.bundle.sha256`, else `corrupt`.
+3. **Decode:** `decodeRunBundle(bytes, gameId)`. For untrimmed bundles this recomputes
+   `resultsDigest`.
+4. **Check the digest:** `data.meta.resultsDigest === stub.resultsDigest`, else `corrupt`.
+5. **Check space:** `estimate().quota − usage ≥ 3 × bytes`, else `local-full`.
+6. **Write:** rebuild `RunMeta` (table below), call `writeCompacted(raw, { ...data, meta }, meta, origin)`
+   in **one transaction**, then set `syncIndex.local = 1`.
 
-A corrupt result writes nothing. Analyze shows "This run's file in Drive is damaged. It can be
-re-uploaded from Laptop." On the owner device, the next GC re-uploads any bundle whose listed
-sha32 differs from its index (self-heal).
+> **Trimmed bundles** (runs imported from a gallery-trimmed file) cannot have their digest recomputed
+> (harness-data-analysis.md §10.1). For them, verification is the file sha256 plus equality of the
+> declared digest. Analyze keeps showing "trimmed: verified at export".
+
+**`RunMeta` rebuilt from the decoded bundle and the stub** (done runs only):
+
+| Field | Source |
+|---|---|
+| `v`, `runId`, `definitionId`, `simKey`, `runKey`, `gameId`, `gameVersion`, `coreVersion`, `appVersion`, `createdAt`, `sessions`, `chunkSize`, `chunks`, `schedule`, `labels`, `columns`, `resultsDigest` | decoded bundle |
+| `status` | `'done'` |
+| `completedSessions`, `prefixSessions` | decoded: equal to `sessions`, or to the bundle's sessions for an imported partial |
+| `bitmap` | decoded: every chunk set; an imported partial keeps the decoder's prefix bitmap |
+| `interrupted` | absent (meaningless for a done run) |
+| `error` | absent (done runs have none, and errored runs are never bundled) |
+| `storage` | set by `writeCompacted` from `backend.kind` (`'idb'`) |
+| `device`, `timing`, `resumes` | `stub.extra` (the maker's values: "made on a Pixel, 6 workers, 4.0 s") |
+| `visibility` | `[]`: the maker's tab log is not synced |
+| `imported` | `stub.extra.imported` **verbatim**, unknown keys such as `trimInfo` included, when the run was an import; otherwise **absent**. The decoder's own `imported` is discarded |
+| `synced` | `{ from: stub.owner ?? hlcDevice(entry.hlc), fromName, at: now }` |
+
+A stub-only run (paused, cancelled or errored) exists as a full `RunMeta` only on its owner's
+device. Other devices never build a `RunMeta` for it; they show the stub row.
 
 ### 7.7 Ids and collisions
 
-- **def:** content-addressed, so the same id means the same content. Merges are metadata-only.
-- **run, group:** random suffixes, globally unique. A run collision (about 2⁻⁴⁰) is handled by
-  §7.5.
-- **strategy, layout:** user slugs. A collision is a conflict, resolved as copy-local.
-  `allocCopyId` and `allocLayoutId` check `taken` against the **local store ∪ the incoming remote
-  keys**, so the copy cannot collide with another incoming record.
-- **setting:** a fixed key namespace.
+- **def:** content-addressed, so no collisions.
+- **run, group:** random ids, collision ≈ 2⁻⁴⁰. Runs are handled as in §7.5.
+- **strategy, layout:** user slugs. The same new slug on two devices, with no base, is concurrent:
+  both `vv` are `{dev: 1}`. That gives a deterministic copy.
+- **setting:** fixed keys.
 
-### 7.8 Determinism and "never corrupt local data"
+Copy ids are checked against the local stores and the incoming remote keys. When the deterministic
+id is already taken by unrelated content, the next 6 hex digits of the fingerprint are appended, so
+the result is still deterministic.
 
-- Pulls never write partial records. Each apply is one `update()` transaction per key, and a run
-  download is one `writeCompacted` transaction after full verification.
-- The engine writes only through `raw`, so applied data never echoes back as a local change, and
-  the tracked marks stay in the same transaction as the user's writes.
-- Definitions keep their id = hash; run results keep `resultsDigest`. The sync layer never
-  re-normalizes or re-encodes a definition. A bundle is the same canonical bytes as Export, so an
-  export → import → export of a synced run stays byte-identical.
-- Watch and resume rules are unchanged: re-simulation still requires equal game and core versions.
+### 7.8 Never corrupt local data
+
+- **Pulls never write partial records.** Each key goes through one `update()` transaction. Each run
+  goes through one `writeCompacted` transaction, after full verification.
+- **The engine writes raw.** Marks therefore come only from user writes.
+- **Ids and digests are kept.** Definitions keep id = hash, and runs keep their digests.
+- **Bundles are re-verified on every download**, never trusted.
 
 ### 7.9 GC (once per 24 h per device, after a successful push)
 
 1. **Duplicates:**
-   - Several `lib.<self>` files: merge all, keep `syncMeta.files.ownLib`, delete the rest.
-   - Several roots: keep the earliest `modifiedTime`.
-   - Several copies of the same bundle name: keep one.
-2. **Stale devices:** delete a lib file whose `writtenAt` is more than 180 days old. Its entries
-   are already in everyone's merged state. That device starts over by merging if it ever returns.
-3. **Tombstones:** drop tombstone *T* from our lib file only when **every** remaining lib file
-   contains *T*, or a newer entry for that key. All lib files are read anyway, so this is exact,
-   and no stale copy can resurrect the record.
-4. **Orphan bundles:** delete `run.*` files referenced by no entry in any lib file and modified
-   more than 1 h ago (the upload-then-reference window).
-5. **Pacing:** deletes go through the write token bucket. GC is skipped on metered or low battery
-   if the browser tells us (`navigator.connection.saveData`).
+   - several `lib.<self>` files: merge them all, keep `files.ownLib`, delete the rest;
+   - several roots: keep the earliest;
+   - several files with one bundle name: keep the one whose sha256 matches the winning stub, and
+     delete the others once they are more than 1 h old.
+2. **Stale devices:** delete a lib file whose `writtenAt` is more than 180 days old. Its entries are
+   already in everyone's merged state. If that device ever returns, it re-seeds (step 6).
+3. **Tombstones (age + acknowledgement):** drop tombstone *T* from our lib file only when:
+   - it is **older than 30 days** (`hlcWall`), **and**
+   - **every** remaining lib file holds *T* or an entry that descends from it. A device
+     acknowledges *T* by rewriting its lib file with *T* in it.
+
+   After step 2, no stale copy remains that could resurrect the record.
+4. **Orphan bundles:** delete `run.*` files that no live run entry in any lib file references (by
+   runId + digest16), once they are more than 1 h old. **The keep rule:** a bundle stays while any
+   lib file (ours or a peer's) holds a live `run:<runId>` entry with that digest. This covers shared
+   imported runs.
+5. **Re-upload (consistent with §7.6 and §9).**
+   - **Who:** any device holding a done run locally whose index entry names a bundle: the owner, or
+     any holder of a shared run.
+   - **When:** the listing lacks that name, or shows a size different from `stub.bundle.bytes`.
+   - **What:** re-upload under the same name, take the new sha256, and push the stub. This is the
+     self-heal path for `missing`.
+   - **Corrupt files:** a downloader that sees `corrupt` posts a notice. The holder fixes it on its
+     next GC when the size differs. When only the content differs (rare), Library → Runs offers
+     "Re-upload" (S5b).
+6. **Re-seed (should-fix 5).** This applies when our own lib file is missing (GC'd as stale, or
+   deleted by hand), `syncIndex` is not empty, and the root is not erased.
+   - **Why:** pushing the old base would re-assert stale state.
+   - **What:** call `resetLocalSyncState()`, which keeps prefs, the device id, the account and the
+     copies, then `begin('merge')`, which waits for an idle run.
+   - **Effect:** local records come back as fresh entries. A record that others deleted, and whose
+     tombstone is gone, comes back too. The notice says it was kept on this device, and differences
+     become copies.
+7. **Pacing:** deletes use the write bucket. GC is skipped when `navigator.connection?.saveData` is
+   on.
 
 ### 7.10 Account binding, erase, sign-out
 
-- **Binding:** `syncMeta.account = { accountId, email, boundAt }` is set at first sync. A
-  different `permissionId` at sign-in opens a sheet: "This device synced with a@…; you signed in
-  as b@…". The choices are **Sync this device's data to b@** (`resetLocalSyncState` then `begin`)
-  or **Cancel** (revoke).
-- **Remove my data from Drive** (confirm sheet):
-  1. Rewrite the root as `{ …, erased: { at, by: self } }`.
-  2. Delete every other file (paced; progress shown).
-  3. `resetLocalSyncState()`, then sign out. Local data is untouched.
-  4. Other devices, on their next cycle, see `erased.at > boundAt`. They stop (`off`) and show a
-     notice: "Sync was turned off and your Drive data was removed from Pixel. Turn on again?"
-  5. Signing in again later rewrites the root without `erased`.
-  6. The ~200 B marker stays in Drive; it is listed in "hidden app data" with the rest.
-- Users can also remove everything from Google's side: Google Drive → Settings → Manage apps →
-  spinner → Delete hidden app data. Then the root is missing, so the next cycle treats Drive as
-  empty and asks before uploading (`preview().remoteEmpty`, §8.3).
+- **Binding:** `syncMeta.account = { accountId, email, boundAt }`. When a different `permissionId`
+  signs in, a sheet offers two choices:
+  - **Sync this device's data to b@**: `resetLocalSyncState`, then `begin('merge')`;
+  - **Cancel**: revoke.
+- **Remove my data from Drive:**
+  1. Rewrite the root with `erased: { at, by }`.
+  2. Delete every other file (paced, with progress).
+  3. `resetLocalSyncState()`, then sign out. Local data stays.
+  4. Other devices see `erased.at > boundAt`, turn `off`, and show a notice.
+  5. A later sign-in rewrites the root without `erased`.
+- **Hidden app data deleted from Google's side** (Drive → Manage apps): the root is missing, so the
+  preview reports `remoteEmpty` and asks before uploading (§8.3). The device never re-pushes
+  silently; that is the re-seed rule.
 
 ### 7.11 Triggers, backoff, multi-tab
 
-| Trigger | Condition | Kind |
-|---|---|---|
-| sign-in | | `begin` |
-| app start | prefs.enabled, a valid token in sessionStorage, 3 s after first paint | cycle |
-| `visibilitychange → visible` | last cycle > 60 s ago | cycle |
-| `onDirty` | debounce 5 s, max wait 30 s | cycle |
-| interval | every 5 min while visible | cycle |
-| `online` | | cycle |
-| Sync now | always (gets a token first if needed: a user gesture) | cycle, resets backoff |
-| a run finishes | 10 s after `done` | cycle (uploads its bundle) |
+| Trigger | Condition |
+|---|---|
+| sign-in | → `begin` (after the run-idle wait) |
+| start | `prefs.enabled`, a valid token in localStorage, 3 s after first paint |
+| visible | more than 60 s since the last cycle |
+| local change | `onDirty`, **including marks broadcast from other tabs** (`BroadcastChannel('spinner-sync')` `{ type: 'dirty', keys }`, received by the lock holder); debounce 5 s, wait at most 30 s |
+| interval | every 5 min while visible |
+| `online` | |
+| Sync now | always; resets the backoff |
+| a run reaches `done` | 10 s later (uploads its bundle) |
 
-- **Never while hidden:** no Background Sync, no SW token.
-- **During an active run:** library sync proceeds; bundle encoding, upload and download wait
-  until no run is active.
-- **Backoff for `network`, `server`, `rate`:** 30 s, 1 m, 2 m, 5 m, 10 m, then 15 m (cap), with
-  ±20 % jitter. `Retry-After` wins when it is longer.
-- **Other errors:**
-  - `auth` → `needs-auth`, with no timer;
-  - `quota` → `drive-full`, retried hourly or on Sync now;
-  - `forbidden` → `error` ("Access was removed. Sign in again.");
-  - offline (`navigator.onLine === false` or a `network` error) → `offline`, waiting for `online`.
+- **Never while hidden.**
+- **During an active run:** library sync continues. Bundle uploads and downloads, the first sync
+  and Replace wait.
+- **Backoff:**
+  - `network`, `server`, `rate`: 30 s, 1 m, 2 m, 5 m, 10 m, then 15 m, with ±20 % jitter;
+    `Retry-After` wins;
+  - `auth` → `needs-auth`;
+  - `quota` → `drive-full` (retried hourly, or on Sync now);
+  - `forbidden` → `error`;
+  - offline → `offline`, until the `online` event.
 - **Multi-tab:**
-  - Each cycle takes the Web Lock `spinner:sync` with `ifAvailable`; a busy lock means another tab
-    is syncing.
-  - The lock holder broadcasts `SyncStatus` on `BroadcastChannel('spinner-sync')`, and other tabs
-    mirror it.
-  - After applying, the holder broadcasts `{ changed: kinds[] }`. Every tab bumps `libraryVersion`
-    (Define/data), the layouts touch, `recentRuns`, `settingsStore`, and calls `clearRunCache`
-    and `clearVerdictCache` for replaced runs.
+  - each cycle takes the Web Lock `spinner:sync` with `ifAvailable`;
+  - the holder broadcasts its status and `{ changed: kinds[] }`;
+  - every tab then refreshes `libraryVersion`, layouts, `recentRuns` and `settingsStore`, and calls
+    `clearRunCache` and `clearVerdictCache`.
 
-### 7.12 Storage budget
+### 7.12 Storage budget and downloads
 
-- **Account card:**
-  - **Drive:** spinner's bytes (sum of listed file sizes) and the account's usage and limit
-    (`about`).
-  - **This device:** `navigator.storage.estimate()` and persisted state.
-  - **Runs only on Drive:** count and bytes (`remoteOnly`), with **Download all**.
-  - Per run, in Library → Runs: **Remove download (keep on Drive)** (`evict`).
-- **Policy defaults (D12):**
-  - `onOpen` when `navigator.userAgentData?.mobile` is true, or the viewport is narrower than
-    768 px and the pointer is coarse;
+- **The Account card shows:**
+  - Drive: spinner's bytes, plus the account's usage and limit;
+  - this device: `estimate()`;
+  - runs only in Drive: count and bytes, with **Download all**;
+  - per run: **Remove download (keep in Drive)** (`evict`).
+- **Policy defaults:**
+  - `onOpen` when `userAgentData.mobile` is set, or the screen is under 768 px wide with a coarse
+    pointer;
   - `all` otherwise.
-  - Download all, and policy `all`, first check `quota − usage ≥ 1.5 × remoteOnly.bytes`. Otherwise
-    the device downloads what fits and the card says "Not enough space on this device".
-- **Local `QuotaExceededError` during a download:** the state becomes `local-full`, the policy
-  switches to `onOpen` with a notice, and nothing partial is written (single transaction).
-- **Uploads are not optional** (owner: everything). The first sign-in shows the total ("Upload 30
-  runs, 48 MB"). Uploads run in the background, newest first, and are resumable.
+- **Download all** checks `quota − usage ≥ 1.5 × remoteOnly.bytes`. When space runs short, it
+  downloads what fits and says so.
+- **Quota error:** the state goes to `local-full`, and the policy switches to `onOpen` with a notice.
+  Nothing is half-written.
+
+### 7.13 DB upgrade interactions (nit)
+
+- **An old tab (v2 code) is open when a new tab opens v3.** The new tab gets `onblocked` and shows
+  the existing "close other spinner tabs" message. The old tab's `onversionchange` closes its
+  connection.
+- **An older build after a rollback meets a v3 database.** Opening fails with `VersionError`, and the
+  app falls back to the memory backend with "data from a newer version". **Sync is disabled whenever
+  the backend is memory**, so a rolled-back device can never push a wave of tombstones. Nothing is
+  deleted.
 
 ---
 
-## 8. UX (phone first, 360 px portrait)
+## 8. UX (phone first, 360 px)
 
-### 8.1 Settings → Account (first card on Settings; anchor `#/settings?account=1`)
+### 8.1 Settings → Account (first card; `#/settings?account=1`)
 
 ```
 Signed out                              Signed in
@@ -811,58 +818,59 @@ Signed out                              Signed in
 │ Use your library and runs on   │      │ owner@gmail.com                │
 │ all your devices. spinner keeps│      │ ✓ Up to date · 2 min ago       │
 │ them in a hidden folder in     │      │ This device: Pixel 11  [Rename]│
-│ your own Google Drive.         │      │ ┌────────────┐                 │
-│ ┌────────────────────────────┐ │      │ │  Sync now  │                 │
-│ │ G  Sign in with Google     │ │      │ └────────────┘                 │
-│ └────────────────────────────┘ │      │ Google Drive  182 MB of 15 GB  │
+│ your own Google Drive.         │      │ [ Sync now ]                   │
+│ [ G  Sign in with Google     ] │      │ Google Drive  182 MB of 15 GB  │
 │ spinner sees only its own      │      │ This device    96 MB           │
 │ folder, never your other files.│      │ 12 runs only in Drive (31 MB)  │
 │ How sync works ›               │      │ [ Download all ]               │
-└────────────────────────────────┘      │ Download runs                  │
-                                        │ (•) When I open them           │
-Not configured (no client id)           │ ( ) All, in the background     │
-┌────────────────────────────────┐      │ ⚠ 1 notice                 ›   │
-│ Account and sync               │      │ Devices: Pixel 11 (this),      │
-│ Sync is not set up in this     │      │   Laptop (yesterday)       ›   │
-│ build.                         │      │ [ Sign out ]                   │
-└────────────────────────────────┘      │ Remove my data from Drive…     │
-                                        └────────────────────────────────┘
+│ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │      │ Download runs                  │
+│ Test Google sign-in  (D23)     │      │ (•) When I open them           │
+└────────────────────────────────┘      │ ( ) All, in the background     │
+Popup failed / installed Android:       │ ⚠ 1 notice                 ›   │
+│ [ G  Sign in in this window  ] │      │ Devices: Pixel 11 (this),      │
+│ The app reloads after signing  │      │   Laptop (yesterday)       ›   │
+│ in; nothing is lost.           │      │ [ Sign out ]                   │
+Not configured: "Sync is not set up     │ Remove my data from Drive…     │
+in this build."                         └────────────────────────────────┘
 ```
-
-The status line has one text per state. Colour is never the only signal; each state also has an
-icon and a word.
 
 | State | Status line | Action |
 |---|---|---|
 | `idle` | ✓ Up to date · 2 min ago | Sync now |
-| `syncing` | ↻ Syncing… uploading run 3 of 12 (14 MB) | progress bar, `aria-valuenow` |
+| `syncing` | ↻ Syncing… uploading run 3 of 12 (14 MB) | progress bar |
 | `offline` | ⦸ Offline · 4 changes waiting | none |
-| `needs-auth` | ! Sign-in expired · 4 changes waiting | **Reconnect** (primary) |
+| `needs-auth`, pending > 0 | ! Sign-in expired · 4 changes waiting | **Reconnect** (primary) |
+| `needs-auth`, pending 0 | Sync paused · sign in again to get changes from your other devices | Reconnect (secondary) |
+| `waiting-run` | ⏸ Waiting for the run to finish | none |
 | `backoff` | ! Google Drive is busy · retrying in 2 min | Sync now |
-| `drive-full` | ! Your Google Drive is full | "Free up space in Google Drive" link + Sync now |
+| `drive-full` | ! Your Google Drive is full | link, plus Sync now |
 | `local-full` | ! This device is out of space · runs stay in Drive | Library › Runs |
 | `error` | ! Drive data is from a newer spinner. Update the app. / Access was removed. Sign in again. | Check for updates / Sign in |
 
-### 8.2 Shell indicator (`SyncIndicator`, TopBar on phones, NavRail on wide screens)
+### 8.2 Shell indicator (`SyncIndicator` in TopBar and NavRail)
 
 ```
-TopBar 360 px:  ┌──────────────────────────────────────────────┐
-                │ ←  Library                 [☁✓] [Running 43%]│
-                └──────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ ←  Library                 [☁✓] [Running 43%]│
+└──────────────────────────────────────────────┘
 ```
 
 - **Hidden** when sync is `off`.
-- **Visible states:**
-  - `☁✓` idle: muted;
-  - `☁↻` syncing: rotates, static under `prefers-reduced-motion`;
-  - `☁⦸` offline;
-  - `☁!` needs attention: amber. On widths ≥ 400 px it adds the text "Reconnect".
-- **Target and labels:** 44 × 44 px. `aria-label` is the status line ("Sync: up to date, 2 minutes
-  ago"). A polite live region announces only changes into or out of the attention states.
-- **Tap:** in `needs-auth`, it calls `reconnect()` (inside the click: a user gesture). Otherwise it
-  opens `#/settings?account=1`.
+- **Glyphs:**
+  - ☁✓ idle (muted);
+  - ☁↻ syncing (static under reduced motion);
+  - ☁⦸ offline;
+  - ☁‖ paused: `needs-auth` with nothing pending, or `waiting-run`. Muted, **no nag**.
+  - ☁! amber, **only** for `needs-auth` with pending > 0, `error`, `drive-full` or `local-full`. It
+    adds the text "Reconnect" when the screen is at least 400 px wide.
+- **Size and labels:** a 44 × 44 px target. The `aria-label` is the status line. A polite live region
+  announces only entering or leaving the attention states.
+- **Tap:** in `needs-auth`, it calls `reconnect()` inside the click. Otherwise it opens the Account
+  card.
 
-### 8.3 First sign-in on a second device (bottom sheet)
+### 8.3 First sign-in on a second device
+
+The sheet is shown once any active run finishes:
 
 ```
 ┌────────────────────────────────┐   Drive empty:
@@ -878,19 +886,21 @@ TopBar 360 px:  ┌────────────────────�
 └────────────────────────────────┘
 ```
 
-- **Replace** asks again ("Delete 5 experiments and 2 runs on this phone?").
-- With no local data, the sheet is skipped and the device simply pulls.
+Replace asks again before deleting.
 
-### 8.4 Runs that are not on this device
+### 8.4 Runs that are not on this device (B4: every list and picker)
 
-- **Lists (Home, Library → Runs):** the normal row, verdict included (from the stub), plus a
-  `☁ In Drive` badge. A paused remote run shows "Paused on Laptop · 43%", greyed, and does not
-  open.
-- **Analyze / Watch on a remote-only run** (`RemoteRunCard` replaces "not found"):
+- **Lists.** Home, Library → Runs, the Compare picker and Define's compare sheet show the normal
+  row, with its verdict and a "☁ In Drive" badge. Stub-only remote runs are greyed ("Paused on
+  Laptop · 43%") and do not open.
+- **Compare.** Picking a remote done run downloads it first, inline ("Downloading 2 runs…").
+- **Sweep.** A remote done run with the variant's `simKey` counts as done and is **not** re-run. It
+  downloads when the sweep screen needs its numbers.
+- **Analyze or Watch on a remote-only run** shows the `RemoteRunCard`:
 
 ```
 ┌────────────────────────────────┐
-│ Martingale red · 10,000 × 500  │
+│ Martingale red · 10,000 × 500  │   (name from the definition record: experimentName())
 │ mean −$41 ± $6 · P(ahead) 38%  │
 │ In your Google Drive (1.8 MB), │
 │ made on Laptop.                │
@@ -899,23 +909,19 @@ TopBar 360 px:  ┌────────────────────�
 └────────────────────────────────┘
 ```
 
-- **Behaviour of the card:**
-  - It downloads automatically when online with a valid token.
-  - With no token it shows `[ Reconnect and download ]`.
-  - Offline: "You're offline. It will download when you're back online." The download
-    auto-starts on `online`.
-  - Corrupt: the message from §7.6.
-- **Conflict toast** (once per cycle, aggregated): "“Big Martingale” was changed on two devices.
-  Both are kept; this device's copy is “Big Martingale (Pixel)”." The toast has a **View** action
-  that opens the notices list in Account. Notices are capped at 50 and can be marked read.
+  Other card states:
+  - offline: "It will download when you're back online";
+  - signed out: `[Reconnect and download]`;
+  - corrupt or missing: "This run's file in Drive is damaged or missing. It is re-uploaded from the
+    device that has it on its next sync."
+- **Conflict toast** (aggregated per cycle) with **View**, which opens the notices in Account.
 
 ### 8.5 Other copy
 
-- Settings → Storage: "Delete all data" becomes **"Delete everything on this device"**, with the
-  sub-line "Your Google Drive copy is kept." (shown when signed in).
-- **Remove my data from Drive** confirm: "Remove all spinner data from your Google Drive? It stays
-  on this device. Your other devices stop syncing." `[Remove from Drive]` (danger) `[Cancel]`.
-  Progress: "Removing 48 files…".
+- **"Delete all data"** becomes **"Delete everything on this device"**, with the line "Your Google
+  Drive copy is kept."
+- **Remove my data from Drive** asks: "Remove all spinner data from your Google Drive? It stays on
+  this device. Your other devices stop syncing." Buttons: `[Remove from Drive]` `[Cancel]`.
 
 ---
 
@@ -923,48 +929,44 @@ TopBar 360 px:  ┌────────────────────�
 
 | Situation | Behaviour |
 |---|---|
-| App offline at start | Everything works locally. Sync stays `offline` and the GIS script is not loaded. Remote-only runs show the offline card |
-| Network drops mid-cycle | The current request fails as `network`; nothing is committed for that step. State `offline`, then a retry on `online` (or backoff) |
-| 401 mid-cycle | `needs-auth`, Reconnect. Resumable sessions continue after it |
-| 403 rate / 429 | Per-request retries (≤ 5, exponential, `Retry-After`), then cycle `backoff` |
-| 403 storage quota | `drive-full`. Uploads stop and library pulls continue (pulls need no space) |
-| 5xx | as rate |
-| Lib file undecodable, or hash mismatch per entry | That file or entry is skipped with a notice naming the device. Other data still syncs. Its `seen` is not advanced, so it is retried after the peer rewrites it |
-| Root `version > 1` | `error`: "Drive data is from a newer spinner. Update the app." Nothing is written |
-| Bundle missing (404) | Remote-only card: "This run's file is missing in Drive." The owner device re-uploads it at its next GC |
-| Bundle corrupt | Nothing written; notice; owner self-heals |
-| Local quota during apply or download | `local-full`; policy to `onOpen`; library records are tiny and still apply |
-| IndexedDB unavailable (memory backend) | Sync is **disabled** on this device, with the card note "Sync needs storage that persists". A memory-only device must not push tombstones for everything after a reload |
-| Clock skew > 24 h | Accepted (HLC); a warning names the device |
-| Popup blocked or closed | Toast "The sign-in window didn't open", plus the "Sign in in this window" button (§5.4) |
-| GIS script fails to load | "Couldn't reach Google. Check your connection." Retry is allowed (`scriptPromise` resets) |
-| Another tab is syncing | This tab mirrors its status; Sync now says "Syncing in another tab" |
-| A run deleted remotely while running here | Kept; re-pushed after it finishes; notice |
+| Offline at start | Everything works locally. Sync shows `offline`; GIS is not loaded |
+| Network drop or 401 mid-cycle | The step is not committed. State `offline` or `needs-auth`; resumable sessions continue later |
+| Rate limit (403/429) or 5xx | Per-request retries, then `backoff` |
+| Drive quota | `drive-full`: uploads stop, pulls continue |
+| Bad lib file or entry | Skipped with a notice naming the device; `seen` is not advanced |
+| Root `version > 1` | `error`; nothing is written |
+| Bundle missing or corrupt | `RemoteRunCard` message; the holder self-heals on GC (§7.9 step 5) |
+| Local quota | `local-full`; the policy switches to `onOpen` |
+| Memory backend (IDB unavailable, or a rolled-back build) | **Sync disabled**, with the note "Sync needs storage that persists" |
+| Clock skew > 24 h | Accepted, with a warning |
+| Popup blocked, closed or timed out | "Sign in in this window" (redirect) |
+| Redirect `state` mismatch or expired | The return page shows a message and a link back; no token is stored |
+| GIS script fails to load | "Couldn't reach Google"; retry is allowed |
+| Another tab is syncing | Status is mirrored; Sync now shows "Syncing in another tab" |
+| A remote delete of a run that is running here | The run is kept and re-pushed, with a notice |
+| First sync or Replace while a run is active | `waiting-run`; starts when the run is idle |
 
 ---
 
 ## 10. Privacy and security
 
-- **Scope:** only `https://www.googleapis.com/auth/drive.appdata`. Google shows it as *"See,
-  create, and delete its own configuration data in your Google Drive"*. spinner **cannot see,
-  list or change any other Drive file**. The folder is hidden from the Drive UI. It counts toward
-  the user's storage and can be deleted from Drive → Settings → Manage apps.
-- **No server:** data goes only between the browser and Google. There is no analytics, and
-  spinner sees nothing.
+- **Scope:** only `drive.appdata` ("See, create, and delete its own configuration data in your
+  Google Drive"). spinner cannot see any other Drive file. The folder is hidden, counts toward the
+  user's storage, and can be deleted in Drive → Settings → Manage apps.
+- **No server:** data goes only between the browser and Google.
 - **Tokens:**
-  - Memory plus sessionStorage only, about 1 h, never in localStorage or IndexedDB, never logged
-    (the error reports from §6.5 of architecture.md must redact `Authorization` and
-    `access_token`).
-  - No refresh tokens. A revoke happens on sign-out.
-  - The redirect fallback checks `state` and scrubs the URL fragment before routing.
-- **Client ID:** public by design. Its authorised JavaScript origins are only
-  `https://creynia.github.io` plus localhost for development, so a copy of the ID on another
-  origin is refused by Google. There is no client secret in the repo, in CI or in the build.
-- **Data integrity is not confidentiality:** Drive data is not end-to-end encrypted. It is
-  readable by the account owner (and by Google). That is acceptable for simulation data, and it is
-  stated. Client-side encryption with a passphrase is a chip.
-- **CSP** (§5.5) limits where scripts and connections may go.
-- **About** (add after the decisions #11 disclaimer, verbatim):
+  - An access token lasts about 1 h and lives in localStorage with its expiry (D2). There is no
+    refresh token.
+  - Sign-out revokes the token.
+  - Error reports must redact `Authorization` and `access_token`.
+  - The redirect checks `state` and scrubs the URL fragment.
+- **Client ID:** public. Its authorised origins are `https://creynia.github.io` and localhost. There
+  is no secret anywhere.
+- **Not end-to-end encrypted.** The data is readable by the account owner and by Google, and the
+  About text says so. A passphrase is a chip (open question 18).
+- **CSP:** from S0 on (§5.5).
+- **About**, after the decisions #11 disclaimer, verbatim (the README gets the same text under
+  "Privacy"):
 
   > **Google Drive sync (optional).** If you sign in with Google, spinner keeps a copy of your
   > library and runs in a hidden app folder in your own Google Drive. spinner can see only that
@@ -973,429 +975,517 @@ TopBar 360 px:  ┌────────────────────�
   > Google Drive → Settings → Manage apps → spinner → Delete hidden app data. You can revoke access
   > at myaccount.google.com/permissions.
 
-  The README gets the same paragraph under "Privacy".
-
 ---
 
 ## 11. Test strategy
 
-### 11.1 Unit (node, Vitest, `VITEST_MAX_WORKERS=2`)
+### 11.1 Unit tests (node, `VITEST_MAX_WORKERS=2`)
 
 - **core/store:**
-  - Upgrade tests with fake-indexeddb: a fresh v3 has 14 stores; a v2 database seeded with every
-    store's data keeps all of it and gains 3 stores; a v1 database upgrades through 2 and 3.
+  - v3 upgrade with fake-indexeddb: a fresh database has 14 stores; a seeded v2 database keeps all
+    its data and gains 3 stores; v1 upgrades straight to v3.
   - The memory backend has 14 stores.
-  - `update()` atomicity on both backends: a throw aborts both the read and the writes.
-  - Tracking marks for every writer path in §3.3, in the same transaction; an aborted transaction
-    leaves no mark; a raw write leaves none; `theme` gives no mark and `framing` does.
-- **core/sync, pure parts:**
-  - HLC monotonicity and `recv`;
-  - entry hash vectors (pinned);
-  - lib round trip byte-identical;
-  - decode refusals;
-  - every row of the §7.5 table as a test;
-  - property tests (seeded, using `core/rng`) that `mergeEntries` is commutative, associative and
-    idempotent.
-- **core/sync, engine with `createMemoryRemote`:** the key acceptance tests.
-  - **Convergence fuzz:**
-    - 3 devices (each its own memory backend, all sharing one remote) run 300 random operations.
-      The operations are create, edit, delete and rename of strategies, layouts, defs and groups;
-      setting changes; and finishing, cancelling or deleting fake runs.
-    - The devices sync in a random interleaving, then all sync twice more.
-    - **Assert:** every device has identical synced stores (canonical dump). No record is lost
-      except by delete or a conflict copy. Every conflict produced exactly one notice.
-  - **Crash injection:** a fault on the *k*-th remote call, for every *k* across a cycle. Then
-    sync again. Assert convergence and that no local record changed except by a resolution rule.
-  - **Run lifecycle:**
-    - paused stub → done bundle;
-    - cancelled prefix → continued → done supersedes and the old bundle is GC'd;
-    - remote delete while active;
-    - a corrupted bundle byte (sha mismatch) and a tampered digest are both rejected, with nothing
-      written.
-  - **Forward compatibility:** a `v: 2` entry survives a round trip through an older device
-    untouched.
-  - **GC:** tombstone retention across a stale device; orphan bundle removal after 1 h only.
-  - **Erase marker:** other devices go `off`.
-  - Comparisons of large byte arrays must use length plus a hash or a loop, **never `toEqual` on
-    multi-MB typed arrays**: it exhausted the heap in the prototype.
+  - **Every hard-coded store count is updated:** `schema.test.ts` (11 → 14), `backend.test.ts`,
+    `sink.test.ts` and `tests/app/shell.test.tsx`. S1 greps the tests for `toHaveLength(1[01])` and
+    `STORE_NAMES`.
+  - `update()` is atomic on both backends.
+  - Tracking marks:
+    - every writer path writes its mark in the same transaction;
+    - an aborted transaction leaves no mark, and a raw write leaves none;
+    - `theme` gets no mark, `framing` does;
+    - a dry-run definition gets a mark, but `snapshot` returns null for it.
+- **core/sync, the pure parts:**
+  - HLC `tickAt` and `recv`.
+  - Fingerprint vectors pinned per kind (§7.2), including "a change to `updatedAt` only gives the
+    same hash".
+  - `vv` descent.
+  - `mergeEntries` properties over 1,000 seeded cases: commutative, associative, idempotent, and
+    the losers form a set.
+  - `joinDef`:
+    - with and without `displayName`/`displayNameAt` (rename-back);
+    - `runIds` sorted, minus deleted runs;
+    - unknown keys preserved.
+  - Deterministic `copyOf` ids.
+  - Every row of §7.4 and §7.5.
+  - A lib file round trip, and the decode refusals.
+- **core/sync engine, with `createMemoryRemote({ hook })`:**
+  - **The B1 model test.** The prototype's `model.test.mts` scenarios, re-run through the real
+    engine and the memory remote.
+  - **Convergence fuzz at remote-call granularity.**
+    - Setup: 3 devices share one memory remote; each has its own memory backend.
+    - Interleaving: the `hook` runs before **every** remote call (list, download, create, update,
+      delete). At each hook point the scheduler may run any number of steps of the *other*
+      devices' cycles, or local edits, before letting the call proceed. Cycles therefore genuinely
+      interleave mid-cycle, and the B1 race can fall between a device's `RECHECK` and its lib
+      write.
+    - Operations:
+      - create, edit, rename and delete of strategies, layouts, definitions, groups and settings;
+      - fake runs finishing, cancelled or deleted;
+      - imports of the same run on two devices.
+    - Each case runs 300 steps, then settles by having every device sync twice. 50 seeds.
+    - **Assert:**
+      - every device ends with identical synced stores (canonical dump);
+      - every device's last local value before settling exists on every device, either as itself
+        or as a copy;
+      - every concurrent pair produces exactly one copy, and one notice on each device that saw it;
+      - no copy of a deleted copy is ever made;
+      - a merge never changes the order of a group's `runIds`.
+  - **Crash injection:** fault the *k*-th remote call for every *k* across a cycle, then sync again.
+    The devices must converge, and nothing local may change except by a rule.
+  - **Runs:**
+    - paused, then done: the stub is replaced by stub + bundle;
+    - cancelled and errored runs: a stub only, never a bundle;
+    - a remote delete while the run is active;
+    - a corrupt bundle (sha mismatch) and a tampered digest: nothing is written;
+    - a shared import on two devices: one entry, one bundle, and the second upload is skipped;
+    - a trimmed import downloads with sha-only verification;
+    - the `RunMeta` rebuild table, field by field.
+  - **Other engine tests:**
+    - dry runs never reach the remote;
+    - forward compatibility: a `v: 2` entry survives a round trip through an older device;
+    - GC: a tombstone is dropped only after 30 days plus every acknowledgement; a stale device's
+      file goes after 180 days; an orphan goes after 1 h, while a shared bundle is kept; a missing
+      bundle is re-uploaded by its holder;
+    - re-seed when the own lib file is missing;
+    - the erase marker;
+    - first-sync merge and replace, including waiting for an active run;
+    - a cycle with no changes makes **exactly 1 request**.
+  - Never call `toEqual` on multi-MB typed arrays; it exhausted the heap in the prototype.
 - **app/services/sync:**
-  - The Drive client against `tests/fakes/drive-server.ts`, as in the prototype: paging,
-    multipart, resumable resume, an expired session (404) restarting, a missing `Range`, abort,
-    every error mapping.
-  - The GIS token source with a fake `google.accounts.oauth2` (prototype tests, plus a
-    sessionStorage restore after "reload").
-  - The redirect return script: `state` mismatch, error fragments.
-  - The service with a fake engine and fake timers: triggers, debounce, backoff schedule, the lock.
+  - the Drive client against `tests/e2e/fakes/drive-server.ts` (typed, inside the tsconfig);
+  - GIS against a fake `google.accounts.oauth2`, including `timeoutMs`;
+  - the redirect return entry: localStorage state, TTL, mismatch, error fragment, scrub;
+  - flow choice: Android standalone gets the redirect, desktop the popup;
+  - the service with a fake engine and fake timers.
 
-### 11.2 Component (happy-dom)
+### 11.2 Component tests (happy-dom)
 
-- `Account` renders every `SyncState` with text.
-- `reconnect()` is called synchronously inside the click handler: the spy is called before any
-  `await` resolves.
-- `SyncIndicator` has an `aria-label` for every state.
-- `RemoteRunCard` covers progress, offline and corrupt.
-- The first-sync sheet's buttons map to `chooseFirstSync`.
+- Every `SyncState` renders its text, including `needs-auth` with and without pending changes.
+- `reconnect()` and `signIn()` are called synchronously inside the click.
+- The amber glyph follows §8.2 exactly.
+- `RemoteRunCard` covers all its states.
+- The Test sign-in button appears only when a client ID is configured.
 
 ### 11.3 E2E (Playwright, `res browser`, `PW_WORKERS ≤ 2`)
 
-- **Fakes:** `tests/e2e/fakes/route.ts` installs, per browser context:
-  - `page.route('https://accounts.google.com/gsi/client', …)` serving `tests/fakes/gis-fake.js`.
-    It defines `google.accounts.oauth2` and grants a token at once. Tests can make it block the
-    popup, deny, or expire via `window.__gisFake`.
-  - `page.route('https://www.googleapis.com/**', …)`, forwarding to **one shared
-    `createFakeDrive()` instance in the test process**.
-  - Two `browser.newContext()` therefore act as **two devices on one account**.
-- **Scenarios** (`tests/e2e/sync.spec.ts`; `phone-360` and `desktop` projects):
-  1. A: sign in → the Drive-empty sheet → Start → a definition, a layout and a finished small run
-     (200 sessions) upload. The indicator ends at ✓.
-  2. B with its own local definition: sign in → the merge sheet shows the counts → Merge. B lists
-     A's run with a verdict and `☁ In Drive`. Opening it downloads it, and Analyze matches A's
-     headline numbers (same `resultsDigest`).
-  3. Edit a layout on A, then Sync now on B: B shows the edit.
-  4. Edit the same strategy on A and on B (offline), then sync both: both copies exist on both
-     devices, and B has a notice.
-  5. Delete a run on B and sync both: it is gone on A.
-  6. B offline (`context.setOffline(true)`): edits queue ("Offline · 2 changes waiting"). Online
-     again: pushed.
-  7. Token expiry (`__gisFake.expireAll()`): the indicator shows Reconnect. Tapping it (silent
-     grant) lets the sync finish.
-  8. Popup blocked: the "Sign in in this window" fallback round trip through `oauth-return.html`
-     (the fake auth endpoint is routed as well).
-  9. Remove my data from Drive on A: B shows "Sync was turned off…", and the fake Drive holds only
-     the erase marker.
-  10. CSP: the whole existing suite plus this one, with zero `securitypolicyviolation` events. An
-      axe scan of Account and the sheets at 360 px. No horizontal scroll.
+`tests/e2e/fakes/route.ts` routes three Google endpoints to fakes:
 
-### 11.4 Manual plan for the owner (real Google, after deploy)
+- `https://accounts.google.com/gsi/client` → `tests/e2e/fakes/gis-fake.ts`, built to a string at
+  test time and controlled through `window.__gisFake`;
+- `https://accounts.google.com/o/oauth2/v2/auth` → a fake consent page that redirects back with a
+  token;
+- `https://www.googleapis.com/**` → **one shared fake Drive** in the test process.
 
-1. On a laptop in Chrome at https://creynia.github.io/spinner/: Settings → Account → Sign in. The
-   consent screen shows the "unverified app" or test-user notice and **only** the "its own
-   configuration data" permission. Run a 10,000 × 500 experiment, then check that the Account card
-   shows ✓ and the Drive usage grows by about 1–2 MB.
-2. **Pixel, installed PWA:** sign in from the installed app. Note whether the popup returned to
-   the app. If not, use "Sign in in this window" and report which worked. Choose Merge. The runs
-   appear with verdicts; open one and it downloads; the numbers match the laptop's.
-3. Turn the phone's network off, edit a strategy, and turn it back on: it syncs within 5 s of
-   coming back.
-4. Leave the phone app open for more than 1 hour: the indicator shows Reconnect, and one tap fixes
-   it with a quick flash and no questions.
-5. Edit the same strategy on both devices while one is offline: both copies remain, and there is a
+Two `browser.newContext()` act as two devices on one account. The scenarios run on `phone-360` and
+`desktop`:
+
+1. A signs in, Drive is empty, Start: a definition, a layout and a small done run upload.
+2. B (with local data) chooses Merge. A's run shows with its verdict and badge **in Home, the
+   Library, the Compare picker and Define's compare sheet**. Opening it downloads it, and the
+   numbers match (same digest).
+3. A edits a layout; Sync now on B shows the edit.
+4. **B1:** A and B edit the same strategy. A's fake-Drive writes are held until B has listed and
+   pushed. Both versions survive on both devices (the id plus one copy), with one notice each.
+5. A deletes a run and syncs; it is gone on B.
+6. B goes offline, edits queue, and B comes back online: the edits push.
+7. Token expiry with pending changes: amber Reconnect, one tap, the sync finishes. Expiry with
+   nothing pending: no amber.
+8. A blocked popup falls back to a redirect round trip through `oauth-return.html`. With
+   `display-mode: standalone` emulated and an Android user agent, the redirect is the default.
+9. Remove my data from Drive on A turns B `off`.
+10. A sweep on B reuses A's remote done variant run; no new run starts.
+11. A paused run on A shows greyed on B and does not open.
+
+The CSP is enforced on **every** spec from S0 on. axe runs at 360 px.
+
+### 11.4 Manual plan for the owner (real Google)
+
+**The gate** comes after wave 2 (D23), on the deploy that includes S3. On the Pixel:
+
+1. In Chrome (not the installed app), tap Settings → Test Google sign-in. Expect the consent screen
+   with the unverified/test-user notice and only the "its own configuration data" permission. Then
+   expect your email and "0 files".
+2. In the installed app, tap the same button. Expect the redirect flow: the app reloads, then shows
+   your email.
+3. Report which flows worked, and whether the popup also works in the installed app (button: "Try
+   popup instead").
+
+**The full plan**, after S6:
+
+1. **Laptop:** sign in and run a 10,000 × 500 experiment. Expect ✓, and Drive usage up by about
+   1–2 MB.
+2. **Pixel, installed app:** sign in and choose Merge. The runs show with verdicts. Opening one
+   downloads it, and the numbers match the laptop's.
+3. **Pixel offline:** edit a strategy, then go back online. It should sync within 5 s.
+4. **Leave the app for more than 1 h:** with nothing pending there is no nag. After an edit there is
+   an amber Reconnect, and one tap fixes it.
+5. **Edit the same strategy on both devices,** one of them offline. Both versions are kept, with a
    notice.
-6. https://myaccount.google.com/permissions lists spinner with "Google Drive: see, create and
-   delete its own configuration data". Sign out on the laptop: the entry disappears or the token is
-   revoked.
-7. Remove my data from Drive on the laptop: the phone shows "Sync was turned off". Drive →
-   Settings → Manage apps → spinner shows (almost) no hidden data.
-8. Add a row to `docs/perf.md`: the time to first sync and to download a run on the phone.
+6. **Sign out on the laptop.** myaccount.google.com/permissions lists spinner with only the app-data
+   permission.
+7. **Remove my data from Drive.** The phone shows "Sync was turned off".
+8. **Record timings** (time to first sync, time to download a run) in `docs/perf.md`.
 
 ---
 
-## 12. Owner setup (Google Cloud), about 10 minutes
+## 12. Owner setup (Google Cloud, about 10 minutes)
 
-Google renamed the console's "OAuth consent screen" pages to **Google Auth Platform** (Branding,
-Audience, Data access, Clients). The older names are in parentheses.
+Google renamed the "OAuth consent screen" pages to **Google Auth Platform** (Branding, Audience,
+Data access, Clients). The old names are in parentheses.
 
-1. **Project.** Open https://console.cloud.google.com/ → the project picker (top bar) → **New
-   project** → name `spinner` → **Create**, then select it.
-2. **Enable the Drive API.** ☰ → **APIs & Services → Library** → search "Google Drive API" →
-   **Google Drive API** → **Enable**.
-3. **Consent screen.** ☰ → **Google Auth Platform** (APIs & Services → OAuth consent screen) →
-   **Get started**:
-   - App information: app name `spinner`, User support email = your Gmail → Next.
-   - Audience: **External** → Next.
-   - Contact information: your Gmail → Next.
-   - Agree to the policy → **Create**.
-4. **Scope.** Google Auth Platform → **Data access** → **Add or remove scopes**:
-   - Filter for `drive.appdata` and tick
-     `https://www.googleapis.com/auth/drive.appdata` ("See, create, and delete its own
-     configuration data in your Google Drive").
-   - **Update**, then **Save**.
-   - It is a non-sensitive scope, so it needs no verification review.
-5. **Who can sign in.** Google Auth Platform → **Audience**:
-   - **Recommended:** leave Publishing status at **Testing**, then **Test users → Add users** →
-     your Gmail → Save. Only listed test users (up to 100) can sign in. Sign-in shows a "Google
-     hasn't verified this app" step: click **Continue**. Testing mode has no other limit that
-     matters here (its 7-day refresh-token expiry does not apply, because there are no refresh
-     tokens).
-   - **Alternative:** **Publish app** (In production). Anyone with a Google account can then sign
-     in. With only a non-sensitive scope there is no security review, but the consent screen may
-     still show "unverified" until you complete brand verification (Branding page: home page and
-     privacy policy URLs, e.g. the README).
-6. **Client.** Google Auth Platform → **Clients** (APIs & Services → Credentials → Create
-   credentials → OAuth client ID) → **Create client**:
-   - Application type: **Web application**; Name: `spinner web`.
+1. **Project.** Open https://console.cloud.google.com/, then the project picker → **New project** →
+   `spinner` → **Create**. Select it.
+2. **Drive API.** ☰ → **APIs & Services → Library** → "Google Drive API" → **Enable**.
+3. **Consent screen.** ☰ → **Google Auth Platform** (OAuth consent screen) → **Get started**:
+   - app name `spinner`, support email = your Gmail;
+   - Audience **External**;
+   - contact = your Gmail;
+   - agree → **Create**.
+4. **Scope.** **Data access** → **Add or remove scopes** → tick
+   `https://www.googleapis.com/auth/drive.appdata` → **Update** → **Save**. It is non-sensitive, so
+   there is no review.
+5. **Audience.** Leave **Testing** on, then **Test users → Add users** → your Gmail → Save. At
+   sign-in, Google shows "Google hasn't verified this app": choose **Continue** (open question 17).
+   Publishing is the alternative; brand verification is optional for this scope.
+6. **Client.** **Clients** (Credentials → Create credentials → OAuth client ID) → **Create client**:
+   - Type: **Web application**. Name: `spinner web`.
    - **Authorised JavaScript origins:**
-     - `https://creynia.github.io`;
-     - `http://localhost:5173` (vite dev);
-     - `http://localhost:4173` (vite preview and e2e).
-   - **Authorised redirect URIs** (for the §5.4 fallback):
-     - `https://creynia.github.io/spinner/oauth-return.html`;
-     - `http://localhost:5173/oauth-return.html`;
-     - `http://localhost:4173/spinner/oauth-return.html`.
-   - **Create**. Copy the **Client ID** (`1234…-abc….apps.googleusercontent.com`). Ignore the
-     client secret: spinner never uses it, and you may delete it from the client's page.
-   - Origin changes can take a few minutes to apply.
-7. **Give the ID to the build.** It is public, so either way is fine:
-   - **(a) recommended:** GitHub → creynia/spinner → Settings → Secrets and variables → Actions →
-     **Variables** tab → **New repository variable** → Name `GOOGLE_CLIENT_ID`, value = the ID.
-     WP-S6 adds `env: VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}` to the build step of
-     `pages.yml`.
-   - **(b):** paste it into chat, and the orchestrator commits it as `COMMITTED_CLIENT_ID` in
-     `src/app/services/sync/config.ts`.
-   - Local development: put `VITE_GOOGLE_CLIENT_ID=…` in `.env.local` (gitignored by Vite's
-     defaults; add it to `.gitignore` if it is missing).
-8. **Check.** After the next deploy, Settings → Account shows **Sign in with Google**, not "not set
-   up". Then follow §11.4.
+     - `https://creynia.github.io`
+     - `http://localhost:5173`
+     - `http://localhost:4173`
+   - **Authorised redirect URIs:**
+     - `https://creynia.github.io/spinner/oauth-return.html`
+     - `http://localhost:5173/oauth-return.html`
+     - `http://localhost:4173/spinner/oauth-return.html`
+   - Click **Create** and copy the **Client ID** (`…apps.googleusercontent.com`). Ignore the secret,
+     or delete it. Changes can take a few minutes to apply.
+7. **Give the ID to the build.** It is public, so any of these is fine:
+   - **(a) Recommended:** GitHub → creynia/spinner → Settings → Secrets and variables → Actions →
+     **Variables** → **New repository variable**: `GOOGLE_CLIENT_ID` = the ID. S3 wires it into the
+     Pages build.
+   - **(b)** Paste it in chat, and the orchestrator commits it to `src/app/services/sync/config.ts`.
+   - **Local development:** put `VITE_GOOGLE_CLIENT_ID=<the ID>` in **`.env.local`** at the repo
+     root. `*.local` is gitignored from S0 on; check with `git check-ignore .env.local`.
+8. **Gate (D23).** After the S3 deploy, run the §11.4 gate and report the result. Wave 4 starts
+   after that.
 
 ---
 
 ## 13. Work packages
 
-These rules apply to every WP:
+**Rules for every WP:**
 
-- **Branches:** `claude/spinner-sync-<wp>`.
-- **Ownership:** exclusive; everything else is read-only. The orchestrator grants batons
-  (`BATON REQUEST <path> <why>`).
-- **Done means green** on `npm run check`. Vitest runs through `res cpu`, Playwright through
-  `res browser`.
-- **Rename coordination:** **no rename feature** in these WPs. `DefinitionRecord.displayName?` is
-  added by the parallel rename work. S2a's `mergeDefRecord` merges it by HLC if present, and must
-  compile with or without the field: treat it as an optional unknown key until the rename lands.
-
-### DAG and waves
+- Branches: `claude/spinner-sync-<wp>`.
+- Ownership is exclusive; the orchestrator grants batons.
+- Done = `npm run check` green.
+- Vitest runs through `res cpu`, Playwright through `res browser`.
+- **No rename feature.** `displayName`/`displayNameAt` come from PR #37. S2a must compile with or
+  without them, treating them as optional keys until #37 lands.
 
 ```
-Wave 1:  S0 contracts + stubs + layering edge
-            │
-Wave 2:  ┌──┴──────────┬───────────────┬────────────────┐
-         S1 store v3   S2a sync pure   S3 auth + Drive  S4 UI (vs S0 stub)
-         + tracking    (hlc, entries,  client + fakes
-            │          merge, libfile)       │                │
-            └─────┬────────┘                 │                │
-Wave 3:        S2b engine (+ memory remote, runs, gc)         │
-                  │                          │                │
-Wave 4:        S5 app service + integration ◄┴────────────────┘
-                  │
-Wave 5:        S6 e2e (two devices), CSP, SW test, About/README, pages.yml
+Wave 1:  S0 contracts + stubs + Backend.update (both) + CSP plugin + .gitignore + layering edge
+           │
+Wave 2:  ┌─┴───────────┬──────────────┬─────────────────┬──────────────┐
+         S1 store v3   S2a sync pure  S3 auth + Drive   S4 sync UI
+         + tracking    (hlc, fp, vv,  + redirect entry  (vs S0 stub)
+           │           merge, lib)    + Test sign-in ──► ★ GATE: owner checks sign-in on the Pixel (D23)
+           └─────┬───────┘                │                    │
+Wave 3:   S2b engine core ──────┐         │                    │
+          (pull/apply/push,     │         │                    │
+           RECHECK, call-level  ▼         │                    │
+           fuzz)              S2c runs, GC, erase, first sync, re-seed
+                                │         │                    │
+Wave 4:  (after ★)        S5a app service ◄┘                   │
+                                │                              │
+Wave 5:                   S5b screen integration ◄─────────────┘   (all listRuns consumers, RunRow)
+                                │
+Wave 6:                   S6 e2e two-device, docs, delete the prototype
 ```
 
-There are eight WPs; at most four run at once.
+There are ten WPs, at most four at once (wave 2). The gate overlaps wave 3; the engine does not need
+Google.
 
-### WP-S0 Contracts and stubs (wave 1, one agent)
+### WP-S0 Contracts, stubs, CSP (wave 1)
 
 - **Owns:**
-  - `src/core/contracts/sync.ts` (new, from the prototype);
-  - `src/core/contracts/run.ts` (additive `RunMeta.synced?`);
-  - `src/core/contracts/contracts.test.ts` (append);
-  - `src/core/sync/{index,hlc,entries,merge,libfile,engine,memory-remote}.ts`: stubs with the
-    §4.4 signatures, throwing `not implemented`;
-  - `src/app/services/sync/{index,config}.ts`: the §4.5 inert stub, state `off`, with `config.ts`
-    reading `VITE_GOOGLE_CLIENT_ID`;
-  - in `src/core/store/backend.ts`: **only** the `TxReader` type, the `update` signature and the
-    memory implementation (WP-S1 does the rest of the file).
+  - `src/core/contracts/sync.ts`; additive `synced?` in `run.ts`; appended cases in
+    `contracts.test.ts`;
+  - the `src/core/sync/*.ts` stubs (§4.4);
+  - `src/app/services/sync/{index,config}.ts`, as an inert stub;
+  - `build/vite-plugin-csp.ts`;
+  - in `src/core/store/backend.ts`, **only** `TxReader` and `update` on **both** backends: the IDB
+    side real, or a stub rejecting `not implemented`;
+  - in `src/core/store/bundle.ts`, `encodeRunBundleWithDigest` (a thin wrapper);
+  - `tests/build/sw.test.ts`: a test that cross-origin requests are not intercepted;
+  - `tests/build/csp.test.ts`: the built `index.html` has the meta CSP.
 - **Batons:**
-  - `eslint.config.js` and `tests/build/layering.test.ts` in one commit: `CORE_MODULES += 'sync'`,
-    `CORE_ALLOWED.sync = ['contracts', 'money', 'experiment', 'store']`, `testing` may import
-    `sync`;
-  - `src/core/index.ts`: append `export * from './sync'` (types and stubs);
-  - `src/env.d.ts`: `interface ImportMetaEnv { readonly VITE_GOOGLE_CLIENT_ID?: string }`.
+  - `eslint.config.js` and `tests/build/layering.test.ts`, in one commit: `CORE_MODULES += 'sync'`,
+    `CORE_ALLOWED.sync = ['contracts', 'experiment', 'store']`, and `testing` gains `sync`;
+  - `src/core/index.ts` (append);
+  - `src/env.d.ts` (`ImportMetaEnv.VITE_GOOGLE_CLIENT_ID?`);
+  - `vite.config.ts` (register the CSP plugin);
+  - `.gitignore` (`*.local`);
+  - `tests/app/shell.test.tsx` (`strictBackend` gains `update`);
+  - a shared e2e fixture `tests/e2e/fixtures.ts` that fails on `securitypolicyviolation`, or
+    `playwright.config.ts` if needed.
 - **Acceptance:**
   - typecheck, lint and the layering test pass;
-  - a contract test pins `HLC_PATTERN`, `SYNCED_SETTING_KEYS`, `RESUMABLE_CHUNK % 262144 === 0`
-    and `SYNC_KINDS`;
-  - the memory `update()` is tested: a read inside sees earlier writes of other transactions, and a
-    throw aborts everything;
-  - the existing suite is green.
+  - contract constants are pinned;
+  - the memory `update()` is tested;
+  - the **full existing e2e suite passes under the CSP** with zero violations;
+  - `git check-ignore .env.local` succeeds.
 
 ### WP-S1 Store v3 and change tracking (wave 2)
 
 - **Owns:**
-  - `src/core/store/backend.ts` (v3: `V2_STORE_NAMES`, the 3 stores, `DB_UPGRADES[3]`, the IDB
-    `update()`, `SYNCED_STORES`);
-  - `src/core/store/tracking.ts` (new: `createTrackedBackend`, `evictRunResults`);
-  - `src/core/store/{schema,backend,tracking}.test.ts`;
-  - `src/app/services/db.ts`:
-    - `getRepo` wraps the backend with `createTrackedBackend`;
-    - `getBackend()` returns the tracked backend, `getRawBackend()` the raw one;
-    - `deleteAll` goes through the raw backend; `syncMeta` survives it except `account` and `seen`
-      (prefs and device persist);
-    - when the backend is memory-only, `getBackend()` is not wrapped, so sync stays disabled;
-  - `tests/app/shell.test.tsx` (touch for the `keyOf` and store counts).
-- **Batons:** `src/core/index.ts` (append exports).
-- **Acceptance:**
-  - fake-indexeddb: a fresh v3 has 14 stores, each with its keyPath and indexes; a seeded v2
-    reopened at v3 keeps every record; v1 → v3 works; `openStore` reports `idb`;
-  - mark tests for each §3.3 writer path: the exact `syncDirty` keys, settings filtered, and none
-    for a raw write;
-  - an aborted transaction leaves no mark;
-  - `onDirty` fires once per committed transaction;
-  - `update()` on IDB can read then write in one transaction;
-  - `deleteAll` leaves zero marks.
+  - `src/core/store/backend.ts`: v3 (`V2_STORE_NAMES`, the new stores, `DB_UPGRADES[3]`,
+    `SYNCED_STORES`) and completing the IDB `update`;
+  - `src/core/store/tracking.ts`;
+  - the `schema`, `backend` and `tracking` tests, **`sink.test.ts`**, and every other test with a
+    hard-coded store count;
+  - `src/app/services/db.ts`: wrap the backend in `getRepo`, add `getRawBackend()`, make
+    `deleteAll` write raw, and skip wrapping on a memory backend (so sync stays disabled there);
+  - `tests/app/shell.test.tsx` (store counts).
+- **Batons:** `src/core/index.ts`.
+- **Acceptance:** as §11.1 core/store.
 
-### WP-S2a Sync core: pure parts (wave 2)
+### WP-S2a Sync core, pure parts (wave 2)
 
-- **Owns:** `src/core/sync/{hlc,entries,merge,libfile}.ts` and their tests.
-- **Batons:** none.
-- **Acceptance:**
-  - the HLC encodes and decodes against `HLC_PATTERN`, `tick` is strictly increasing under a
-    frozen or backwards clock, and `recv` dominates;
-  - `entryOf` hash vectors are pinned, and `verifyEntry` returns each code;
-  - encode/decode of the lib is byte-identical on round trip; bad format, newer version and bad
-    gzip are refused with `SyncFileError` codes;
-  - `resolve` is a table-driven test of every §7.4/§7.5 cell;
-  - the merge helpers' properties (commutative, associative, idempotent) hold over 1,000 seeded
-    cases;
-  - `mergeDefRecord` keeps the definition untouched (id = hash) and handles a missing or present
-    `displayName`.
+- **Owns:** `src/core/sync/{hlc,fingerprint,vv,merge,libfile}.ts` and their tests.
+- **Acceptance:** as §11.1 pure, including porting the prototype's `model.test.mts` cases onto the
+  real `mergeEntries` and `resolve`.
 
-### WP-S3 Auth and the Drive client (wave 2)
+### WP-S3 Auth, Drive client, sign-in gate (wave 2)
 
 - **Owns:**
-  - `src/app/services/sync/{gis,drive,redirect,backoff}.ts` (from the prototype);
-  - `public/oauth-return.html`, `public/oauth-return.js`;
-  - `tests/fakes/drive-server.ts` (the fake Drive as a `fetch` handler, from `fake-drive.mts`, plus
-    `about`, `Retry-After`, a session-expiry switch, and a delay knob);
-  - `tests/fakes/gis-fake.js` (the stub GIS script with `window.__gisFake` controls);
-  - `tests/app/sync/{gis,drive,redirect,backoff}.test.ts`.
-- **Batons:** none.
+  - `src/app/services/sync/{gis,drive,redirect,flow,backoff,test-signin}.ts`;
+  - `oauth-return.html` (at the repo root, a Vite entry) and `src/oauth/return.ts`;
+  - `tests/e2e/fakes/{drive-server,gis-fake,auth-page}.ts`;
+  - `tests/app/sync/*.test.ts`;
+  - the **Test Google sign-in** row, `src/app/screens/Settings/TestSignIn.tsx`.
+- **Batons:**
+  - `vite.config.ts`: `build.rollupOptions.input` adds `oauth-return.html`; the CSP plugin covers
+    it;
+  - `src/app/screens/Settings/index.tsx`: one line, mount `TestSignIn`;
+  - `.github/workflows/pages.yml`: `env: VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}` on the
+    build step, so the gate deploy has the ID.
 - **Acceptance:**
-  - the prototype tests;
-  - list paging over 2,500 files; resumable upload with a resume, a 404 restart and no `Range`
-    header; download progress; abort; every error code;
-  - token restore from sessionStorage; revoke while offline;
-  - redirect: a `state` mismatch is refused and the fragment scrubbed;
-  - backoff: the schedule with jitter bounds and `Retry-After`; the write token bucket allows ≤ 3
-    per second.
+  - the prototype tests, plus paging, resume, the 404 restart, a missing `Range`, abort, and the
+    error codes;
+  - `timeoutMs` leads to the redirect offer;
+  - the redirect state lives in localStorage, with TTL, mismatch and scrub covered;
+  - flow choice;
+  - token restore from localStorage after a reload;
+  - an offline revoke;
+  - an e2e smoke of Test sign-in through the fakes;
+  - the build emits `dist/oauth-return.html` with the CSP and no inline script.
 
 ### WP-S4 Sync UI (wave 2, against the S0 stub)
 
-- **Owns:**
-  - `src/app/screens/Settings/Account.tsx` (+ test);
-  - `src/app/components/SyncIndicator.tsx` (+ test);
-  - `src/app/components/SyncSheets.tsx` (the first-sync, account-switch, remove-data and notices
-    sheets, + test);
-  - `src/app/components/RemoteRunCard.tsx` (+ test).
+- **Owns:** `src/app/screens/Settings/Account.tsx`,
+  `src/app/components/{SyncIndicator,SyncSheets,RemoteRunCard}.tsx`, and their tests.
 - **Batons:**
-  - `src/app/screens/Settings/index.tsx`: insert `<Account/>` first; the "Delete everything on this
-    device" copy; the About privacy paragraph from §10, verbatim;
-  - `src/app/components/TopBar.tsx` and `Nav.tsx`: one line each;
-  - `src/app/styles/tokens.css`: an amber token only if none exists.
+  - `Settings/index.tsx`: Account first; "Delete everything on this device"; the About paragraph;
+  - `TopBar.tsx` and `Nav.tsx`, one line each;
+  - `tokens.css`: an amber token if there is none.
+- **Acceptance:** §11.2, axe at 360 px, and no horizontal scroll at 360 px or 844 × 390.
+
+### WP-S2b Engine core (wave 3: needs S1 and S2a)
+
+- **Owns:** `src/core/sync/{engine,apply,push,memory-remote}.ts` and their tests, including
+  `engine.fuzz.test.ts`. The scope:
+  - `cycle`, PULL+APPLY, SNAPSHOT, RECHECK, push and commit;
+  - the memory remote's `hook` and `fault`;
+  - status and progress.
 - **Acceptance:**
-  - every §8.1 state renders its text; the indicator has an `aria-label` per state;
-  - Reconnect and Sign in call the service synchronously in the click handler;
-  - axe is clean at 360; no horizontal scroll at 360 and 844 × 390;
-  - reduced motion stops the spinner;
-  - `RemoteRunCard` covers progress, offline, needs-auth, missing and corrupt.
+  - B1 through the engine;
+  - the call-level fuzz, 50 seeds, over the library kinds (no runs yet);
+  - crash injection;
+  - fingerprint no-op saves;
+  - dry-run exclusion;
+  - opaque entries;
+  - a no-change cycle makes one request.
 
-### WP-S2b Sync engine (wave 3: needs S1 and S2a)
+### WP-S2c Runs, GC, erase, first sync (wave 3, after S2b; S2b's fuzz harness exists)
 
-- **Owns:** `src/core/sync/{engine,runs,gc,memory-remote}.ts` and tests, including
-  `engine.fuzz.test.ts`.
-- **Batons:** `src/core/store/sink.ts`, only if `writeCompacted` needs an option to skip
-  `storage: backend.kind`, which must stay `'idb'`.
-- **Acceptance:** the §11.1 engine bullets:
-  - 3-device convergence fuzz;
-  - crash injection at every remote call;
-  - the run lifecycle;
-  - integrity rejections writing nothing;
-  - forward-compatible opaque entries;
-  - GC (tombstone and stale device, orphan ≥ 1 h);
-  - erase marker;
-  - first-sync merge and replace;
-  - `uploadRuns: false` skips bundles but pushes stubs;
-  - time budget → `more: true`;
-  - whether a cycle with no changes makes exactly **1 request (list)**. This is the request budget
-    test.
+- **Owns:** `src/core/sync/{runs,gc,first,erase}.ts` and their tests.
+- **Batons:** `src/core/store/sink.ts`, only if `writeCompacted` needs an option;
+  `src/core/store/bundle.ts`, only if decode must expose `trimmed`.
+- **Acceptance:** the §11.1 runs, GC, re-seed, erase and first-sync tests, with the fuzz extended to
+  runs and shared imports.
 
-### WP-S5 App service and integration (wave 4: needs S2b, S3, S4)
+### WP-S5a App service (wave 4: needs S2b, S2c, S3, and the passed gate)
 
-- **Owns:**
-  - `src/app/services/sync/{index,service,lock,channel}.ts` (replacing the stub bodies; the API is
-    unchanged);
-  - `tests/app/sync/service.test.ts`.
-- **What it builds:**
-  - the triggers (§7.11), Web Lock, BroadcastChannel (status, changes, token share), backoff, the
-    status store;
-  - `describeRun` from `runMetrics` and `verdictFromMetrics`;
-  - `isRunActive` from the controller registry;
-  - the policy default (§7.12);
-  - the refresh fan-out after apply.
-- **Batons:**
-  - `src/app/main.tsx` (start the service);
-  - `src/app/services/runs.ts` (`RunListItem.remote?: { bytes; owner; status }`, remote rows in
-    `listRuns`, and an `isActive` export);
-  - `src/app/screens/Analyze/data.tsx` and `src/app/screens/Watch/deps.ts` (a `remote` state →
-    `RemoteRunCard`);
-  - `src/app/screens/Library/index.tsx` and `src/app/screens/Home/index.tsx` (the badge, "Remove
-    download", and greyed remote paused runs);
-  - `src/app/screens/Define/data.ts` and `src/app/services/layouts.ts` (export the `touch`
-    functions only).
+- **Owns:** `src/app/services/sync/{index,service,lock,channel,prefs}.ts` (the real bodies) and
+  `tests/app/sync/service.test.ts`. The scope:
+  - triggers, the Web Lock, and the BroadcastChannel (status, changes, **dirty marks from other
+    tabs**);
+  - backoff;
+  - the status store, following §8.1 (no nag when nothing is pending);
+  - `describeRun` (verdict), `isDryRun` (`DRY_RUN_TAG`), `isRunActive`;
+  - the policy defaults;
+  - the run-idle wait for first sync and Replace;
+  - the refresh fan-out to other tabs.
+- **Batons:** `src/app/main.tsx` (start the service); `src/app/services/runs.ts` (export
+  `isActive`).
 - **Acceptance:**
-  - fake timers: each trigger and the debounce limits;
+  - every trigger, under fake timers;
   - a hidden tab never syncs;
-  - with two simulated tabs (two service instances, one lock shim), only one cycles;
-  - a remote-only run row shows its verdict and badge; opening it downloads it, then renders
-    Analyze;
-  - a memory-backend device stays `off` with its note;
-  - no `console.error` on the happy path.
+  - with two tabs, one cycle runs at a time, and dirty marks are forwarded to the lock holder;
+  - a memory backend gives `off`;
+  - no `console.error`.
 
-### WP-S6 E2E, CSP, SW and docs (wave 5: needs S5)
+### WP-S5b Screen integration (wave 5: needs S5a and S4)
+
+- **Owns:** `RunRow` and `listRunRows()` in `src/app/services/runs.ts`. That file belongs to
+  ui-results; S5b holds its baton for this wave.
+- **Batons**, covering every `listRuns()` consumer (B4):
+  - `services/runs.ts` (`listRecentRuns` → Home);
+  - `Sweep/sweep.ts`: reuse remote done runs by `simKey`, never re-run them;
+  - `Compare/index.tsx`: the picker, plus inline download;
+  - `Define/index.tsx`: the compare sheet;
+  - `Library/index.tsx`: badge, greyed stubs, Remove download, Re-upload;
+  - `Home/index.tsx`;
+  - `Analyze/data.tsx` and `Watch/deps.ts`: a `remote` state that shows `RemoteRunCard`;
+  - `Define/data.ts` and `services/layouts.ts`: export the `touch` functions.
+
+  Names resolve through `experimentName()` from PR #37, or `definition.name` until #37 lands.
+- **Acceptance:**
+  - app tests for each consumer, with a remote-only done run and a stub-only paused run;
+  - Sweep does not start a run for a remote done variant;
+  - Compare downloads first, then compares.
+
+### WP-S6 E2E, docs, cleanup (wave 6: needs S5b)
 
 - **Owns:**
-  - `tests/e2e/sync.spec.ts`, `tests/e2e/fakes/route.ts`;
-  - `build/vite-plugin-csp.ts`;
-  - `tests/build/sw.test.ts` additions;
-  - `README.md` (the Privacy section);
-  - `docs/design/architecture.md` (one pointer paragraph to this doc).
-- **Batons:**
-  - `vite.config.ts` (register the CSP plugin, production only);
-  - `.github/workflows/pages.yml` and `ci.yml` (the `VITE_GOOGLE_CLIENT_ID` env from
-    `vars.GOOGLE_CLIENT_ID`; CI e2e uses a dummy ID, since the fakes do not check it);
-  - `playwright.config.ts` (only if a fixture needs it).
-- **Acceptance:**
-  - all §11.3 scenarios pass on `phone-360` and `desktop`;
-  - the full existing e2e suite passes with the CSP, with zero violations;
-  - the SW test shows that a cross-origin request is not intercepted;
-  - `npm run check` is green.
-- The orchestrator records the D1–D20 summary in `decisions.md` and the open questions in
-  `open-questions.md`.
+  - `tests/e2e/sync.spec.ts` and `tests/e2e/fakes/route.ts`;
+  - `README.md` (Privacy);
+  - `docs/design/architecture.md` (a pointer);
+  - **deleting `docs/design/sync-prototype/`** and fixing every pointer to it, here (§15) and
+    elsewhere.
+- **Batons:** `.github/workflows/ci.yml` (a dummy `VITE_GOOGLE_CLIENT_ID` for e2e).
+- **Acceptance:** all §11.3 scenarios on `phone-360` and `desktop`; `npm run check` green.
+- The orchestrator updates `decisions.md` with the rev 2 refinements (§16).
 
 ---
 
-## 14. Open questions (product calls, with recommended defaults)
+## 14. Open questions
+
+Already decided (open-questions.md rows 13–18):
+
+| # | Question | Decided |
+|---|---|---|
+| 13 | Theme | per device |
+| 14 | Downloads | phones on open, desktops all |
+| 15 | Resume on another device | no in v1 |
+| 16 | Upload on mobile data | always |
+| 17 | Testing vs publish | Testing |
+| 18 | Encryption | no in v1 |
+
+New in rev 2:
 
 | # | Question | Recommended default | Alternatives |
 |---|---|---|---|
-| Q1 | Should **theme** follow the account? | **No, per device.** A phone often follows the system dark mode; framing and pace do sync. | Sync it with framing and pace. |
-| Q2 | Which devices download full runs automatically? | **Phones: when opened. Desktops: all, in the background.** Every run is always uploaded, lists always show verdicts, and Download all is one tap. | All devices download all; all download on open. |
-| Q3 | Continue a **paused or cancelled run on another device**? | **Not in v1.** Paused runs show as "Paused on Laptop · 43%". A cancelled run's prefix is analyzable anywhere. | v2: hand-off via a prefix bundle (contiguous chunks 0…k−1 rebuild a valid bitmap) plus an owner transfer. |
-| Q4 | Sync **gallery-origin** runs? | **Yes, like any run** (≤ 2 MB each). Simplest, and works offline on the other device. | Sync a stub that re-fetches from `gallery/`. |
-| Q5 | **Concurrent edits** of a strategy or layout | **Keep both** (a conflicted copy named with the device) plus a notice. | Last writer wins silently; ask the user each time. |
-| Q6 | **Uploads on mobile data** | **Always** (owner chose everything; runs are 1–2 MB). The Account card shows the totals. | A "Wi-Fi only" switch, using `navigator.connection.type` on Android Chrome only. |
-| Q7 | Who can sign in: Testing mode with the owner as test user, or publish? | **Testing**, with the owner (and anyone you add) as test user. | Publish to production; brand verification is optional for this scope. |
-| Q8 | Encrypt Drive data with a passphrase? | **No in v1** (it is your own Drive, simulation data). Make it a chip. | Client-side AES-GCM with a passphrase that each device must enter. |
+| Q19 | How is a conflicted copy named? | `"<name> (<device name>)"`. The device name is set at first sign-in from the UA ("Pixel 11", "Chrome on Linux") and can be renamed in Account. | "(conflict, 29 Oct)" |
+| Q20 | Should paused, cancelled and errored runs from another device show in lists? | **Yes, greyed** ("Paused on Laptop · 43%"), so you know the work exists. | Hide them until done. |
+| Q21 | What happens to a library definition that uses a strategy which became a conflicted copy? | Nothing: definitions inline their strategy (content-addressed), so nothing references the library id. | n/a |
 
 ---
 
-## 15. Prototype and risks to verify
+## 15. Prototype and risks
 
-`docs/design/sync-prototype/` holds throwaway code. The `.mts` extension keeps it out of the app's
-tsconfig and ESLint, and Prettier ignores `docs/`. It contains:
+`docs/design/sync-prototype/` is throwaway code; S6 deletes it. The `.mts` extension keeps it out of
+the app tsconfig and ESLint, and Prettier already ignores `docs/`. It contains:
 
-- `contracts-sync.mts` (§4.1);
-- `drive.mts` (the `RemoteStore` over Drive REST);
-- `gis.mts` (the GIS `TokenSource`);
-- `fake-drive.mts` (the fake Drive as a fetch handler);
-- `prototype.test.mts`: 5 tests, all passing. They cover multipart create, list paging, download,
-  update, delete, about; a **13 MB resumable upload that is interrupted and resumes from the
-  server's offset**; the error mapping; and GIS sign-in, early expiry, silent reconnect with
-  `login_hint`, revoke, a missing scope, a blocked popup and an unconfigured build.
+- `contracts-sync.mts`. Rev 2 adds `basis` and `vv`, removes `name` from the stub, and makes `owner`
+  optional.
+- `drive.mts`.
+- `gis.mts`. Rev 2 keeps the token in localStorage and adds `timeoutMs`.
+- `fake-drive.mts`.
+- `prototype.test.mts`, 5 tests:
+  - Drive: multipart upload, paging, a resumable 13 MB upload with resume, and error mapping;
+  - GIS: sign-in, expiry, silent reconnect, revoke, scope, blocked popup, timeout and unconfigured.
+- `model.mts` and `model.test.mts`, the **B1 merge model**, 5 tests:
+  - the exact race where both devices push before either pulls;
+  - a chain A → C → D, with no false conflict;
+  - an edit beating a delete;
+  - associativity and commutativity;
+  - a 30-seed, 3-device fuzz at step granularity, asserting convergence and that no edit is lost.
 
-| # | Risk | Mitigation and check |
+| # | Risk | Mitigation |
 |---|---|---|
-| R1 | Whether the GIS popup returns to an **installed Android PWA** | Redirect fallback (§5.4); manual step 2 |
-| R2 | A browser's popup blocker on `prompt: ''` reconnects | Reconnect is called only from clicks (component test); fallback |
-| R3 | Whether the resumable upload `308` `Range` header is exposed through CORS | If it is not, the client assumes the whole chunk landed (coded); a `bytes */N` status query before finishing verifies. Manual step 1 with a large run |
-| R4 | Main-thread jank encoding a 100k-session bundle | Uploads wait for no active run; a chip moves encoding to a worker |
-| R5 | Lib file growth with huge libraries (> 10 MB gz) | Measure in the fuzz; a chip shards lib files by kind (`lib.<dev>.runs.json.gz`) |
-| R6 | The GIS script is unversioned and can change under us | It is used only through the 3-call surface typed in `gis.mts`; the fake mirrors it; manual check after deploy |
+| R1 | The GIS popup in an installed Android app | The redirect is the default there (D1); the gate (D23) tests both flows |
+| R2 | The implicit grant is discouraged and could be retired | It is used only on Android standalone and as a fallback; the popup path stays. Revisit if Google announces a retirement |
+| R3 | CORS may hide the resumable upload's `308 Range` header | The client assumes the whole chunk landed and confirms with `bytes */N`. Check manually with a large run |
+| R4 | Main-thread jank while encoding large bundles | Encoding happens only while no run is active; a chip moves it to a worker |
+| R5 | Lib file growth | Measured in the fuzz; a chip shards lib files by kind |
+| R6 | The GIS script is unversioned | Only 3 calls are used, the fake mirrors them, and the gate re-checks |
+
+---
+
+## 16. Changelog: rev 2 (PR #36 review)
+
+**Blocking:**
+
+- **B1:**
+  - entries carry `basis` and a per-key `vv`;
+  - two entries are concurrent when neither descends from the other;
+  - the winner is the edit over a delete, otherwise the higher HLC;
+  - the loser becomes a deterministic copy, made once;
+  - RECHECK re-lists and re-pulls before the lib write;
+  - the fuzz runs at remote-call granularity;
+  - the prototype has a merge model and tests for the exact race.
+- **B2:** S0 owns `update` on both backends and the `strictBackend` touch.
+- **B3:**
+  - only done runs get bundles; paused, cancelled and errored runs are stubs, and "continued
+    supersedes" is gone;
+  - `encodeRunBundleWithDigest` exposes the digest;
+  - a field-by-field `RunMeta` rebuild table.
+- **B4:**
+  - groups use whole-record LWW, never a union;
+  - definition `runIds` are sorted;
+  - `RunRow` and `listRunRows()` are added, and every `listRuns()` consumer is in S5b;
+  - Sweep reuses remote runs.
+- **B5:**
+  - `displayName` merges by `displayNameAt`;
+  - HLCs are minted from the edit time;
+  - unknown keys are preserved;
+  - `RunStub` has no name;
+  - the byte-identity and sha-reuse claims are dropped, and reuse is keyed by runId + digest.
+- **B6:**
+  - shared imported runs have no owner;
+  - the upload is skipped when the remote already has the digest;
+  - a GC keep rule.
+
+**Should-fix:**
+
+1. Auth:
+   - redirect by default on Android standalone;
+   - a timeout on `acquire`;
+   - redirect state in localStorage;
+   - the implicit-flow note;
+   - the Test sign-in gate (D23).
+2. The token is stored in localStorage, and there is no nag when nothing is pending.
+3. Per-type fingerprints that exclude `updatedAt`.
+4. Our own entries are ordered, and a strategy copy recomputes its hash.
+5. Tombstone GC uses age plus acknowledgement; a missing own lib file triggers a re-seed.
+6. Dry runs and benchmark runs are excluded.
+7. First sync and Replace wait while a run is active.
+8. Tooling:
+   - `oauth-return` is a Vite entry;
+   - the fakes are typed and live in `tests/e2e/fakes`;
+   - `*.local` is gitignored.
+9. The CSP lands in S0, and the full e2e suite runs under it.
+10. Splits and edges:
+    - S2 becomes S2a, S2b and S2c, and S5 becomes S5a and S5b;
+    - the `money` edge is removed.
+11. `sink.test.ts` and the other hard-coded store counts are in S1.
+12. Dirty marks are broadcast to the lock holder.
+
+**Nits:**
+
+- trimmed-bundle verification (§7.6);
+- GC re-upload, consistent with §7.6 and §9 (§7.9 step 5);
+- `pace` only seeds the defaults of new drafts (D15);
+- an old tab, or a rolled-back build, meeting v3 gets `VersionError`, falls back to memory, and sync
+  is disabled (§7.13).

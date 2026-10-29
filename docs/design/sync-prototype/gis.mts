@@ -1,8 +1,9 @@
 /**
  * PROTOTYPE of `src/app/services/sync/gis.ts` (sync.md §5.1): a `TokenSource` over Google Identity
  * Services' token model. The script is loaded lazily, only when the user signs in or reconnects,
- * so an offline start never waits on accounts.google.com. Tokens live in memory plus
- * sessionStorage (this tab only, cleared when it closes); localStorage keeps only the email hint.
+ * so an offline start never waits on accounts.google.com. The token and its expiry live in memory
+ * and localStorage (review should-fix 2: an app restart within the hour stays silent; the CSP is
+ * the defence), together with the email hint.
  */
 import type { AuthState, TokenSource } from './contracts-sync.mts';
 
@@ -37,14 +38,14 @@ declare global {
 
 export const DRIVE_APPDATA_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 export const GIS_SRC = 'https://accounts.google.com/gsi/client';
-const TOKEN_KEY = 'spinner:sync:token'; // sessionStorage
+const TOKEN_KEY = 'spinner:sync:token'; // localStorage { token, expiresAt, email }
 const HINT_KEY = 'spinner:sync:hint'; // localStorage: { email } only, not a secret
 /** Treat a token as expired a little early so a request never starts with seconds left. */
 const SKEW_MS = 120_000;
 
 export class AuthError extends Error {
   constructor(
-    readonly code: 'popup-blocked' | 'popup-closed' | 'denied' | 'scope' | 'script' | 'unconfigured',
+    readonly code: 'popup-blocked' | 'popup-closed' | 'denied' | 'scope' | 'script' | 'unconfigured' | 'timeout',
     message: string,
   ) {
     super(message);
@@ -108,12 +109,13 @@ export function createGisTokenSource(cfg: {
   now?: () => number;
   /** Fetches the account email after a grant (Drive `about`); the scope gives no id token. */
   whoAmI: (token: string) => Promise<string>;
+  /** No answer from the popup within this long -> AuthError 'timeout' (the app then offers the redirect). */
+  timeoutMs?: number;
 }): TokenSource {
   const now = cfg.now ?? Date.now;
   const load = cfg.load ?? (() => loadGis());
-  const session = typeof sessionStorage === 'undefined' ? undefined : sessionStorage;
   const local = typeof localStorage === 'undefined' ? undefined : localStorage;
-  let mem: Stored | null = read<Stored>(session, TOKEN_KEY);
+  let mem: Stored | null = read<Stored>(local, TOKEN_KEY);
   const hint = (): string | undefined => mem?.email ?? read<{ email: string }>(local, HINT_KEY)?.email;
   const subs = new Set<(s: AuthState) => void>();
 
@@ -141,7 +143,13 @@ export function createGisTokenSource(cfg: {
       const g = await load();
       // NOTE: `load()` resolves immediately once the script is in, so the popup still opens inside
       // the click's user activation. The first sign-in preloads the script on Account card render.
-      const resp = await new Promise<GisTokenResponse>((resolve, reject) => {
+      const resp = await new Promise<GisTokenResponse>((resolve0, reject0) => {
+        const timer = setTimeout(
+          () => reject0(new AuthError('timeout', 'Google sign-in did not answer.')),
+          cfg.timeoutMs ?? 120_000,
+        );
+        const resolve = (r: GisTokenResponse): void => (clearTimeout(timer), resolve0(r));
+        const reject = (e: unknown): void => (clearTimeout(timer), reject0(e));
         const client = g.initTokenClient({
           client_id: cfg.clientId,
           scope: DRIVE_APPDATA_SCOPE,
@@ -163,7 +171,7 @@ export function createGisTokenSource(cfg: {
       const expiresAt = now() + Number(resp.expires_in ?? 3599) * 1000;
       const email = await cfg.whoAmI(resp.access_token);
       mem = { token: resp.access_token, expiresAt, email };
-      write(session, TOKEN_KEY, mem);
+      write(local, TOKEN_KEY, mem);
       write(local, HINT_KEY, { email });
       emit();
       return resp.access_token;
@@ -171,7 +179,7 @@ export function createGisTokenSource(cfg: {
     async revoke() {
       const t = mem?.token;
       mem = null;
-      write(session, TOKEN_KEY, null);
+      write(local, TOKEN_KEY, null);
       write(local, HINT_KEY, null);
       if (t) {
         try {

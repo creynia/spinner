@@ -137,6 +137,9 @@ describe('GIS token source against a fake GIS', () => {
     await expect(blocked.acquire({ silent: true })).rejects.toMatchObject({ code: 'popup-blocked' });
     const denied = createGisTokenSource({ clientId: 'cid', load: async () => fakeGis({ error: 'access_denied' }).g, whoAmI: async () => 'x' });
     await expect(denied.acquire({ silent: false })).rejects.toMatchObject({ code: 'denied' });
+    const silentGis: GisOauth2 = { ...fakeGis({ scope: DRIVE_APPDATA_SCOPE }).g, initTokenClient: () => ({ requestAccessToken: () => undefined }) };
+    const hung = createGisTokenSource({ clientId: 'cid', load: async () => silentGis, whoAmI: async () => 'x', timeoutMs: 20 });
+    await expect(hung.acquire({ silent: true })).rejects.toMatchObject({ code: 'timeout' });
     const off = createGisTokenSource({ clientId: '', whoAmI: async () => 'x' });
     expect(off.state.state).toBe('unconfigured');
     await expect(off.acquire({ silent: false })).rejects.toMatchObject({ code: 'unconfigured' });
