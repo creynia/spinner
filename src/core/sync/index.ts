@@ -22,3 +22,8 @@ export {
   type SyncEngineDeps,
 } from './engine';
 export { createMemoryRemote, type MemoryRemoteOptions } from './memory-remote';
+export { type SyncCtx } from './ctx';
+export { downloadRun, evictRun, uploadPendingRuns } from './runs';
+export { runGc } from './gc';
+export { beginFirst, previewFirst, reseed } from './first';
+export { eraseRemote, resetLocalSyncState } from './erase';

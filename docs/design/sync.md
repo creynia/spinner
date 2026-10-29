@@ -243,6 +243,10 @@ export interface Backend { /* …existing… */
 }
 ```
 
+`fn` may await only `r.get` (IndexedDB commits when no request is pending), a nested `tx`/`update`
+inside `fn` deadlocks, and the memory backend does not model deactivation (see the JSDoc and §7.3).
+The IDB `update` rejects if the transaction commits before `fn` settles.
+
 WP-S0 owns `update` on **both** backends:
 
 - the memory implementation, in full;
@@ -271,7 +275,10 @@ export function hlcDevice(h: Hlc): DeviceId; export function hlcWall(h: Hlc): nu
 // fingerprint.ts
 export function fingerprintValue(kind: SyncKind, value: unknown): Json;          // §7.2
 export function entryOf<K extends SyncKind>(kind: K, id: string, value: SyncValueByKind[K] | null,
-  hlc: Hlc, base: SyncEntry | undefined, self: DeviceId): Promise<SyncEntry<K>>;  // basis = base?.hlc, vv = base.vv + self
+  hlc: Hlc, parent: { hlc: Hlc; seen: Record<DeviceId, number> } | undefined,
+  self: DeviceId, counter: number): Promise<SyncEntry<K>>;
+  // basis = parent?.hlc ?? null; vv = { ...(parent?.seen ?? {}), [self]: counter }, counter = a fresh vvCounter
+  // value the caller consumed (§7.4: syncIndex.seen + { self: ++vvCounter }; never base.entry.vv)
 export function verifyEntry(e: SyncEntry): Promise<'ok'|'bad-hash'|'bad-id'|'unknown-kind'|'newer'>;
 export const SUPPORTED_V: Record<SyncKind, number>;
 // vv.ts
@@ -283,7 +290,9 @@ export interface Folded { winner: SyncEntry; losers: SyncEntry[]; seen: Record<D
 export function foldEntries(all: readonly SyncEntry[], deletedRuns: ReadonlySet<string>): Folded;
 export function equivalent(a: SyncEntry, b: SyncEntry): boolean;                 // same hash and deleted flag
 export function joinDef(maximal: readonly SyncEntry<'def'>[], deletedRuns: ReadonlySet<string>): SyncEntry<'def'>;
-export function copyOf(loser: SyncEntry, deviceName: string, taken: ReadonlySet<string>): Promise<SyncEntry | null>;
+export function copyOf(loser: SyncEntry, taken: ReadonlySet<string>,
+  mint: { hlc: Hlc; self: DeviceId; counter: number }): Promise<SyncEntry | null>;
+  // the copy: hlc = mint.hlc, basis = null, vv = { [self]: counter }; id and name are a pure function of loser.hash
 export type Resolution = { do: 'skip-older' } | { do: 'apply'; entry: SyncEntry } | { do: 'keep-local' }
   | { do: 'join'; entry: SyncEntry } | { do: 'opaque'; reason: string };
 /** foldEntries over remote ∪ {base} ∪ {local candidate}, mapped to an action; losers → copies. */
@@ -303,7 +312,8 @@ export interface SyncEngineDeps { backend: TrackedBackend; remote: RemoteStore; 
 export interface SyncEngine {
   preview(): Promise<FirstSyncPreview>; begin(c: 'merge' | 'replace'): Promise<CycleResult>;
   cycle(o?: { uploadRuns?: boolean; timeBudgetMs?: number }): Promise<CycleResult>;
-  downloadRun(runId, o?): Promise<'ok' | 'missing' | 'corrupt'>; remoteRuns(): Promise<RunStub[]>;
+  downloadRun(runId, o?): Promise<'ok' | 'missing' | 'corrupt'>; listRemoteRuns(): Promise<RunStub[]>;
+  devices(): Promise<SyncDeviceInfo[]>; downloadAllRemote(o?): Promise<{ done: number; skipped: number }>;
   evict(runId): Promise<void>; eraseRemote(): Promise<void>; resetLocalSyncState(): Promise<void> }
 export function createSyncEngine(d: SyncEngineDeps): SyncEngine;
 export function createMemoryRemote(o?: { fault?: (op: string, name?: string) => RemoteError | undefined;
@@ -541,11 +551,20 @@ PULL+APPLY(files):
                     | keep-local (syncIndex ← remote, so the next push descends from it; the mark stays)
                     | join (def: write the joined record; syncIndex ← joined entry; the mark stays if local ≠ joined)
                     | opaque (syncIndex ← entry, local 0; never dropped)
-        for l in losers: c ← copyOf(l, deviceNameOf(l), taken)  (null when the copy id is in
+        for l in losers: c ← copyOf(l, taken, { hlc, self, counter: ++vvCounter })  (null when the copy id is in
               syncMeta.copies or syncIndex, live or tombstone) ; write c's record + a syncDirty mark ; notice
      })
   seen[f.id] ← f.version for fully applied files
 ```
+
+**`raw.update` constraint (S2b, rev 3.2).** Inside `raw.update(stores, fn)`, `fn` may await only
+`r.get`. IndexedDB commits a transaction as soon as no request is pending, so `crypto.subtle`
+hashing, `await entryOf(...)` or `await copyOf(...)` inside `fn` lets the transaction commit early;
+the IDB backend then rejects ("transaction committed before update fn settled"). The engine
+therefore **computes the candidate entry, the fold and every copy (including their hashes) before
+`raw.update`** and keeps only reads, comparisons and queued writes inside it. A nested `tx` or
+`update` inside `fn` deadlocks. The memory backend does not model this deactivation, so S2b's tests
+run against fake-indexeddb as well.
 
 **First sync** (`begin`) **waits until no run is active**, in state `waiting-run` ("Waiting for the
 run to finish"). Then:
@@ -1298,7 +1317,8 @@ Google.
 - **Owns:**
   - `src/core/contracts/sync.ts`; additive `synced?` in `run.ts`; appended cases in
     `contracts.test.ts`;
-  - the `src/core/sync/*.ts` stubs (§4.4);
+  - the `src/core/sync/*.ts` stubs (§4.4), `ctx.ts` (`SyncCtx`, the S2b/S2c seam) and the S2c stubs
+    `runs.ts`, `gc.ts`, `first.ts`, `erase.ts`;
   - `src/app/services/sync/{index,config}.ts`, as an inert stub;
   - `build/vite-plugin-csp.ts`;
   - in `src/core/store/backend.ts`, **only** `TxReader` and `update` on **both** backends: the IDB
@@ -1392,7 +1412,8 @@ Google.
 ### WP-S2b Engine core (wave 3: needs S1 and S2a)
 
 - **Owns:** `src/core/sync/{engine,apply,push,memory-remote}.ts` and their tests, including
-  `engine.fuzz.test.ts`. The scope:
+  `engine.fuzz.test.ts`. S2b builds the `SyncCtx` (`ctx.ts`, frozen by S0) and calls the S2c
+  functions through it; it does not touch `runs/gc/first/erase.ts`. The scope:
   - `cycle`, PULL+APPLY, SNAPSHOT, RECHECK, push and commit;
   - the memory remote's `hook` and `fault`;
   - status and progress.
@@ -1409,7 +1430,10 @@ Google.
 
 ### WP-S2c Runs, GC, erase, first sync (wave 3, after S2b; S2b's fuzz harness exists)
 
-- **Owns:** `src/core/sync/{runs,gc,first,erase}.ts` and their tests.
+- **Owns:** `src/core/sync/{runs,gc,first,erase}.ts` and their tests. The frozen S0 stubs
+  (`uploadPendingRuns`, `downloadRun`, `evictRun`, `runGc`, `previewFirst`, `beginFirst`, `reseed`,
+  `eraseRemote`, `resetLocalSyncState`, each taking a `SyncCtx`) are its signatures; S2b's
+  `engine.ts` delegates to them.
 - **Batons:** `src/core/store/sink.ts`, only if `writeCompacted` needs an option;
   `src/core/store/bundle.ts`, only if decode must expose `trimmed`.
 - **Acceptance:** the §11.1 runs, GC, re-seed, erase and first-sync tests, with the fuzz extended to

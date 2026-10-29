@@ -89,6 +89,17 @@ export interface Backend {
    * One readwrite transaction with an atomic read-modify-write (sync.md §4.2, review B2): `fn` may
    * await only `r.get` on this transaction, then queue writes on `w`. Reads see the writes queued
    * so far. All or nothing: if `fn` rejects, nothing is written and `update` rejects with it.
+   *
+   * Rules for `fn`:
+   * - **No awaits on anything but `r.get`.** IndexedDB commits a transaction as soon as it has no
+   *   pending request, so a timer, a fetch, `crypto.subtle` (hashing) or any other async work
+   *   inside `fn` lets it commit early. The IDB backend then rejects with "transaction committed
+   *   before update fn settled"; compute candidates, hashes and copies **before** calling `update`.
+   * - **No nested `tx` or `update` on the same backend from inside `fn`.** It would wait for this
+   *   transaction while this one waits for it: a deadlock.
+   * - The memory backend does not model transaction deactivation: it serialises updates with a
+   *   lock but lets `fn` await anything. Code that is only tested on memory can still break on
+   *   IDB, so every `update` test also runs against fake-indexeddb.
    */
   update(stores: StoreName[], fn: (r: TxReader, w: TxOps) => Promise<void>): Promise<void>;
 }
@@ -389,13 +400,14 @@ export function createIdbBackend(db: IDBDatabase): Backend {
           reject(asError(e));
           return;
         }
-        t.oncomplete = () => resolve();
-        t.onabort = () =>
-          reject(asError(t.error ?? new DOMException('transaction aborted', 'AbortError')));
-        t.onerror = () => {
-          // the abort handler reports it
-        };
+        // Resolve only when the transaction has completed AND `fn` has settled. A transaction
+        // that commits while `fn` is still awaiting something that is not an IDB request would
+        // otherwise resolve here while later writes are lost (or throw into nobody's hands).
+        let fnDone = false;
+        let failed = false;
         const fail = (e: unknown): void => {
+          if (failed) return;
+          failed = true;
           try {
             t.abort();
           } catch {
@@ -403,21 +415,50 @@ export function createIdbBackend(db: IDBDatabase): Backend {
           }
           reject(asError(e));
         };
+        t.oncomplete = () => {
+          if (failed) return;
+          if (fnDone) resolve();
+          else {
+            failed = true;
+            reject(
+              new Error(
+                'transaction committed before update fn settled; compute async work (hashes) before update',
+              ),
+            );
+          }
+        };
+        t.onabort = () => {
+          if (failed) return;
+          failed = true;
+          reject(asError(t.error ?? new DOMException('transaction aborted', 'AbortError')));
+        };
+        t.onerror = () => {
+          // the abort handler reports it
+        };
+        const reader: TxReader = {
+          get: (store, key) => wrap(t.objectStore(store).get(key)) as Promise<never>,
+        };
+        const ops: TxOps = {
+          put: (store, value) => {
+            t.objectStore(store).put(value);
+          },
+          delete: (store, key) => {
+            t.objectStore(store).delete(key);
+          },
+        };
+        let running: Promise<void>;
         try {
-          fn(
-            { get: (store, key) => wrap(t.objectStore(store).get(key)) as Promise<never> },
-            {
-              put: (store, value) => {
-                t.objectStore(store).put(value);
-              },
-              delete: (store, key) => {
-                t.objectStore(store).delete(key);
-              },
-            },
-          ).catch(fail);
+          running = fn(reader, ops);
         } catch (e) {
           fail(e);
+          return;
         }
+        running.then(
+          () => {
+            fnDone = true;
+          },
+          (e: unknown) => fail(e),
+        );
       });
     },
   };

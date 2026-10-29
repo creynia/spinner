@@ -7,6 +7,7 @@ import type {
   FirstSyncPreview,
   RemoteStore,
   RunStub,
+  SyncDeviceInfo,
   SyncKey,
   SyncProgress,
 } from '../contracts/sync';
@@ -44,9 +45,18 @@ export interface SyncEngineDeps {
 export interface SyncEngine {
   preview(): Promise<FirstSyncPreview>;
   begin(choice: 'merge' | 'replace'): Promise<CycleResult>;
+  /**
+   * One sync cycle. Never returns `busy`: the app service wraps this in the Web Lock
+   * `spinner:sync` and synthesises `busy` itself.
+   */
   cycle(o?: { uploadRuns?: boolean; timeBudgetMs?: number }): Promise<CycleResult>;
   downloadRun(runId: string, o?: DownloadRunOptions): Promise<'ok' | 'missing' | 'corrupt'>;
-  remoteRuns(): Promise<RunStub[]>;
+  /** Run stubs on the remote (newest first), for lists and pickers. */
+  listRemoteRuns(): Promise<RunStub[]>;
+  /** Devices that have written a lib file. */
+  devices(): Promise<SyncDeviceInfo[]>;
+  /** Download every remote-only run (the "Download all" button); `skipped` = already local. */
+  downloadAllRemote(o?: DownloadRunOptions): Promise<{ done: number; skipped: number }>;
   evict(runId: string): Promise<void>;
   eraseRemote(): Promise<void>;
   resetLocalSyncState(): Promise<void>;

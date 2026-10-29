@@ -1,6 +1,6 @@
 // Order-independent merge of sync entries (sync.md §7.4, §7.5). STUB from WP-S0; WP-S2a writes
 // the bodies.
-import type { DeviceId, SyncEntry, SyncIndexRecord } from '../contracts/sync';
+import type { DeviceId, Hlc, SyncEntry, SyncIndexRecord } from '../contracts/sync';
 import { notImplemented, notImplementedAsync } from './stub';
 
 export interface Folded {
@@ -27,13 +27,16 @@ export function joinDef(
 }
 
 /**
- * A pure function of the loser's fingerprint: id and name `"<name> (conflict <hex6>)"` are
- * identical across devices (S-A). `null` when the copy id is already taken.
+ * The copy of a losing entry. Its id and name `"<name> (conflict <hex6>)"` are a pure function of
+ * the loser's fingerprint, identical across devices (S-A). The copy is a fresh entry minted by
+ * this device: `hlc = mint.hlc`, `basis = null`, `vv = { [mint.self]: mint.counter }` where
+ * `counter` is a fresh `vvCounter` value the caller consumed. `null` when the copy id is in
+ * `taken` (live or tombstoned).
  */
 export function copyOf(
   _loser: SyncEntry,
-  _deviceName: string,
   _taken: ReadonlySet<string>,
+  _mint: { hlc: Hlc; self: DeviceId; counter: number },
 ): Promise<SyncEntry | null> {
   return notImplementedAsync('S2a', 'copyOf');
 }

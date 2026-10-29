@@ -3,6 +3,7 @@ import { RESERVED_STOP_REASONS, STRATEGY_SCHEMA } from './strategy';
 import { DEFINITION_SCHEMA, SHARE_LINK_MAX_CHARS } from './experiment';
 import { ENDED_BY, ENDED_BY_STRATEGY_BASE, MAX_ROUNDS, MAX_SESSIONS, type RunMeta } from './run';
 import {
+  DEVICE_ID_PATTERN,
   HLC_PATTERN,
   RemoteError,
   RESUMABLE_CHUNK,
@@ -14,7 +15,10 @@ import {
   type AuthState,
   type LibFileV1,
   type RunStub,
+  type SyncAccountRecord,
   type SyncEntry,
+  type SyncErrorCode,
+  type SyncMetaRecord,
   type SyncState,
 } from './sync';
 import { SIM_PROTOCOL } from './protocol';
@@ -176,6 +180,21 @@ describe('sync contract (sync.md §4.1)', () => {
       'waiting-run',
     ];
     expect([lib.entries.length, auth.length, states.length]).toEqual([1, 5, 10]);
+  });
+  it('matches device ids', () => {
+    expect(DEVICE_ID_PATTERN.test('7k2m9qxd4a')).toBe(true);
+    expect(DEVICE_ID_PATTERN.test('7k2m9qxd4u')).toBe(false);
+    expect(DEVICE_ID_PATTERN.test('7k2m9qxd4')).toBe(false);
+  });
+  it('types syncMeta rows by key', () => {
+    const account: SyncAccountRecord = { accountId: 'a', email: 'a@b.c', boundAt: 'x' };
+    const rows: SyncMetaRecord[] = [
+      { k: 'account', v: account },
+      { k: 'vvCounter', v: 3 },
+      { k: 'files', v: { ownLib: { id: 'f' } } },
+    ];
+    const codes: SyncErrorCode[] = ['newer-layout', 'access-removed', 'account-mismatch', 'erased'];
+    expect([rows.length, codes.length]).toEqual([3, 4]);
   });
   it('adds RunMeta.synced additively', () => {
     const synced: NonNullable<RunMeta['synced']> = {

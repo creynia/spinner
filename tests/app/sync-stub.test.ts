@@ -15,6 +15,9 @@ describe('sync service stub', () => {
     expect(svc.conflictNotices.get()).toEqual([]);
     expect(svc.syncPrefs.get().enabled).toBe(false);
     expect(svc.firstSyncPrompt.get()).toBeNull();
+    expect(svc.accountSwitchPrompt.get()).toBeNull();
+    expect(svc.syncDevices.get()).toEqual([]);
+    expect(svc.syncAbout.get()).toBeNull();
   });
   it('every action resolves and changes nothing', async () => {
     await svc.signIn();
@@ -26,6 +29,9 @@ describe('sync service stub', () => {
     await svc.setPrefs({ enabled: true });
     await svc.evictRun('r');
     svc.markConflictsRead();
+    await svc.chooseAccountSwitch('cancel');
+    svc.expireTokenForTest();
+    expect(await svc.downloadAllRemote()).toEqual({ done: 0, skipped: 0 });
     expect(await svc.remoteRun('r')).toBeNull();
     expect(await svc.downloadRun('r')).toBe('missing');
     expect(svc.syncStatus.get().state).toBe('off');

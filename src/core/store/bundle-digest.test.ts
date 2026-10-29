@@ -1,4 +1,5 @@
 // encodeRunBundleWithDigest: a thin wrapper over encodeRunBundle (sync.md §4.1).
+import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { makeRun } from './__fixtures__/synth';
@@ -26,5 +27,17 @@ describe('encodeRunBundleWithDigest', () => {
     };
     expect(d).toBe(bundle.meta.resultsDigest);
     expect(d).toBe(run.meta.resultsDigest ?? (await resultsDigest(run)));
+  });
+});
+
+describe('encodeRunBundle bytes are pinned', () => {
+  // Computed from origin/main's encoder before the WithDigest refactor: the sync swarm must not
+  // change a single byte of the run bundle format.
+  it('gzip-off bytes of the synthetic run', async () => {
+    const b = await encodeRunBundle(run, { gzip: false });
+    expect(b.length).toBe(37659);
+    expect(createHash('sha256').update(b).digest('hex')).toBe(
+      '6be79bda3f9682c7f12488ed07130ce5a62f710febfb069a75a743873f4ef9b8',
+    );
   });
 });

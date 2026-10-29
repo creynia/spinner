@@ -6,6 +6,8 @@ import type {
   ConflictNotice,
   FirstSyncPreview,
   RunStub,
+  SyncAbout,
+  SyncDeviceInfo,
   SyncDevicePrefs,
   SyncStatus,
 } from '@core';
@@ -28,6 +30,16 @@ export const syncPrefs: Store<SyncDevicePrefs> = createStore<SyncDevicePrefs>({
 export const firstSyncPrompt: Store<FirstSyncPreview | null> = createStore<FirstSyncPreview | null>(
   null,
 );
+
+/** Devices that have written a lib file (Account card). */
+export const syncDevices: Store<SyncDeviceInfo[]> = createStore<SyncDeviceInfo[]>([]);
+/** The Drive account and storage, plus this device's bytes; null until known. */
+export const syncAbout: Store<SyncAbout | null> = createStore<SyncAbout | null>(null);
+/** Non-null while the "this Drive belongs to another account" sheet is due (§7.10). */
+export const accountSwitchPrompt: Store<{ from: string; to: string } | null> = createStore<{
+  from: string;
+  to: string;
+} | null>(null);
 
 /** Click handlers only (a popup needs a user gesture). */
 export function signIn(): Promise<void> {
@@ -70,4 +82,18 @@ export function markConflictsRead(): void {
 /** The D23 gate: sign in with Google and list the appDataFolder (WP-S3 implements). */
 export function testSignIn(): Promise<{ email: string; files: number }> {
   return Promise.reject(new Error('not implemented (WP-S3): testSignIn'));
+}
+export function chooseAccountSwitch(_choice: 'sync' | 'cancel'): Promise<void> {
+  return Promise.resolve();
+}
+/** Download every remote-only run; `skipped` counts those already on this device. */
+export function downloadAllRemote(
+  _onProgress?: (doneBytes: number, totalBytes: number) => void,
+  _signal?: AbortSignal,
+): Promise<{ done: number; skipped: number }> {
+  return Promise.resolve({ done: 0, skipped: 0 });
+}
+/** Test hook (WP-S3 makes it real): make the stored token look expired. */
+export function expireTokenForTest(): void {
+  // inert until WP-S3
 }

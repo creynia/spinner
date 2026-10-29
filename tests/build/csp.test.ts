@@ -46,17 +46,21 @@ describe.skipIf(!hasDist)('dist HTML entries', () => {
   it('has at least index.html', () => {
     expect(pages).toContain('index.html');
   });
-  it.each(pages)('%s has the meta CSP first in <head> and no inline script', (page) => {
-    const html = readFileSync(new URL(`dist/${page}`, root), 'utf8');
-    const meta = /<meta http-equiv="Content-Security-Policy" content="([^"]*)"\s*\/?>/.exec(html);
-    expect(meta?.[1]?.replaceAll('&#39;', "'")).toBe(CSP);
-    // the charset declaration must stay inside the first 1024 bytes
-    expect(html.indexOf('charset')).toBeLessThan(1024);
-    const before = html.slice(0, html.indexOf(meta![0]));
-    expect(before).not.toMatch(/<script|<link|<style/);
-    const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].filter(
-      (m) => m[1]!.trim() !== '',
-    );
-    expect(inline).toEqual([]);
-  });
+  it.each(pages)(
+    '%s has the meta CSP right after charset, before any script, and no inline script',
+    (page) => {
+      const html = readFileSync(new URL(`dist/${page}`, root), 'utf8');
+      const meta = /<meta http-equiv="Content-Security-Policy" content="([^"]*)"\s*\/?>/.exec(html);
+      expect(meta?.[1]?.replaceAll('&#39;', "'")).toBe(CSP);
+      // the charset declaration stays first, inside the first 1024 bytes, and the CSP follows it
+      expect(html.indexOf('charset')).toBeLessThan(512);
+      expect(html.indexOf(meta![0])).toBeGreaterThan(html.indexOf('charset'));
+      const before = html.slice(0, html.indexOf(meta![0]));
+      expect(before).not.toMatch(/<script|<link|<style/);
+      const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].filter(
+        (m) => m[1]!.trim() !== '',
+      );
+      expect(inline).toEqual([]);
+    },
+  );
 });

@@ -8,14 +8,19 @@ export function fingerprintValue(_kind: SyncKind, _value: unknown): Json {
   return notImplemented('S2a', 'fingerprintValue');
 }
 
-/** basis = base?.hlc, vv = base.vv + self (a fresh `vvCounter` value is the caller's to pass in). */
+/**
+ * Build an entry. `parent` is what the edit descends from (`syncIndex[key]`: its entry's `hlc` and
+ * its `seen` join); `counter` is a fresh `syncMeta.vvCounter` value the caller consumed (sync.md
+ * §7.4, N1). `basis = parent?.hlc ?? null`; `vv = { ...(parent?.seen ?? {}), [self]: counter }`.
+ */
 export function entryOf<K extends SyncKind>(
   _kind: K,
   _id: string,
   _value: SyncValueByKind[K] | null,
   _hlc: Hlc,
-  _base: SyncEntry | undefined,
+  _parent: { hlc: Hlc; seen: Record<DeviceId, number> } | undefined,
   _self: DeviceId,
+  _counter: number,
 ): Promise<SyncEntry<K>> {
   return notImplementedAsync('S2a', 'entryOf');
 }

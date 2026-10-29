@@ -6,7 +6,8 @@ import * as sync from './index';
 
 const entry = {} as SyncEntry;
 const hlc = '0mh3k2z1c.0000.7k2m9qxd4a';
-const WP = /^not implemented \(WP-(S2a|S2b)\): /;
+const ctx = {} as sync.SyncCtx;
+const WP = /^not implemented \(WP-(S2a|S2b|S2c)\): /;
 
 const syncStubs: [string, string, () => unknown][] = [
   ['createClock', 'S2a', () => sync.createClock('7k2m9qxd4a', () => 0)],
@@ -31,9 +32,22 @@ const syncStubs: [string, string, () => unknown][] = [
 ];
 
 const asyncStubs: [string, string, () => Promise<unknown>][] = [
-  ['entryOf', 'S2a', () => sync.entryOf('setting', 'framing', null, hlc, undefined, '7k2m9qxd4a')],
+  [
+    'entryOf',
+    'S2a',
+    () => sync.entryOf('setting', 'framing', null, hlc, undefined, '7k2m9qxd4a', 1),
+  ],
   ['verifyEntry', 'S2a', () => sync.verifyEntry(entry)],
-  ['copyOf', 'S2a', () => sync.copyOf(entry, 'Laptop', new Set())],
+  ['copyOf', 'S2a', () => sync.copyOf(entry, new Set(), { hlc, self: '7k2m9qxd4a', counter: 1 })],
+  ['uploadPendingRuns', 'S2c', () => sync.uploadPendingRuns(ctx, 0)],
+  ['downloadRun', 'S2c', () => sync.downloadRun(ctx, 'r')],
+  ['evictRun', 'S2c', () => sync.evictRun(ctx, 'r')],
+  ['runGc', 'S2c', () => sync.runGc(ctx)],
+  ['previewFirst', 'S2c', () => sync.previewFirst(ctx)],
+  ['beginFirst', 'S2c', () => sync.beginFirst(ctx, 'merge')],
+  ['reseed', 'S2c', () => sync.reseed(ctx)],
+  ['eraseRemote', 'S2c', () => sync.eraseRemote(ctx)],
+  ['resetLocalSyncState', 'S2c', () => sync.resetLocalSyncState(ctx)],
   ['encodeLib', 'S2a', () => sync.encodeLib({} as never)],
   ['decodeLib', 'S2a', () => sync.decodeLib(new Uint8Array())],
 ];

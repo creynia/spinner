@@ -138,3 +138,33 @@ describe('Backend.update: memory only', () => {
     expect(await b.get('settings', 'v')).toEqual({ key: 'v', value: 5 }); // tx ran after update
   });
 });
+
+describe('Backend.update: IndexedDB fn must settle inside the transaction', () => {
+  it('rejects when fn awaits a timer and then puts (the transaction already committed)', async () => {
+    const b = await idbBackend();
+    await expect(
+      b.update(['settings'], async (_r, w) => {
+        await new Promise((res) => setTimeout(res, 20));
+        w.put('settings', { key: 'late', value: 1 });
+      }),
+    ).rejects.toThrow('transaction committed before update fn settled');
+    expect(await b.get('settings', 'late')).toBeUndefined();
+  });
+  it('rejects with the error of fn, not a commit error, when fn throws after a read', async () => {
+    const b = await idbBackend();
+    await expect(
+      b.update(['settings'], async (r) => {
+        await r.get('settings', 'x');
+        throw new Error('mine');
+      }),
+    ).rejects.toThrow('mine');
+  });
+  it('does not resolve before fn has queued its writes after several reads', async () => {
+    const b = await idbBackend();
+    await b.update(['settings'], async (r, w) => {
+      for (let i = 0; i < 5; i++) await r.get('settings', `k${i}`);
+      w.put('settings', { key: 'end', value: 1 });
+    });
+    expect(await b.get('settings', 'end')).toEqual({ key: 'end', value: 1 });
+  });
+});

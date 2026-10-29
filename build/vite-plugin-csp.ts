@@ -20,8 +20,9 @@ export const CSP = [
 ].join('; ');
 
 /**
- * Injects the CSP as a `<meta http-equiv>` at the top of `<head>` of every HTML entry in a
- * production build (a policy only covers what follows it). The dev server is left alone: HMR needs
+ * Injects the CSP as a `<meta http-equiv>` right after the charset meta of every HTML entry in a
+ * production build (a policy only covers what follows it, and the charset must stay in the first
+ * 1024 bytes). The dev server is left alone: HMR needs
  * inline scripts and a websocket.
  */
 export function cspPlugin(): Plugin {
@@ -31,15 +32,19 @@ export function cspPlugin(): Plugin {
     configResolved(config) {
       command = config.command;
     },
-    transformIndexHtml() {
-      if (command === 'serve') return [];
-      return [
-        {
-          tag: 'meta',
-          attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP },
-          injectTo: 'head-prepend',
-        },
-      ];
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        if (command === 'serve') return html;
+        const meta = `<meta http-equiv="Content-Security-Policy" content="${CSP}" />`;
+        // Right after the charset declaration, which must stay inside the first 1024 bytes.
+        const charset = /<meta\s+charset=[^>]*>/i.exec(html);
+        if (charset) {
+          const at = charset.index + charset[0].length;
+          return `${html.slice(0, at)}\n    ${meta}${html.slice(at)}`;
+        }
+        return html.replace(/<head[^>]*>/i, (h) => `${h}\n    ${meta}`);
+      },
     },
   };
 }

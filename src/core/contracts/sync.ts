@@ -10,7 +10,8 @@ import type { RunStatus } from './run';
 // ------------------------------------------------------------------ identity and ordering
 
 /** Random per browser profile (an installed PWA shares it with the Chrome tab: same origin). */
-export type DeviceId = string; // /^[0-9a-hjkmnp-tv-z]{10}$/ (Crockford base32, 50 bits)
+export type DeviceId = string; // DEVICE_ID_PATTERN (Crockford base32, 50 bits)
+export const DEVICE_ID_PATTERN = /^[0-9a-hjkmnp-tv-z]{10}$/;
 
 /**
  * Hybrid logical clock, encoded so that string order is causal order:
@@ -212,7 +213,7 @@ export interface TransferProgress {
 export interface RemoteStore {
   readonly kind: 'drive' | 'memory';
   /** Every file in the folder (all pages). */
-  list(): Promise<RemoteFile[]>;
+  list(opts?: { signal?: AbortSignal }): Promise<RemoteFile[]>;
   download(
     fileId: string,
     opts?: { onProgress?: TransferProgress; signal?: AbortSignal },
@@ -234,7 +235,7 @@ export interface RemoteStore {
   ): Promise<RemoteFile>;
   /** Replace a file's content (same id). Atomic: readers see the old or the new content. */
   update(fileId: string, bytes: Uint8Array, opts?: { signal?: AbortSignal }): Promise<RemoteFile>;
-  delete(fileId: string): Promise<void>;
+  delete(fileId: string, opts?: { signal?: AbortSignal }): Promise<void>;
   /** Account and storage, for the Account card. */
   about(): Promise<RemoteAbout>;
 }
@@ -296,6 +297,17 @@ export type SyncState =
   | 'local-full' // IndexedDB quota while applying
   | 'waiting-run'; // first sync waits for the active run to finish (sync.md §7.3)
 
+/** Why the sync is in `error` (or why a cycle failed); the UI picks its copy from this. */
+export type SyncErrorCode =
+  | 'newer-layout'
+  | 'access-removed'
+  | 'account-mismatch'
+  | 'erased'
+  | 'network'
+  | 'quota'
+  | 'auth'
+  | 'unknown';
+
 export interface SyncStatus {
   state: SyncState;
   email?: string;
@@ -306,7 +318,11 @@ export interface SyncStatus {
   remoteOnly: { runs: number; bytes: number };
   progress?: { phase: SyncPhase; done: number; total: number; bytes?: number };
   retryAt?: number;
-  error?: { code: string; message: string };
+  error?: { code: SyncErrorCode; message: string };
+  /** Why `off` although the user may want sync: this build has no persistent store. */
+  disabledReason?: 'memory-backend';
+  /** Name of a device whose clock is far from ours (HLC skew warning). */
+  clockSkewDevice?: string;
   /** Unread conflict notices (sync.md §6.4). */
   conflicts: number;
 }
@@ -362,14 +378,20 @@ export interface FirstSyncPreview {
 
 /** How one `cycle()` or `begin()` ended. */
 export interface CycleResult {
+  /**
+   * `busy` is not produced by the engine: the app service (S5a) wraps `cycle` in the Web Lock
+   * `spinner:sync` (ifAvailable) and synthesises `busy` when another tab holds it.
+   */
   outcome: 'ok' | 'busy' | 'needs-auth' | 'waiting-run' | 'offline' | 'error' | 'off' | 'timeout';
   /** Requests made to the remote (a no-change cycle makes exactly 1). */
   requests: number;
   pushed: number;
   applied: number;
   copies: number;
+  /** Kinds of local records this cycle changed (screens refresh from it). */
+  changed: SyncKind[];
   /** Set when `outcome` is `error` (or another non-ok outcome that has a cause). */
-  error?: { code: string; message: string };
+  error?: { code: SyncErrorCode; message: string };
 }
 
 // ------------------------------------------------------------------ local sync records (S1)
@@ -395,8 +417,79 @@ export interface SyncDirtyRecord {
   n: string;
 }
 
-/** `syncMeta` record: a key/value row (device, prefs, account, clock, seen, files, vvCounter, ...). */
-export interface SyncMetaRecord {
-  k: string;
-  v: unknown;
+/** The `syncMeta` keys (sync.md §4.2). */
+export type SyncMetaKey =
+  | 'device'
+  | 'prefs'
+  | 'account'
+  | 'clock'
+  | 'seen'
+  | 'files'
+  | 'uploads'
+  | 'last'
+  | 'conflicts'
+  | 'gcAt'
+  | 'libSha'
+  | 'copies'
+  | 'vvCounter';
+
+/** This device's account binding (sync.md §7.10). */
+export interface SyncAccountRecord {
+  accountId: string;
+  email: string;
+  boundAt: string;
+}
+
+/** A remote file this device knows by id (taken from `syncMeta`, not from a listing). */
+export interface SyncFileRef {
+  id: string;
+  version?: string;
+}
+
+/** The value of each `syncMeta` key. */
+export interface SyncMetaValues {
+  /** Random per browser profile; a new id starts a new vv component. */
+  device: { id: DeviceId; createdAt: string };
+  prefs: SyncDevicePrefs;
+  account: SyncAccountRecord;
+  /** Last HLC this device minted or received. */
+  clock: Hlc;
+  /** Remote file id -> `version` fully applied. */
+  seen: Record<string, string>;
+  files: { root?: SyncFileRef; ownLib?: SyncFileRef };
+  /** Resumable upload `resumeKey` -> session URI. */
+  uploads: Record<string, string>;
+  /** ISO time of the last successful cycle. */
+  last: string;
+  /** At most 50, newest last. */
+  conflicts: ConflictNotice[];
+  /** Epoch ms of the last GC. */
+  gcAt: number;
+  /** sha256 of the lib bytes last uploaded (skips a no-change upload). */
+  libSha: string;
+  /** Copy ids this device has made (live or tombstoned): never copy a copy twice. */
+  copies: string[];
+  /** Monotone, never reset by any reset path (N1). */
+  vvCounter: number;
+}
+
+/** `syncMeta` record: a typed key/value row. */
+export type SyncMetaRecord<K extends SyncMetaKey = SyncMetaKey> = {
+  [P in K]: { k: P; v: SyncMetaValues[P] };
+}[K];
+
+// ------------------------------------------------------------------ UI-facing shapes
+
+/** One device that has written a lib file (Settings -> Account, "Your devices"). */
+export interface SyncDeviceInfo {
+  id: DeviceId;
+  name: string;
+  lastSyncedAt: string;
+  appVersion: string;
+}
+
+/** The Account card's storage line: the Drive account plus what this device holds. */
+export interface SyncAbout extends RemoteAbout {
+  /** Bytes of synced data on this device. */
+  deviceBytes: number;
 }
