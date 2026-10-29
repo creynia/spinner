@@ -95,4 +95,10 @@ export function downloadAllRemote(
 }
 
 // WP-S3: the D23 gate (sign in, about, list) and its test hooks are real.
-export { testSignIn, resumeTestSignIn, endTestSignIn, expireTokenForTest } from './test-signin';
+export {
+  testSignIn,
+  resumeTestSignIn,
+  endTestSignIn,
+  preloadSignIn,
+  expireTokenForTest,
+} from './test-signin';

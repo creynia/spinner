@@ -21,7 +21,7 @@
   color: #ffffff;
   opacity: 0.85;
 }
-.sync-ind-top + .running-chip {
+.sync-ind-top ~ .running-chip {
   margin-left: 0;
 }
 .sync-ind-top.attention {

@@ -6,7 +6,9 @@
 // now", exercises the real Reconnect path: a silent re-acquire with the stored email hint. Sign out
 // (WP-S5a's `signOut`, or `endTestSignIn()` here) revokes the grant.
 import { createDriveStore } from './drive';
+import { GOOGLE_CLIENT_ID } from './config';
 import { getAuth } from './flow';
+import { loadGis } from './gis';
 
 /** Set while a redirect round trip for the gate is under way (survives the page leaving). */
 const GATE_KEY = 'spinner:sync:gate';
@@ -71,6 +73,21 @@ export async function resumeTestSignIn(): Promise<TestSignInResult | null> {
   if (!flag.get() || !getAuth().source.current()) return null;
   flag.set(false);
   return check();
+}
+
+/**
+ * Loads the GIS script ahead of the tap, so the popup opens inside the click's user activation.
+ * Failures are ignored here (the tap reports them). Without `eager` it loads only when sign-in is
+ * already in play (a token, an email hint or a gate redirect in flight), so opening Settings
+ * doesn't contact Google for people who never use sync; the card calls it with `eager` when the
+ * pointer or focus reaches the test block. Never while offline.
+ */
+export function preloadSignIn(opts: { eager?: boolean } = {}): void {
+  if (!GOOGLE_CLIENT_ID) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  const s = getAuth().source.state.state;
+  if (!opts.eager && !flag.get() && s !== 'signed-in' && s !== 'expired') return;
+  loadGis().catch(() => undefined);
 }
 
 /** Revokes the grant at Google and forgets the session (the gate's clean-up). */

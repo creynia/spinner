@@ -51,6 +51,29 @@ function toFile(j: DriveFileJson): RemoteFile {
   };
 }
 
+const GOOGLE_ORIGIN = 'https://www.googleapis.com';
+const MAX_RETRY_AFTER_MS = 3_600_000;
+/** A 308 must move the offset forward; chunks are 256 KiB multiples, so this bounds the loop. */
+const MIN_STEP = 256 * 1024;
+
+/**
+ * F1: the bearer token only ever goes to Drive's own API. A resumable session URI comes from a
+ * response header (and from storage), so it is checked before use and before it is persisted.
+ */
+export function assertDriveUrl(uri: string): void {
+  let u: URL;
+  try {
+    u = new URL(uri);
+  } catch {
+    throw new RemoteError('bad-response', 0, 'invalid Drive URL');
+  }
+  if (
+    u.origin !== GOOGLE_ORIGIN ||
+    !(u.pathname.startsWith('/upload/drive/v3/') || u.pathname.startsWith('/drive/v3/'))
+  )
+    throw new RemoteError('bad-response', 0, 'refusing to send credentials to an unexpected URL');
+}
+
 /** Maps an HTTP failure to a `RemoteError` (sync.md §9). */
 export async function errorOf(res: Response): Promise<RemoteError> {
   let reason = '';
@@ -65,7 +88,7 @@ export async function errorOf(res: Response): Promise<RemoteError> {
     // not JSON
   }
   const ra = Number(res.headers.get('Retry-After'));
-  const retry = Number.isFinite(ra) && ra > 0 ? ra * 1000 : undefined;
+  const retry = Number.isFinite(ra) && ra > 0 ? Math.min(ra * 1000, MAX_RETRY_AFTER_MS) : undefined;
   let code: RemoteErrorCode;
   if (res.status === 401) code = 'auth';
   else if (res.status === 429) code = 'rate';
@@ -100,6 +123,7 @@ export function createDriveStore(opts: DriveOptions): RemoteStore {
     init: RequestInit = {},
     ok: number[] = [200],
   ): Promise<Response> {
+    assertDriveUrl(url);
     const token = opts.token();
     if (!token) throw new RemoteError('auth', 401, 'not signed in');
     let res: Response;
@@ -108,6 +132,8 @@ export function createDriveStore(opts: DriveOptions): RemoteStore {
         ...init,
         // Never let the HTTP cache or the service worker keep Drive responses (sync.md §5.5).
         cache: 'no-store',
+        // A redirect would carry the Authorization header to wherever it points.
+        redirect: 'error',
         headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${token}` },
       });
     } catch (e) {
@@ -176,6 +202,12 @@ export function createDriveStore(opts: DriveOptions): RemoteStore {
     let uri = resumeKey ? await opts.sessions?.get(resumeKey) : undefined;
     let offset = 0;
     if (uri) {
+      try {
+        assertDriveUrl(uri);
+      } catch (e) {
+        await forget(); // a poisoned or foreign session is dropped; the next attempt starts fresh
+        throw e;
+      }
       // Ask how much the server has: 308 + Range, or 200/201 when it was already complete.
       const q = await call(
         uri,
@@ -190,8 +222,11 @@ export function createDriveStore(opts: DriveOptions): RemoteStore {
         await forget();
         return fileOf(q);
       }
-      if (q.status === 308) offset = rangeEnd(q.headers.get('Range'));
-      else {
+      if (q.status === 308) {
+        offset = rangeEnd(q.headers.get('Range'));
+        if (offset >= total)
+          throw new RemoteError('bad-response', 308, 'inconsistent upload progress');
+      } else {
         uri = undefined; // expired session (about a week): start over
         await forget();
       }
@@ -209,9 +244,13 @@ export function createDriveStore(opts: DriveOptions): RemoteStore {
       });
       uri = init.headers.get('Location') ?? undefined;
       if (!uri) throw new RemoteError('bad-response', init.status, 'no upload session');
+      assertDriveUrl(uri);
       if (resumeKey) await opts.sessions?.set(resumeKey, uri);
     }
-    for (;;) {
+    // F2: every 308 must advance the offset, and never reach the total (that would be a 200).
+    const maxSteps = Math.ceil(total / MIN_STEP) + 4;
+    for (let step = 0; ; step++) {
+      if (step > maxSteps) throw new RemoteError('bad-response', 308, 'upload made no progress');
       const end = Math.min(offset + RESUMABLE_CHUNK, total);
       const res = await call(
         uri,
@@ -245,7 +284,10 @@ export function createDriveStore(opts: DriveOptions): RemoteStore {
       }
       // If the Range header is not exposed to us, assume the whole chunk landed (sync.md §15 R3).
       const got = res.headers.get('Range');
-      offset = got ? rangeEnd(got) : end;
+      const next = got ? rangeEnd(got) : end;
+      if (next <= offset || next >= total)
+        throw new RemoteError('bad-response', 308, 'inconsistent upload progress');
+      offset = next;
       onProgress?.(offset, total);
     }
   }

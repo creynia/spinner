@@ -1,9 +1,12 @@
 /* eslint-disable @typescript-eslint/require-await -- async stubs and fake method tables */
 import { describe, expect, it } from 'vitest';
 import { RemoteError, RESUMABLE_CHUNK, RESUMABLE_THRESHOLD } from '@core';
-import { createDriveStore, errorOf } from '../../../src/app/services/sync/drive';
+import { assertDriveUrl, createDriveStore, errorOf } from '../../../src/app/services/sync/drive';
 import { createFakeDrive } from './fakes';
 import { bytes, sum } from './helpers';
+
+const urlOf = (u: RequestInfo | URL): string =>
+  typeof u === 'string' ? u : u instanceof URL ? u.href : u.url;
 
 const store = (fake: ReturnType<typeof createFakeDrive>, uris = new Map<string, string>()) => ({
   uris,
@@ -282,5 +285,136 @@ describe('Drive client against the fake Drive', () => {
     await expect(d.create('r', big, { onProgress: () => (tok = null) })).rejects.toMatchObject({
       code: 'auth',
     });
+  });
+
+  describe('token-host guard (F1)', () => {
+    const OK = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=u1';
+    it('asserts Google API origin and Drive path prefixes', () => {
+      expect(() => assertDriveUrl(OK)).not.toThrow();
+      expect(() => assertDriveUrl('https://www.googleapis.com/drive/v3/files')).not.toThrow();
+      for (const bad of [
+        'https://evil.test/upload/drive/v3/files',
+        'http://www.googleapis.com/drive/v3/files',
+        'https://www.googleapis.com.evil.test/drive/v3/files',
+        'https://www.googleapis.com:8443/drive/v3/files',
+        'https://www.googleapis.com/oauth2/v1/userinfo',
+        'https://www.googleapis.com/drive/v3evil',
+        'not a url',
+      ])
+        expect(() => assertDriveUrl(bad), bad).toThrow(RemoteError);
+    });
+
+    it('never follows redirects with the bearer token', async () => {
+      const inits: RequestInit[] = [];
+      const fake = createFakeDrive({ tokens: new Set(['t1']) });
+      const d = createDriveStore({
+        token: () => 't1',
+        fetchImpl: (u, i) => (inits.push(i ?? {}), fake.fetch(u, i)),
+      });
+      await d.list();
+      await d.create('a', bytes(10));
+      expect(inits.length).toBeGreaterThan(1);
+      expect(inits.every((i) => i.redirect === 'error')).toBe(true);
+    });
+
+    it('a poisoned Location is refused before any token is sent or any session persisted', async () => {
+      const sent: string[] = [];
+      const fake = createFakeDrive({ tokens: new Set(['t1']) });
+      const uris = new Map<string, string>();
+      const d = createDriveStore({
+        token: () => 't1',
+        fetchImpl: async (u, i) => {
+          sent.push(urlOf(u));
+          const res = await fake.fetch(u, i);
+          return urlOf(u).includes('uploadType=resumable')
+            ? new Response(null, { status: 200, headers: { Location: 'https://evil.test/steal' } })
+            : res;
+        },
+        sessions: {
+          get: async (k) => uris.get(k),
+          set: async (k, v) => void (v ? uris.set(k, v) : uris.delete(k)),
+        },
+      });
+      await expect(
+        d.create('r', bytes(RESUMABLE_THRESHOLD + 5), { resumeKey: 'k' }),
+      ).rejects.toMatchObject({ code: 'bad-response' });
+      expect(sent.some((u) => u.includes('evil.test'))).toBe(false);
+      expect(uris.size).toBe(0);
+    });
+
+    it('a poisoned persisted session is dropped, never sent to, and the retry starts fresh', async () => {
+      const sent: string[] = [];
+      const fake = createFakeDrive({ tokens: new Set(['t1']) });
+      const uris = new Map([['k', 'https://evil.test/upload/drive/v3/files?upload_id=x']]);
+      const d = createDriveStore({
+        token: () => 't1',
+        fetchImpl: (u, i) => (sent.push(urlOf(u)), fake.fetch(u, i)),
+        sessions: {
+          get: async (k) => uris.get(k),
+          set: async (k, v) => void (v ? uris.set(k, v) : uris.delete(k)),
+        },
+      });
+      const big = bytes(RESUMABLE_THRESHOLD + 5, 3);
+      await expect(d.create('r', big, { resumeKey: 'k' })).rejects.toMatchObject({
+        code: 'bad-response',
+      });
+      expect(sent).toEqual([]);
+      expect(uris.size).toBe(0);
+      const f = await d.create('r', big, { resumeKey: 'k' });
+      expect(f.bytes).toBe(big.length);
+    });
+  });
+
+  describe('resumable progress guard (F2)', () => {
+    const big = () => bytes(RESUMABLE_THRESHOLD + RESUMABLE_CHUNK + 5, 9);
+    const stuck = (range: string | null) => (m: string, url: URL) =>
+      m === 'PUT' && url.searchParams.has('upload_id')
+        ? new Response(null, { status: 308, headers: range ? { Range: range } : {} })
+        : undefined;
+
+    it('fails when the offset does not advance', async () => {
+      const fake = createFakeDrive({ tokens: new Set(['t1']), fault: stuck('bytes=0-262143') });
+      const { d } = store(fake);
+      await expect(d.create('r', big())).rejects.toMatchObject({ code: 'bad-response' });
+      expect(fake.log.filter((l) => l.method === 'PUT').length).toBeLessThan(5);
+    });
+    it('fails when the offset goes backwards', async () => {
+      let n = 0;
+      const fake = createFakeDrive({
+        tokens: new Set(['t1']),
+        fault: (m, url) =>
+          m === 'PUT' && url.searchParams.has('upload_id')
+            ? new Response(null, {
+                status: 308,
+                headers: { Range: n++ === 0 ? 'bytes=0-524287' : 'bytes=0-262143' },
+              })
+            : undefined,
+      });
+      await expect(store(fake).d.create('r', big())).rejects.toMatchObject({
+        code: 'bad-response',
+      });
+    });
+    it('fails when a 308 claims the whole file (or more) arrived', async () => {
+      const total = big().length;
+      for (const end of [total - 1, total + 100]) {
+        const fake = createFakeDrive({ tokens: new Set(['t1']), fault: stuck(`bytes=0-${end}`) });
+        await expect(store(fake).d.create('r', big())).rejects.toMatchObject({
+          code: 'bad-response',
+        });
+      }
+    });
+    it('fails on a 308 without Range for the final chunk, instead of looping', async () => {
+      const fake = createFakeDrive({ tokens: new Set(['t1']), fault: stuck(null) });
+      await expect(store(fake).d.create('r', big())).rejects.toMatchObject({
+        code: 'bad-response',
+      });
+    });
+  });
+
+  it('clamps Retry-After to one hour (F3)', async () => {
+    const res = (v: string) => new Response('{}', { status: 429, headers: { 'Retry-After': v } });
+    expect((await errorOf(res('86400'))).retryAfterMs).toBe(3_600_000);
+    expect((await errorOf(res('3600'))).retryAfterMs).toBe(3_600_000);
+    expect((await errorOf(res('90'))).retryAfterMs).toBe(90_000);
   });
 });

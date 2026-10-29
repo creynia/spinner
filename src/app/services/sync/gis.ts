@@ -58,6 +58,8 @@ export const GIS_SRC = 'https://accounts.google.com/gsi/client';
 export const SKEW_MS = 120_000;
 /** No answer from the popup within this long: the app offers the redirect (sync.md §5.1). */
 export const ACQUIRE_TIMEOUT_MS = 120_000;
+/** Revoking at Google may not hang the sign-out button. */
+export const REVOKE_TIMEOUT_MS = 5_000;
 
 export type AuthErrorCode =
   | 'popup-blocked'
@@ -140,6 +142,12 @@ function write(st: Storage | undefined, k: string, v: unknown): void {
   }
 }
 
+/** Seconds of token life from a Google response: finite and positive, else the usual 3599. */
+export function ttlSeconds(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 3599;
+}
+
 const asError = (e: unknown): Error => (e instanceof Error ? e : new Error(String(e)));
 
 export interface GisTokenSource extends TokenSource {
@@ -182,19 +190,23 @@ export function createGisTokenSource(cfg: GisConfig): GisTokenSource {
     return isStored(v) ? v : null;
   };
   let mem: Stored | null = fromStorage();
-  // The token is kept until it expires; after that only the email hint stays.
-  if (mem && mem.expiresAt - SKEW_MS <= now()) {
-    write(local, TOKEN_KEY, null);
-    if (!read(local, HINT_KEY)) write(local, HINT_KEY, { email: mem.email });
-    mem = null;
-  }
   const hint = (): string | undefined => {
     if (mem?.email) return mem.email;
     const h = read(local, HINT_KEY) as { email?: unknown } | null;
     return typeof h?.email === 'string' && h.email ? h.email : undefined;
   };
 
+  /** The token is kept until it expires; then only the email hint stays (here and in storage). */
+  function dropExpired(): void {
+    if (!mem || mem.expiresAt - SKEW_MS > now()) return;
+    write(local, TOKEN_KEY, null);
+    if (!read(local, HINT_KEY)) write(local, HINT_KEY, { email: mem.email });
+    mem = null;
+  }
+  dropExpired();
+
   function state(): AuthState {
+    dropExpired();
     if (!cfg.clientId) return { state: 'unconfigured' };
     if (redirecting) return { state: 'redirecting' };
     if (mem && mem.expiresAt - SKEW_MS > now())
@@ -270,9 +282,11 @@ export function createGisTokenSource(cfg: GisConfig): GisTokenSource {
         'denied',
         resp.error_description ?? resp.error ?? 'Access was not granted.',
       );
+    // "Includes", not "equals": with include_granted_scopes Google reports every scope this client
+    // was ever granted, so an exact match would reject a valid grant.
     if (!g.hasGrantedAllScopes(resp, DRIVE_APPDATA_SCOPE))
       throw new AuthError('scope', 'spinner needs permission to keep its own data in your Drive.');
-    const expiresAt = now() + Number(resp.expires_in ?? 3599) * 1000;
+    const expiresAt = now() + ttlSeconds(resp.expires_in) * 1000;
     const email = await cfg.whoAmI(resp.access_token);
     mem = { token: resp.access_token, expiresAt, email };
     write(local, TOKEN_KEY, mem);
@@ -315,23 +329,28 @@ export function createGisTokenSource(cfg: GisConfig): GisTokenSource {
     },
     async revoke() {
       const t = mem?.token;
+      // Local first (F4): the user is signed out at once, however slow or absent Google is.
       mem = null;
       write(local, TOKEN_KEY, null);
       write(local, HINT_KEY, null);
       write(local, OAUTH_KEY, null);
-      if (t) {
-        try {
-          const g = await load();
-          await new Promise<void>((r) => g.revoke(t, r));
-        } catch {
-          // offline: the token dies within the hour anyway; the grant stays listed at Google
-        }
-      }
       emit();
       try {
         channel?.postMessage({ type: 'token' });
       } catch {
         // closed channel
+      }
+      if (!t) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          load().then((g) => new Promise<void>((r) => g.revoke(t, r))),
+          new Promise<void>((r) => (timer = setTimeout(r, REVOKE_TIMEOUT_MS))),
+        ]);
+      } catch {
+        // offline: the token dies within the hour anyway; the grant stays listed at Google
+      } finally {
+        clearTimeout(timer);
       }
     },
     subscribe(fn) {
