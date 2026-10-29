@@ -24,6 +24,8 @@ import {
   type Dev,
 } from './engine-testkit';
 import { eraseRemote } from './erase';
+import type { RemoteStore } from '../contracts/sync';
+import { LIB_NAME } from './libfile';
 import { beginFirst } from './first';
 import { ROOT_NAME } from './libfile';
 import { createMemoryRemote } from './memory-remote';
@@ -132,6 +134,46 @@ describe.each([false, true])('erase (idb %s)', (idb) => {
     await eraseRemote(await a.ctx());
     expect((await inner.list()).map((f) => f.name)).toEqual([ROOT_NAME]);
     expect(await meta(a, 'last')).toBeUndefined();
+  });
+
+  it('a listing that lags our own lib and a peer lib: nothing survives, then local state resets', async () => {
+    const inner = createMemoryRemote({ listingLag: { ownLib: 4 } });
+    const a = await makeDevice({ id: A, idb, now: clock, remote: inner });
+    const b = await makeDevice({ id: B, idb, now: clock, remote: inner });
+    await userPut(a, 'group', group('g', 'one'));
+    await b.cycle(); // B's lib is created just now: A has never seen it, and the listing hides it
+    await a.cycle(); // so is A's
+    await eraseRemote(await a.ctx());
+    for (let i = 0; i < 6; i++)
+      expect((await inner.list()).map((f) => f.name)).toEqual([ROOT_NAME]);
+    expect(await meta(a, 'last')).toBeUndefined();
+  });
+
+  it('files that never leave the listing: erase fails and local state is NOT reset', async () => {
+    const inner = createMemoryRemote();
+    // a peer file whose delete "succeeds" but does not take (a flaky or racing remote)
+    const sticky: RemoteStore = {
+      ...inner,
+      kind: inner.kind,
+      list: (o) => inner.list(o),
+      download: (id, o) => inner.download(id, o),
+      create: (n, b, o) => inner.create(n, b, o),
+      update: (id, b, o) => inner.update(id, b, o),
+      about: () => inner.about(),
+      delete: async (id, o) => {
+        const f = (await inner.list()).find((x) => x.id === id);
+        if (f?.name === LIB_NAME(B)) return;
+        await inner.delete(id, o);
+      },
+    };
+    const a = await makeDevice({ id: A, idb, now: clock, remote: sticky });
+    const b = await makeDevice({ id: B, idb, now: clock, remote: inner });
+    await userPut(a, 'group', group('g', 'one'));
+    await a.cycle();
+    await b.cycle();
+    await expect(eraseRemote(await a.ctx())).rejects.toThrow(/still in Drive/);
+    expect(await meta(a, 'last')).toBeDefined();
+    expect((await a.raw.getAllKeys('syncIndex')).length).toBeGreaterThan(0);
   });
 
   it('tolerates files that vanish while it deletes, and an erase with no root', async () => {

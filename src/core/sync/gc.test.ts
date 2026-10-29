@@ -81,10 +81,11 @@ describe.each([false, true])('GC (idb %s)', (idb) => {
       const w = await world(idb);
       await userPut(w.a, 'group', group('g', 'one'));
       await settle(w.a, w.b);
+      const live0 = (await libOf(w.inner, A)).entries.find((e) => e.key === 'group:g')!;
       await userDel(w.a, 'group', 'g');
       await settle(w.a, w.b, w.a);
       expect(keysIn(await libOf(w.inner, A))).toContain('group:g');
-      return w;
+      return { ...w, live0 };
     }
 
     it('is dropped only after 30 days AND every peer acknowledged it', async () => {
@@ -92,7 +93,7 @@ describe.each([false, true])('GC (idb %s)', (idb) => {
       skew += 29 * DAY;
       await settle(w.a, w.b); // both keep their libs fresh
       await gc(w.a);
-      expect(keysIn(await libOf(w.inner, A))).toContain('group:g'); // not old enough
+      await stillDeleted(w); // not old enough
       skew += 2 * DAY;
       await settle(w.a, w.b);
       await gc(w.a);
@@ -109,28 +110,28 @@ describe.each([false, true])('GC (idb %s)', (idb) => {
       expect((await records(w.b, 'group')).size).toBe(0);
     });
 
+    /** The tombstone is kept AS a tombstone in A's index and lib, and no device has a live g. */
+    async function stillDeleted(w: { a: Dev; b: Dev; inner: RemoteStore }): Promise<void> {
+      expect((await indexOf(w.a)).get('group:g')?.entry.deleted).toBe(true);
+      const e = (await libOf(w.inner, A)).entries.find((x) => x.key === 'group:g');
+      expect(e?.deleted).toBe(true);
+      for (const d of [w.a, w.b]) expect((await records(d, 'group')).has('g')).toBe(false);
+    }
+
     it('stays while a peer still holds the key live or has not written since', async () => {
       const w = await deleted();
       skew += 31 * DAY;
-      // a peer that still holds an older live g (it never saw the delete)
-      const old = await entryOf(
-        'group',
-        'g',
-        group('g', 'one') as never,
-        hlcOf(Date.now() - 40 * DAY, C),
-        undefined,
-        C,
-        1,
-      );
+      // a peer that still holds the live g the tombstone replaced (it never saw the delete)
+      const old = w.live0;
       const f = await forgeLib(w.inner, C, [old], new Date(Date.now()).toISOString());
       await settle(w.a, w.b);
       await gc(w.a);
-      expect(keysIn(await libOf(w.inner, A))).toContain('group:g');
+      await stillDeleted(w);
       // the peer lacks the key but wrote BEFORE the tombstone: it may not have seen it yet
       await w.inner.delete(f.id);
       await forgeLib(w.inner, C, [], new Date(Date.now() - 45 * DAY).toISOString());
       await gc(w.a);
-      expect(keysIn(await libOf(w.inner, A))).toContain('group:g');
+      await stillDeleted(w);
     });
 
     it('a single device drops it after 30 days (no peer has to acknowledge)', async () => {
@@ -205,6 +206,44 @@ describe.each([false, true])('GC (idb %s)', (idb) => {
       expect(keysIn(await libOf(w.inner, B))).toContain('group:g');
       await settle(w.a, w.b);
       expect((await records(w.a, 'group')).size).toBe(1);
+    });
+  });
+
+  describe('time comes from the remote (F2)', () => {
+    it('a local clock far ahead deletes nothing and drops no tombstone', async () => {
+      const inner = createMemoryRemote();
+      let ahead = 0;
+      const a = await makeDevice({ id: A, idb, now: () => clock() + ahead, remote: inner });
+      const b = await makeDevice({ id: B, idb, now: clock, remote: inner });
+      await userPut(a, 'group', group('g', 'one'));
+      await settle(a, b);
+      await userDel(a, 'group', 'g');
+      await settle(a, b, a);
+      ahead = 400 * DAY; // A's clock is wrong by more than a year
+      await gc(a);
+      const left = await names(inner);
+      expect(left).toContain(LIB_NAME(B)); // B's live lib is not "stale"
+      expect((await indexOf(a)).get('group:g')?.entry.deleted).toBe(true); // not 30 days old
+      expect((await libOf(inner, A)).entries.some((e) => e.key === 'group:g')).toBe(true);
+      // the same cycle path refuses too
+      await userPut(a, 'group', group('h', 'x'));
+      await a.cycle();
+      expect(await names(inner)).toContain(LIB_NAME(B));
+    });
+
+    it('a device whose clock is merely a little off still collects (within a day)', async () => {
+      const inner = createMemoryRemote();
+      const a = await makeDevice({ id: A, idb, now: () => clock() + 3600_000, remote: inner });
+      await userPut(a, 'group', group('g', 'one'));
+      await a.cycle();
+      await forgeLib(inner, C, [], new Date(Date.now() - 200 * DAY).toISOString());
+      // the forged file is brand new on the remote: not stale whatever its writtenAt says
+      await gc(a);
+      expect(await names(inner)).toContain(LIB_NAME(C));
+      skew += 200 * DAY;
+      await a.cycle();
+      await gc(a);
+      expect(await names(inner)).not.toContain(LIB_NAME(C));
     });
   });
 

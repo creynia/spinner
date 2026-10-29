@@ -68,13 +68,18 @@ export async function recordBundle(ctx: SyncCtx, runId: string, ref: RunBundleRe
  * One interim write of our lib file (snapshot, reserve, upload, commit), as the cycle does at its
  * end, without the pull: used while bundles are uploading and by GC after it changed our index.
  */
-export async function flushLib(ctx: SyncCtx): Promise<void> {
+export async function flushLib(ctx: SyncCtx, force = false): Promise<RemoteFile | null> {
   const st = internalOf(ctx);
   const files = await ctx.remote.list(sigOf(ctx));
   const pending = await snapshotAll(st);
   await reserve(st); // S-B: the counter is durable before the lib that carries it goes out
   const built = await buildLib(st, pending);
-  const uploaded = await uploadLib(st, built, files, await metaGet(st.raw, 'libSha'));
+  const uploaded = await uploadLib(
+    st,
+    built,
+    files,
+    force ? undefined : await metaGet(st.raw, 'libSha'),
+  );
   await commit(st, {
     pending,
     uploaded,
@@ -82,6 +87,7 @@ export async function flushLib(ctx: SyncCtx): Promise<void> {
     at: new Date(ctx.deps.now()).toISOString(),
     live: new Set(files.map((f) => f.id)),
   });
+  return uploaded?.file ?? null;
 }
 
 /**
@@ -121,13 +127,6 @@ export async function uploadPendingRuns(ctx: SyncCtx, deadline: number): Promise
   todo.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 
   const files = await remote.list(sigOf(ctx));
-  const named = new Map<string, RunBundleRef>(); // bundle names that some stub names
-  for (const r of await raw.getAll<SyncIndexRecord>('syncIndex')) {
-    const b =
-      r.kind === 'run' && !r.entry.deleted ? (r.entry.value as RunStub | null)?.bundle : undefined;
-    if (b) named.set(b.name, b);
-  }
-
   let lastFlush = deps.now();
   let n = 0;
   for (const meta of todo) {
@@ -140,28 +139,28 @@ export async function uploadPendingRuns(ctx: SyncCtx, deadline: number): Promise
     const enc = await encodeRunBundleWithDigest(data, { gzip: true });
     if (enc.resultsDigest !== meta.resultsDigest) continue; // cannot be referenced under its digest
     const name = runBundleName(runId, enc.resultsDigest);
-    // a file of that name and size (an upload whose lib never committed, or a peer's identical
-    // import): adopt it. The sha256 describes THE FILE WE REFERENCE.
+    // A file of that name and size (an upload whose lib never committed, or a peer's identical
+    // import) is adopted only when its bytes ARE ours; otherwise it is replaced in place. The ref
+    // always carries the sha256 of the bytes WE hold, never one read off the remote file.
+    const sha = await sha256Hex(enc.bytes);
     const existing = files.find((f) => f.name === name && f.bytes === enc.bytes.length);
-    let ref: RunBundleRef;
+    let size = enc.bytes.length;
     if (existing) {
-      const stubbed = named.get(name);
-      const sha =
-        stubbed && stubbed.bytes === existing.bytes
-          ? stubbed.sha256
-          : await sha256Hex(await remote.download(existing.id, sigOf(ctx)));
-      ref = { name, bytes: existing.bytes, sha256: sha };
+      const there = await sha256Hex(await remote.download(existing.id, sigOf(ctx)));
+      if (there !== sha) size = (await remote.update(existing.id, enc.bytes, sigOf(ctx))).bytes;
     } else {
-      const created = await remote.create(name, enc.bytes, {
-        appProperties: { kind: 'run', runId, digest16: digest16(enc.resultsDigest) },
-        contentType: 'application/gzip',
-        resumeKey: `run:${runId}`,
-        onProgress: (done) =>
-          deps.onProgress({ phase: 'upload-runs', done: at, total: todo.length, bytes: done }),
-        ...(deps.signal ? { signal: deps.signal } : {}),
-      });
-      ref = { name, bytes: created.bytes, sha256: await sha256Hex(enc.bytes) };
+      size = (
+        await remote.create(name, enc.bytes, {
+          appProperties: { kind: 'run', runId, digest16: digest16(enc.resultsDigest) },
+          contentType: 'application/gzip',
+          resumeKey: `run:${runId}`,
+          onProgress: (done) =>
+            deps.onProgress({ phase: 'upload-runs', done: at, total: todo.length, bytes: done }),
+          ...(deps.signal ? { signal: deps.signal } : {}),
+        })
+      ).bytes;
     }
+    const ref: RunBundleRef = { name, bytes: size, sha256: sha };
     await recordBundle(ctx, runId, ref);
     if (deps.now() - lastFlush >= FLUSH_EVERY_MS) {
       await flushLib(ctx);
@@ -355,8 +354,21 @@ export async function evictRun(ctx: SyncCtx, runId: string): Promise<void> {
   };
   if (!stub || stub.status !== 'done' || !stub.bundle) return refuse();
   const bundle = stub.bundle;
+  // the Drive copy must be the stub's file, byte for byte: a same-size damaged file is no copy
   const files = await ctx.remote.list(sigOf(ctx));
-  if (!files.some((f) => f.name === bundle.name && f.bytes === bundle.bytes)) return refuse();
+  let good = false;
+  for (const f of files.filter((x) => x.name === bundle.name && x.bytes === bundle.bytes)) {
+    try {
+      const got = await ctx.remote.download(f.id, sigOf(ctx));
+      if ((await sha256Hex(got)) === bundle.sha256) {
+        good = true;
+        break;
+      }
+    } catch (e) {
+      if (!(e instanceof RemoteError) || e.code !== 'not-found') throw e;
+    }
+  }
+  if (!good) return refuse();
   // index first: a crash in between leaves data that sync treats as remote-only, which the next
   // download or evict finishes; the other order would leave an index that claims data is here
   await markLocal(raw, key, 0);

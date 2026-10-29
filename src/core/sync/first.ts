@@ -7,6 +7,7 @@ import {
   SYNC_LAYOUT_VERSION,
   type CycleResult,
   type FirstSyncPreview,
+  type LibFileV1,
   type RemoteFile,
   type RunStub,
   type SyncDirtyRecord,
@@ -63,30 +64,36 @@ function estimateBytes(m: RunMeta): number {
   return Math.round((m.completedSessions * row) / 2);
 }
 
+/** Every readable lib file of the listing. A damaged file is not a device; a newer one stops us. */
+async function readLibs(ctx: SyncCtx, files: readonly RemoteFile[]): Promise<LibFileV1[]> {
+  const out: LibFileV1[] = [];
+  for (const f of files.filter((x) => libDevice(x.name) !== null)) {
+    try {
+      out.push(await decodeLib(await ctx.remote.download(f.id, sigOf(ctx))));
+    } catch (e) {
+      if (e instanceof LibFileError && e.code === 'newer-version') {
+        throw new EngineError('newer-layout', 'A device uses a newer version of spinner.');
+      }
+      if (!(e instanceof LibFileError)) throw e;
+    }
+  }
+  return out;
+}
+
 /** What the first-sync sheet shows: counts of what Drive holds and of what is on this device. */
 export async function previewFirst(ctx: SyncCtx): Promise<FirstSyncPreview> {
   const { raw } = internalOf(ctx);
-  const { remote, deps } = ctx;
+  const { remote } = ctx;
   const files = await remote.list(sigOf(ctx));
   await checkRootLayout(ctx, files);
 
   // remote: the fold winner of every key over every lib file
   const byKey = new Map<SyncKey, SyncEntry[]>();
   let newest: { name: string; at: string } | undefined;
-  let libs = 0;
-  for (const f of files.filter((x) => libDevice(x.name) !== null)) {
-    try {
-      const lib = await decodeLib(await remote.download(f.id, sigOf(ctx)));
-      libs++;
-      if (!newest || lib.writtenAt > newest.at)
-        newest = { name: lib.device.name, at: lib.writtenAt };
-      for (const e of lib.entries) byKey.set(e.key, [...(byKey.get(e.key) ?? []), e]);
-    } catch (e) {
-      if (e instanceof LibFileError && e.code === 'newer-version') {
-        throw new EngineError('newer-layout', 'A device uses a newer version of spinner.');
-      }
-      if (!(e instanceof LibFileError)) throw e; // a damaged lib file is not a device
-    }
+  const libs = await readLibs(ctx, files);
+  for (const lib of libs) {
+    if (!newest || lib.writtenAt > newest.at) newest = { name: lib.device.name, at: lib.writtenAt };
+    for (const e of lib.entries) byKey.set(e.key, [...(byKey.get(e.key) ?? []), e]);
   }
   const remoteCounts = zero();
   for (const list of byKey.values()) {
@@ -104,24 +111,20 @@ export async function previewFirst(ctx: SyncCtx): Promise<FirstSyncPreview> {
     }
   }
 
-  // local: dry runs and their definitions are never synced
+  // local: EVERYTHING Replace would delete, so the sheet tells the truth: dry runs and their
+  // definitions, and runs that are paused or still going, count too
   const local = zero();
-  const dry = new Set<string>();
-  for (const d of await raw.getAll<DefinitionRecord>('definitions')) {
-    if (deps.isDryRun(d)) dry.add(d.id);
-    else local.experiments++;
-  }
+  local.experiments = (await raw.getAllKeys('definitions')).length;
   local.strategies = (await raw.getAllKeys('strategies')).length;
   local.layouts = (await raw.getAllKeys('layouts')).length;
   const bundles = await readBundles(raw);
   for (const m of await raw.getAll<RunMeta>('runs')) {
-    if (m.status !== 'done' || dry.has(m.definitionId)) continue;
     local.runs++;
     local.runBytes += bundles[m.runId]?.bytes ?? estimateBytes(m);
   }
 
   return {
-    remoteEmpty: libs === 0,
+    remoteEmpty: libs.length === 0,
     remote: {
       ...(newest ? { fromName: newest.name, syncedAt: newest.at } : {}),
       ...remoteCounts,
@@ -191,8 +194,26 @@ const waiting = (): CycleResult => ({
 export async function beginFirst(ctx: SyncCtx, choice: 'merge' | 'replace'): Promise<CycleResult> {
   const { raw } = internalOf(ctx);
   if (ctx.deps.isRunActive()) return waiting();
-  if (choice === 'replace') await clearLocal(raw, { wipeData: true });
-  else await seedMarks(raw, ctx.deps.now(), (d) => ctx.deps.isDryRun(d));
+  if (choice === 'replace') {
+    // Replace deletes this device's data: only when Drive verifiably has a library to replace it
+    const libs = await readLibs(ctx, await ctx.remote.list(sigOf(ctx)));
+    if (!libs.some((l) => l.entries.length > 0)) {
+      return {
+        outcome: 'error',
+        requests: 0,
+        pushed: 0,
+        applied: 0,
+        copies: 0,
+        changed: [],
+        error: {
+          code: 'unknown',
+          message:
+            'Drive has no readable library to replace this device with. Nothing was deleted.',
+        },
+      };
+    }
+    await clearLocal(raw, { wipeData: true });
+  } else await seedMarks(raw, ctx.deps.now(), (d) => ctx.deps.isDryRun(d));
   return runCycle(ctx);
 }
 

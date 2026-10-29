@@ -2,6 +2,7 @@
 // Every scenario runs on memory AND fake-indexeddb. Never `toEqual` on multi-MB arrays: bytes are
 // compared by length and sha256.
 import 'fake-indexeddb/auto';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunMeta } from '../contracts/run';
@@ -381,6 +382,60 @@ describe.each([false, true])('runs (idb %s)', (idb) => {
       });
       await emptyOf(b);
     });
+  });
+
+  it('evict refuses when the Drive bundle has the right size but the wrong bytes', async () => {
+    const { inner, a, b } = await world(idb, ALL);
+    const made = await finishRun(a, await tinyRun(61));
+    await settle(a, b);
+    const [file] = await bundleFiles(inner);
+    const bad = (await inner.download(file!.id)).slice();
+    bad[bad.length - 9] = (bad[bad.length - 9] ?? 0) ^ 0xff; // same size, damaged
+    await inner.update(file!.id, bad);
+    await expect(evictRun(await b.ctx(), made.runId)).rejects.toThrow(/not in Drive/);
+    expect((await b.raw.get<RunMeta>('runs', made.runId))?.status).toBe('done');
+    expect((await indexOf(b)).get(`run:${made.runId}`)!.local).toBe(1);
+    expect((await b.raw.getAllKeys('summaries')).length).toBe(1);
+  });
+
+  it('an existing same-size file with other bytes is replaced, never adopted; the ref carries our sha', async () => {
+    const { inner, a, b } = await world(idb);
+    const data = await tinyRun(62);
+    const enc = await encodeRunBundleWithDigest(data, { gzip: true });
+    const name = runBundleName(data.meta.runId, enc.resultsDigest);
+    const junk = new Uint8Array(enc.bytes.length).fill(9); // a crashed or damaged earlier upload
+    const planted = await inner.create(name, junk, { appProperties: { kind: 'run' } });
+    await finishRun(a, data);
+    await settle(a, b);
+    const files = await bundleFiles(inner);
+    expect(files).toHaveLength(1);
+    expect(files[0]!.id).toBe(planted.id); // updated in place
+    const ours = await sha(enc.bytes);
+    expect(await sha(await inner.download(planted.id))).toBe(ours);
+    expect((await runStubs(b)).get(data.meta.runId)!.bundle!.sha256).toBe(ours);
+    expect(await downloadRun(await b.ctx(), data.meta.runId)).toBe('ok');
+  });
+
+  it('a bundle that still decodes but has another sha256 is corrupt and writes nothing', async () => {
+    const { inner, a, b } = await world(idb);
+    // a trimmed import: its digest is not recomputed, so a edited-but-valid file decodes cleanly
+    const id = await importRunFile(a, await tinyRun(63), true);
+    await settle(a, b);
+    const [file] = await bundleFiles(inner);
+    const good = await inner.download(file!.id);
+    const doc = JSON.parse(new TextDecoder().decode(gunzipSync(good))) as {
+      app: { version: string };
+    };
+    doc.app.version = 'tampered';
+    const tampered = new Uint8Array(gzipSync(new TextEncoder().encode(JSON.stringify(doc))));
+    expect(await sha(tampered)).not.toBe(await sha(good));
+    expect('data' in (await decodeRunBundle(tampered, 'roulette'))).toBe(true); // it decodes fine
+    await inner.update(file!.id, tampered);
+    expect(await downloadRun(await b.ctx(), id)).toBe('corrupt');
+    for (const st of ['runs', 'summaries', 'checkpoints', 'breakdowns', 'samples'] as const) {
+      expect(await b.raw.getAllKeys(st), st).toEqual([]);
+    }
+    expect((await indexOf(b)).get(`run:${id}`)!.local).toBe(0);
   });
 
   it('evict drops the results, keeps the stub and definitions.runIds; download restores it', async () => {

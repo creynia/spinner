@@ -74,6 +74,8 @@ describe.each([false, true])('first sync (idb %s)', (idb) => {
       await userPut(a, 'layout', await layout('l1', 'x'));
       await finishRun(a, await tinyRun(1));
       await putDry(a);
+      const paused = await finishRun(a, await tinyRun(2));
+      await putStubRun(a, paused, 'paused'); // Replace would delete this too: the sheet counts it
       const p = await previewFirst(await a.ctx());
       expect(p.remoteEmpty).toBe(true);
       expect(p.remote).toMatchObject({
@@ -83,7 +85,8 @@ describe.each([false, true])('first sync (idb %s)', (idb) => {
         runs: 0,
         runBytes: 0,
       });
-      expect(p.local).toMatchObject({ experiments: 1, strategies: 1, layouts: 1, runs: 1 });
+      // everything Replace would delete: the dry definition and the paused run count
+      expect(p.local).toMatchObject({ experiments: 3, strategies: 1, layouts: 1, runs: 2 });
       expect(p.local.runBytes).toBeGreaterThan(0);
     });
 
@@ -210,6 +213,56 @@ describe.each([false, true])('first sync (idb %s)', (idb) => {
       expect((await records(a, 'strategy')).has('mine')).toBe(false);
       expect(await bundleFiles(inner)).toHaveLength(1);
       expect(await dump(a)).toBe(await dump(b));
+    });
+
+    describe.each([
+      ['an empty Drive', (_inner: ReturnType<typeof createMemoryRemote>) => Promise.resolve()],
+      [
+        'a Drive where every lib is damaged',
+        async (inner: ReturnType<typeof createMemoryRemote>) => {
+          for (const d of ['cccccccccc', 'dddddddddd']) {
+            await inner.create(LIB_NAME(d), new Uint8Array([1, 2, 3, 4]), {
+              appProperties: { kind: 'lib' },
+            });
+          }
+        },
+      ],
+      [
+        'a Drive whose only lib has no entries',
+        async (inner: ReturnType<typeof createMemoryRemote>) => {
+          const empty = await makeDevice({
+            id: 'cccccccccc',
+            idb: false,
+            now: clock,
+            remote: inner,
+          });
+          await empty.cycle();
+        },
+      ],
+    ])('Replace against %s', (_name, setup) => {
+      it('wipes nothing and keeps the sync state', async () => {
+        const { inner, a } = await world(idb);
+        await setup(inner);
+        await userPut(a, 'group', group('g', 'mine'));
+        await finishRun(a, await tinyRun(60));
+        const before = await dump(a);
+        const runs = await a.raw.getAllKeys('runs');
+        const index = (await indexOf(a)).size;
+        const r = await beginFirst(await a.ctx(), 'replace');
+        expect(r.outcome).toBe('error');
+        expect(r.error?.message).toMatch(/Nothing was deleted/);
+        expect(await dump(a)).toBe(before);
+        expect(await a.raw.getAllKeys('runs')).toEqual(runs);
+        expect((await a.raw.getAllKeys('summaries')).length).toBe(1);
+        expect((await indexOf(a)).size).toBe(index);
+        expect(await marks(a)).toEqual(
+          [
+            'def:' + (await a.raw.getAll<{ id: string }>('definitions'))[0]!.id,
+            'group:g',
+            `run:${runs[0] as string}`,
+          ].sort(),
+        );
+      });
     });
 
     it('is one transaction: a failure leaves the device exactly as it was', async () => {

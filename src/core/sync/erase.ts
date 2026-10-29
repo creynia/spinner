@@ -70,6 +70,8 @@ export async function clearLocal(raw: Backend, o: ClearOptions = {}): Promise<vo
   });
 }
 
+const ERASE_ROUNDS = 5;
+
 /**
  * Remove my data from Drive: the root is rewritten with `erased` first (other devices stop at
  * once), then every other file goes, one at a time. Safe to repeat after a failure. Then the
@@ -95,27 +97,52 @@ export async function eraseRemote(ctx: SyncCtx): Promise<void> {
       a.modifiedTime < b.modifiedTime ? -1 : a.modifiedTime > b.modifiedTime ? 1 : 0,
     );
   const keep = roots[0];
+  const fresh = async (): Promise<string> =>
+    (await remote.create(ROOT_NAME, bytes, { appProperties: { kind: 'root' }, ...(o ?? {}) })).id;
+  let rootId: string;
   if (keep) {
+    rootId = keep.id;
     try {
       await remote.update(keep.id, bytes, o);
     } catch (e) {
       if (!(e instanceof RemoteError) || e.code !== 'not-found') throw e;
-      await remote.create(ROOT_NAME, bytes, { appProperties: { kind: 'root' }, ...(o ?? {}) });
+      rootId = await fresh();
     }
   } else {
-    await remote.create(ROOT_NAME, bytes, { appProperties: { kind: 'root' }, ...(o ?? {}) });
+    rootId = await fresh();
   }
-  const rest = files.filter((f) => f.id !== keep?.id);
-  let n = 0;
-  deps.onProgress({ phase: 'gc', done: 0, total: rest.length });
-  for (const f of rest) {
+  const drop = async (id: string): Promise<void> => {
     deps.signal?.throwIfAborted();
     try {
-      await remote.delete(f.id, o);
+      await remote.delete(id, o);
     } catch (e) {
       if (!(e instanceof RemoteError) || e.code !== 'not-found') throw e;
     }
-    deps.onProgress({ phase: 'gc', done: ++n, total: rest.length });
+  };
+  // A listing can lag a create, so it is not trusted to be complete: the ids we know of go first
+  // (our lib, the lib versions we have seen, any other root), then the listing is read again until
+  // only the root is left. If it never is, this fails and the local state is NOT reset.
+  const known = new Set<string>([...Object.keys(st.seen)]);
+  if (st.files.ownLib) known.add(st.files.ownLib.id);
+  if (st.files.root) known.add(st.files.root.id);
+  known.delete(rootId);
+  let n = 0;
+  deps.onProgress({ phase: 'gc', done: 0, total: known.size + files.length });
+  for (const id of known) {
+    await drop(id);
+    deps.onProgress({ phase: 'gc', done: ++n, total: known.size + files.length });
+  }
+  let rest = files.filter((f) => f.id !== rootId && !known.has(f.id));
+  for (let round = 0; ; round++) {
+    for (const f of rest) {
+      await drop(f.id);
+      deps.onProgress({ phase: 'gc', done: ++n, total: n + rest.length });
+    }
+    rest = (await remote.list(o)).filter((f) => f.id !== rootId);
+    if (rest.length === 0) break;
+    if (round >= ERASE_ROUNDS) {
+      throw new Error(`${rest.length} file(s) are still in Drive; run "Remove my data" again.`);
+    }
   }
   await clearLocal(st.raw, { copies: true });
 }

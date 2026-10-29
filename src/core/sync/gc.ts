@@ -36,6 +36,8 @@ export const STALE_LIB_DAYS = 180;
 export const TOMBSTONE_DAYS = 30;
 /** Orphan and duplicate bundles are left alone while younger than this (steps 1 and 4). */
 export const GRACE_MS = HOUR;
+/** GC is refused when the local clock is further ahead of the remote's than this. */
+export const CLOCK_SLACK_MS = DAY;
 
 const BUNDLE = /^run\.(.+)\.([0-9a-f]{16})\.spinner\.json\.gz$/;
 const age = (f: RemoteFile, now: number): number => now - Date.parse(f.modifiedTime);
@@ -74,8 +76,13 @@ export async function runGc(ctx: SyncCtx): Promise<void> {
   const st = internalOf(ctx);
   const { raw } = st;
   const { remote, deps, deviceId } = ctx;
-  const now = deps.now();
   const o = sigOf(ctx);
+  // Time comes from the remote, never from this clock: a clock set far ahead would age every
+  // peer's lib past 180 days and every tombstone past 30. Our own lib is written afresh, so its
+  // `modifiedTime` is the remote's "now"; a local clock more than a day ahead of it refuses GC.
+  const written = await flushLib(ctx, true);
+  const now = written ? Date.parse(written.modifiedTime) : Number.NaN;
+  if (!Number.isFinite(now) || deps.now() - now > CLOCK_SLACK_MS) return;
   const aborted = (): boolean => deps.signal?.aborted === true;
 
   const files = await remote.list(o);
