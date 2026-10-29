@@ -1,67 +1,94 @@
 /**
- * PROTOTYPE model of the merge rule (sync.md §7.4, review B1): per-key version vectors as the
- * transitive form of parent pointers, `basis` = the parent's HLC, a deterministic winner for
- * concurrent entries (an edit beats a delete, else the higher HLC), and a deterministic conflicted
- * copy of each concurrent loser, so any device can create the copy and all devices create the same one.
- * Only strategy/layout-like kinds (whole-record values under a user slug) are modelled.
+ * PROTOTYPE model of the merge rule (sync.md §7.4, rev 3). Covers whole-record kinds only
+ * (strategy, layout, group): a value under a user id.
+ *
+ * - `vv`: a per-key version vector. This device's component comes from ONE persistent, monotone
+ *   per-device counter (`syncMeta.vvCounter`) that survives every reset (N1).
+ * - `fold(set)` does not depend on the order of the set (N2):
+ *   1. Equivalent entries (same fingerprint and deleted flag) collapse into the lowest-HLC one, with
+ *      their vvs joined (N3).
+ *   2. Then it takes the maximal elements under strict vv dominance.
+ *   3. Among them, the winner is an edit over a delete, then the higher HLC.
+ *   4. Every other maximal live entry is a loser, which becomes a deterministic copy.
+ *   No entry's ancestry is ever fabricated. The only vv change is the join inside an equivalence
+ *   class of identical content.
+ * - `seen`: the join of every folded published vv. It is kept locally as the basis of the next
+ *   local edit and is never published as the winner's own vv.
  */
 export type Vv = Record<string, number>;
+export type Hlc = [number, number, string];
 export interface Entry {
   id: string;
-  /** `<wall>.<counter>.<device>` compared as a tuple. */
-  hlc: [number, number, string];
-  /** HLC of the entry this one was edited from (null: created fresh). Informational; `vv` decides. */
-  basis: [number, number, string] | null;
+  hlc: Hlc;
+  /** Parent HLC. Informational only; `vv` decides ancestry. */
+  basis: Hlc | null;
   vv: Vv;
   deleted: boolean;
   value: { name: string; body: string } | null;
 }
 
-export const cmpHlc = (a: Entry['hlc'], b: Entry['hlc']): number =>
+export const cmpHlc = (a: Hlc, b: Hlc): number =>
   a[0] - b[0] || a[1] - b[1] || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0);
-
-/** a ≥ b pointwise. */
 export function dominates(a: Vv, b: Vv): boolean {
   for (const [d, n] of Object.entries(b)) if ((a[d] ?? 0) < n) return false;
   return true;
 }
-export const joinVv = (a: Vv, b: Vv): Vv => {
-  const out: Vv = { ...a };
-  for (const [d, n] of Object.entries(b)) out[d] = Math.max(out[d] ?? 0, n);
+const strictlyDominates = (a: Vv, b: Vv): boolean => dominates(a, b) && !dominates(b, a);
+export const joinVv = (...vs: Vv[]): Vv => {
+  const out: Vv = {};
+  for (const v of vs) for (const [d, n] of Object.entries(v)) out[d] = Math.max(out[d] ?? 0, n);
   return out;
 };
-export const sameEntry = (a: Entry, b: Entry): boolean => cmpHlc(a.hlc, b.hlc) === 0;
+export const fp = (e: Entry): string => (e.deleted ? 'DEL' : `${e.value?.name}|${e.value?.body}`);
+const vvKey = (v: Vv): string => JSON.stringify(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1)));
 
-/** Deterministic copy id: same on every device (the loser's id + a content fingerprint). */
 export function copyIdOf(loser: Entry): string {
   let h = 2166136261;
-  for (const ch of `${loser.id}|${loser.value?.body}|${loser.hlc.join('.')}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  for (const ch of `${loser.id}|${fp(loser)}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   return `${loser.id}-${(h >>> 0).toString(36).padStart(7, '0').slice(0, 6)}`;
 }
+export const isCopyId = (id: string): boolean => /-[0-9a-z]{6}$/.test(id);
 
-/**
- * Merge two entries for one key. Commutative, associative, idempotent on the winner; `losers`
- * are the concurrent live entries that did not win (each becomes a conflicted copy).
- */
-export function merge(a: Entry, b: Entry): { winner: Entry; losers: Entry[] } {
-  if (sameEntry(a, b)) return { winner: a, losers: [] };
-  if (dominates(a.vv, b.vv)) return { winner: a, losers: [] };
-  if (dominates(b.vv, a.vv)) return { winner: b, losers: [] };
-  // concurrent
-  let w: Entry;
-  if (a.deleted !== b.deleted) w = a.deleted ? b : a; // an edit beats a delete
-  else w = cmpHlc(a.hlc, b.hlc) > 0 ? a : b;
-  const l = w === a ? b : a;
-  // the winner absorbs the loser's history, so later merges see it as a descendant of both
-  const winner: Entry = { ...w, vv: joinVv(a.vv, b.vv) };
-  return { winner, losers: l.deleted ? [] : [l] };
+export interface Folded {
+  winner: Entry;
+  losers: Entry[];
+  /** The join of every folded vv: the basis for this device's next edit (never published). */
+  seen: Vv;
 }
 
-// ------------------------------------------------------------------ a tiny device + remote model
+/** Order-independent fold of every entry known for one key. */
+export function fold(all: readonly Entry[]): Folded {
+  if (all.length === 0) throw new Error('empty');
+  const classes = new Map<string, Entry[]>();
+  for (const e of all) classes.set(fp(e), [...(classes.get(fp(e)) ?? []), e]);
+  const reps: Entry[] = [...classes.values()].map((cls) => {
+    const low = [...cls].sort((a, b) => cmpHlc(a.hlc, b.hlc))[0]!;
+    return { ...low, vv: joinVv(...cls.map((c) => c.vv)) };
+  });
+  const maximal = reps.filter((e) => !reps.some((o) => o !== e && strictlyDominates(o.vv, e.vv)));
+  const winner = [...maximal].sort((a, b) =>
+    a.deleted !== b.deleted ? (a.deleted ? 1 : -1) : cmpHlc(b.hlc, a.hlc),
+  )[0]!;
+  const losers = maximal
+    .filter((e) => e !== winner && !e.deleted)
+    .sort((a, b) => cmpHlc(a.hlc, b.hlc));
+  return { winner, losers, seen: joinVv(...all.map((e) => e.vv)) };
+}
+
+/** A comparable summary of a fold, for the permutation tests. */
+export const foldSig = (f: Folded): string =>
+  JSON.stringify([
+    fp(f.winner),
+    f.winner.hlc,
+    vvKey(f.winner.vv),
+    f.losers.map((l) => [fp(l), l.hlc]),
+    vvKey(f.seen),
+  ]);
+
+// ------------------------------------------------------------------ device + remote model
 
 export class Remote {
   libs = new Map<string, Map<string, Entry>>();
-  /** Each device writes only its own lib (sync.md D5). */
   write(dev: string, entries: Map<string, Entry>): void {
     this.libs.set(dev, new Map([...entries].map(([k, e]) => [k, structuredClone(e)])));
   }
@@ -70,15 +97,22 @@ export class Remote {
   }
 }
 
+interface IndexRow {
+  /** Published as-is. */
+  entry: Entry;
+  /** Local only. */
+  seen: Vv;
+}
+
 export class Device {
-  /** Local records (what the app shows). */
   store = new Map<string, { name: string; body: string }>();
-  /** syncIndex: last agreed entry per id. */
-  base = new Map<string, Entry>();
-  /** syncDirty: id -> edit time (`at`); entries are minted from edit time, not push time. */
+  index = new Map<string, IndexRow>();
+  /** id -> edit time. */
   dirty = new Map<string, number>();
-  /** Copies already created or seen (never recreate after a delete). */
-  seenCopies = new Set<string>();
+  copies = new Set<string>();
+  /** N1: persistent and monotone across resets (`syncMeta.vvCounter`). */
+  private vvCounter = 0;
+  private needsPull = false;
   private wall = 0;
   private ctr = 0;
   constructor(
@@ -87,109 +121,114 @@ export class Device {
     private readonly clock: () => number,
   ) {}
 
-  private tick(at: number): Entry['hlc'] {
-    const now = at;
-    if (now > this.wall) {
-      this.wall = now;
+  private tickAt(at: number): Hlc {
+    if (at > this.wall) {
+      this.wall = at;
       this.ctr = 0;
     } else this.ctr += 1;
     return [this.wall, this.ctr, this.id];
   }
-  private recv(h: Entry['hlc']): void {
+  private recv(h: Hlc): void {
     if (h[0] > this.wall || (h[0] === this.wall && h[1] > this.ctr)) [this.wall, this.ctr] = [h[0], h[1]];
   }
 
   edit(id: string, body: string): void {
-    this.store.set(id, { name: id, body });
+    this.store.set(id, { name: this.store.get(id)?.name ?? id, body });
     this.dirty.set(id, this.clock());
   }
   del(id: string): void {
     this.store.delete(id);
     this.dirty.set(id, this.clock());
   }
-
-  /** Pull and apply every lib file (sync.md §7.3 PULL + APPLY). */
-  pull(): void {
-    const byId = new Map<string, Entry>();
-    const losers: Entry[] = [];
-    for (const e of this.remote.read()) {
-      const have = byId.get(e.id);
-      if (!have) byId.set(e.id, e);
-      else {
-        const m = merge(have, e);
-        byId.set(e.id, m.winner);
-        losers.push(...m.losers);
-      }
-    }
-    for (const r of byId.values()) {
-      this.recv(r.hlc);
-      const base = this.base.get(r.id);
-      if (base && dominates(base.vv, r.vv)) continue; // already have it (or newer)
-      if (this.dirty.has(r.id)) {
-        // a local unpushed edit is concurrent with anything not already in the base
-        const local = this.localEntry(r.id, base);
-        const m = merge(local, r);
-        losers.push(...m.losers);
-        this.base.set(r.id, { ...r, vv: m.winner.vv });
-        if (m.winner === local || sameEntry(m.winner, local)) {
-          // local wins: keep it dirty, it pushes with the joined history
-        } else {
-          this.apply(m.winner);
-          this.dirty.delete(r.id);
-        }
-        continue;
-      }
-      const m = base ? merge(base, r) : { winner: r, losers: [] as Entry[] };
-      losers.push(...m.losers);
-      this.base.set(r.id, m.winner);
-      this.apply(m.winner);
-    }
-    for (const l of losers) this.makeCopy(l);
+  /**
+   * `resetLocalSyncState` (account switch): forget the index, keep the local records, the device
+   * id and `vvCounter`; every record becomes a candidate (pull happens before push).
+   */
+  reset(): void {
+    this.needsPull = true; // a re-seed is begin('merge'): it pulls before it pushes
+    this.index.clear();
+    this.copies.clear();
+    for (const id of this.store.keys()) this.dirty.set(id, this.clock());
   }
 
-  private localEntry(id: string, base: Entry | undefined): Entry {
+  /** Replace: wipe local records and sync state; `vvCounter` survives (N1). */
+  replace(): void {
+    this.store.clear();
+    this.index.clear();
+    this.dirty.clear();
+    this.copies.clear();
+    this.needsPull = true;
+  }
+
+  private candidate(id: string, at: number): Entry {
+    const row = this.index.get(id);
     const v = this.store.get(id) ?? null;
     return {
       id,
-      hlc: [this.dirty.get(id) ?? 0, 0, this.id], // unpushed: its edit time
-      basis: base?.hlc ?? null,
-      vv: { ...(base?.vv ?? {}), [this.id]: (base?.vv[this.id] ?? 0) + 1 },
+      hlc: [at, 0, this.id],
+      basis: row?.entry.hlc ?? null,
+      // consumes a real counter value: a candidate's vv may be absorbed (equivalence join), so its
+      // component must never be reused by a later, different entry (gaps are harmless)
+      vv: { ...(row?.seen ?? {}), [this.id]: ++this.vvCounter },
       deleted: v === null,
-      value: v,
+      value: v ? { ...v } : null,
     };
   }
 
-  private apply(e: Entry): void {
-    if (e.deleted || !e.value) this.store.delete(e.id);
-    else this.store.set(e.id, { ...e.value });
+  pull(): void {
+    this.needsPull = false;
+    const byId = new Map<string, Entry[]>();
+    for (const e of this.remote.read()) byId.set(e.id, [...(byId.get(e.id) ?? []), e]);
+    for (const [id, remote] of byId) {
+      for (const e of remote) this.recv(e.hlc);
+      const row = this.index.get(id);
+      const at = this.dirty.get(id);
+      const published = [...remote, ...(row ? [row.entry] : [])];
+      const local = at !== undefined ? this.candidate(id, at) : undefined;
+      const f = fold(local ? [...published, local] : published);
+      const seen = joinVv(...published.map((e) => e.vv), row?.seen ?? {});
+      const winnerIsLocal =
+        local !== undefined && fp(f.winner) === fp(local) && !published.some((e) => fp(e) === fp(local));
+      if (winnerIsLocal) {
+        // Stays dirty. The next push mints from `seen`, so it descends from everything folded.
+        this.index.set(id, { entry: row?.entry ?? f.winner, seen });
+      } else {
+        const w = f.winner;
+        if (w.deleted || !w.value) this.store.delete(id);
+        else this.store.set(id, { ...w.value });
+        this.dirty.delete(id);
+        this.index.set(id, { entry: w, seen });
+      }
+      for (const l of f.losers) this.makeCopy(l);
+    }
   }
 
   private makeCopy(l: Entry): void {
     if (!l.value) return;
     const cid = copyIdOf(l);
-    if (this.seenCopies.has(cid) || this.base.has(cid)) return;
-    this.seenCopies.add(cid);
+    if (this.copies.has(cid) || this.index.has(cid) || this.store.has(cid)) return;
+    this.copies.add(cid);
     this.store.set(cid, { name: `${l.value.name} (${l.hlc[2]})`, body: l.value.body });
-    this.dirty.set(cid, this.clock());
+    this.dirty.set(cid, l.hlc[0]); // the loser's edit time
   }
 
-  /** Push: mint entries for dirty ids and write our whole lib (sync.md §7.3 PUSH). */
   push(): void {
+    if (this.needsPull) this.pull();
     for (const [id, at] of this.dirty) {
-      const base = this.base.get(id);
+      const row = this.index.get(id);
       const v = this.store.get(id) ?? null;
-      if (!base && v === null) continue;
+      if (!row && v === null) continue;
       const e: Entry = {
         id,
-        hlc: this.tick(at),
-        basis: base?.hlc ?? null,
-        vv: { ...(base?.vv ?? {}), [this.id]: (base?.vv[this.id] ?? 0) + 1 },
+        hlc: this.tickAt(at),
+        basis: row?.entry.hlc ?? null,
+        vv: { ...(row?.seen ?? {}), [this.id]: ++this.vvCounter },
         deleted: v === null,
-        value: v,
+        value: v ? { ...v } : null,
       };
-      this.base.set(id, e);
+      this.index.set(id, { entry: e, seen: e.vv });
     }
     this.dirty.clear();
-    this.remote.write(this.id, this.base);
+    this.remote.write(this.id, new Map([...this.index].map(([k, r]) => [k, r.entry])));
   }
 }

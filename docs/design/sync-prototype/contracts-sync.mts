@@ -108,7 +108,8 @@ export interface SyncEntry<K extends SyncKind = SyncKind> {
   basis: Hlc | null;
   /**
    * Per-key version vector: edits per device along this entry's history. The transitive form of
-   * the parent pointers: A descends from B iff vv(A) >= vv(B) pointwise (sync.md §7.4).
+   * the parent pointers: A descends from B iff vv(A) >= vv(B) pointwise (sync.md §7.4). This
+   * device's component is a fresh value of the persistent, never-reset `syncMeta.vvCounter` (N1).
    */
   vv: Record<DeviceId, number>;
   /** Fingerprint (sync.md §7.2): sha256 of canonicalJson(value minus volatile fields); `''` for a tombstone. */

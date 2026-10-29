@@ -1,4 +1,4 @@
-# Sync across devices with Google Drive (design spike, rev 2)
+# Sync across devices with Google Drive (design spike, rev 3)
 
 Owner request (2026-10-28): *"I would also like to be able to share experiments and other data
 across devices seamlessly by logging into my google account."*
@@ -10,7 +10,8 @@ The owner has fixed two inputs:
 - **Scope:** sync **everything**: definitions, strategies, layouts, groups, settings, run meta and
   full run results.
 
-**Rev 2** applies the PR #36 review: B1–B6, should-fixes 1–12 and the nits. §16 lists the changes.
+**Rev 2** applies the PR #36 review: B1–B6, should-fixes 1–12 and the nits. **Rev 3** applies the
+re-review: N1–N3, should-fixes 1–5 and the nits. §16 lists the changes for both.
 
 - `decisions.md` ("Google Drive sync") and open questions 13–18 are already recorded.
 - Where rev 2 refines a recorded decision, §1 says so. The two refinements are merging by version
@@ -22,8 +23,9 @@ How to use this doc:
 - A **sign-in gate** after wave 2 has the owner test Google sign-in on the Pixel before the engine
   is wired in.
 - §4 holds the contracts that WP-S0 freezes.
-- The prototype in `docs/design/sync-prototype/` (§15) passes all its tests (10, including the B1
-  model). Run it with `npx vitest run --root docs/design/sync-prototype`.
+- The prototype in `docs/design/sync-prototype/` (§15) passes all 12 of its tests, 7 of them in
+  the merge model. The model fuzz passes 1,000 seeds; it defaults to 100, and `MODEL_SEEDS=1000`
+  raises it. Run it with `npx vitest run --root docs/design/sync-prototype`.
 
 ---
 
@@ -36,14 +38,14 @@ How to use this doc:
 | D3 | Account email | From Drive `about.get` (`emailAddress`, `permissionId`); no `openid email` scope. | An extra consent line for no gain. |
 | D4 | GIS script | Loaded lazily from `accounts.google.com/gsi/client`, only when the Account card renders or on sign-in. Not an npm dependency, no SRI: Google forbids self-hosting it and does not version it. A documented exception to pinning. | Not allowed or not possible. |
 | D5 | Drive layout | A root marker, **one lib file per device** (written only by that device), and **one bundle per done run** (`run.<runId>.<digest16>.spinner.json.gz`, the existing gzip export format). | One file per record: thousands of requests. One shared manifest: Drive v3 has no compare-and-swap. |
-| D6 | Merge (B1) | A state-based CRDT. **Each entry carries `basis`** (the HLC of the entry it was edited from) **and a per-key version vector `vv`**, the transitive form of the parent pointers: A descends from B iff `vv(A) ≥ vv(B)`.<br>• **Concurrent** (neither descends): keep both and post a notice.<br>• **Winner:** an edit beats a delete; otherwise the higher HLC.<br>• **Loser:** a deterministic conflicted copy, so every device makes the same single copy.<br>• The engine **re-lists and re-pulls just before writing its lib file** and re-runs `resolve`. | A bare `basis` pointer: a transitive chain (A → C → D) would look concurrent and resurrect stale copies. Plain LWW: loses an edit when both devices push before either pulls (rev 1's bug). |
-| D7 | Clocks (B5) | HLC per device. **Entries are minted from the edit time** (`syncDirty.last`), not the push time. Entries whose HLC device is this device are ordered (our own history), never a conflict. | Push time: LWW would reflect who synced last, not who edited last. |
+| D6 | Merge (B1, N2, N3) | A state-based CRDT. **Each entry carries `basis`** (the HLC of its parent) **and a per-key version vector `vv`**, the transitive form of the parent pointers: A descends from B iff `vv(A) ≥ vv(B)`.<br>**Merging is a fold over the whole set** of entries known for a key: every lib file, our base and our local candidate. **It never mutates an entry** (N2):<br>1. **Equivalent** entries (same fingerprint and deleted flag) collapse into the lowest-HLC one, with their vvs joined. This only merges identical content, and it ends "copy of a copy" (N3).<br>2. Take the **maximal** elements under strict vv dominance.<br>3. The **winner** among them is an edit over a delete, then the higher HLC.<br>4. **Every other maximal live entry is a loser** and becomes a deterministic conflicted copy, plus a notice.<br>The join of all folded vvs (`seen`) is kept **locally** as the basis of the next edit and is never published as the winner's own vv. The engine **re-lists and re-pulls just before writing its lib file** and re-runs the fold. | Pairwise `mergeEntries` that joined the winner's vv: it fabricated ancestry and depended on the fold order (rev 2 defect N2). Plain LWW: loses an edit when both devices push before either pulls. |
+| D7 | Clocks (B5, N1) | HLC per device. **Entries are minted from the edit time** (`syncDirty.last`), not the push time. **This device's vv component comes from one persistent, monotone counter `syncMeta.vvCounter`.** Every new entry, including the local candidate in a fold, consumes a fresh value. The counter **survives every reset**: re-seed, Replace, account switch, erase, "Delete everything on this device". Only a new device id (fresh browser storage) starts a new component. Our own older entries are therefore always dominated, never concurrent, and never win over a newer local edit. | A per-key count from the base: after a reset it restarts at 1, and the peers' `{self:3}` beats the new edit (rev 2 defect N1). |
 | D8 | Change tracking | A **tracking `Backend` decorator** writes a `syncDirty` mark **in the same IndexedDB transaction** as each tracked write. The engine writes through the raw backend. Other tabs broadcast their marks to the tab holding the sync lock. | Instrumenting each of the 15+ writers. |
 | D9 | Schema | **DB v3** adds `syncIndex`, `syncDirty` and `syncMeta`. `V2_STORE_NAMES` is frozen and the upgrade is guarded by `contains`. Existing records are unchanged. The only changes to existing types are additive: `RunMeta.synced?`, and the encoder now returns its digest. | Fields on existing records: touches frozen contracts and every writer. |
 | D10 | Fingerprints | `hash = sha256(canonicalJson(fingerprintValue(kind, value)))`, defined per type (§7.2). It **excludes `updatedAt`** and other volatile fields, so a re-save that changes nothing pushes nothing. | A hash of the raw record: every save churns. |
-| D11 | Definitions (B5) | Content-addressed and immutable, so they **never conflict on content**. The record metadata is a **join**:<br>• `runIds`: union, **sorted**, minus deleted runs;<br>• `displayName`: field-level LWW **by `displayNameAt`** (from rename PR #37); a rename-back keeps `displayNameAt` as a tombstone;<br>• `createdAt`: min; `updatedAt`: max;<br>• **unknown keys are preserved**.<br>The join takes the max HLC and the joined `vv`, and mints nothing, so devices cannot ping-pong. | Entry-level LWW: a rename and a new run on another device would lose one of them. |
+| D11 | Definitions (B5) | Content-addressed and immutable, so they **never conflict on content**. The record metadata is a **join over the maximal entries of the fold**:<br>• `runIds`: union, **sorted**, minus deleted runs;<br>• `displayName`: field-level LWW **by `displayNameAt`** (from rename PR #37), with **ties broken by the entry HLC**; a rename-back keeps `displayNameAt` as a tombstone;<br>• `createdAt`: min; `updatedAt`: max;<br>• **unknown keys are preserved**.<br>The join takes the max HLC and the joined `vv`, and mints nothing, so devices cannot ping-pong. | Entry-level LWW: a rename and a new run on another device would lose one of them. |
 | D12 | Strategies, layouts, groups | All three have **mutable whole records under stable ids** (strategy and layout slugs; group random ids). They use **entry-level LWW plus the D6 concurrency rule**.<br>• A concurrent loser becomes a conflicted copy with id `<id-base>-<6 hex of its fingerprint>` and name "… (device name)".<br>• A strategy copy re-keys `strategy.id` and recomputes `hash`. A layout copy keeps `layoutHash`, which ignores id and name.<br>• Groups are **never unioned** (B4): `runIds` is ordered (sweep index, compare baseline first). | A union of group `runIds`: breaks sweep and compare order. |
-| D13 | Runs (B3, B6) | **Only `done` runs get a bundle.**<br>• Paused, cancelled and errored runs sync as **stubs only** (status, counts, error).<br>• Running and queued runs are not pushed.<br>• A run made here has `owner` = this device; only the owner writes its entry.<br>• A **run imported** (file or gallery) with the same runId and digest on several devices is **one shared entry with no owner**: any device may write it, the upload is skipped when a remote stub already has the digest, and LWW decides with no notice.<br>• **Dry runs and benchmark runs** (`DRY_RUN_TAG`) are never synced.<br>• No resume on another device in v1. | Partial bundles for cancelled runs: cancelled is terminal, never compacted, and has no `resultsDigest` (`controller.ts`). |
+| D13 | Runs (B3, B6) | **Only `done` runs get a bundle.**<br>• Paused, cancelled and errored runs sync as **stubs only** (status, counts, error).<br>• Running and queued runs are not pushed.<br>• A run made here has `owner` = this device; only the owner writes its entry. **A downloaded run keeps `owner = meta.synced.from`**, so a downloader never takes ownership.<br>• A **run imported** (file or gallery) with the same runId and digest on several devices is **one shared entry with no owner**: any device may write it, the upload is skipped when a remote stub already has the digest, and LWW decides with no notice.<br>• **Dry runs and benchmark runs** (`DRY_RUN_TAG`) are never synced.<br>• No resume on another device in v1. | Partial bundles for cancelled runs: cancelled is terminal, never compacted, and has no `resultsDigest` (`controller.ts`). |
 | D14 | Run download | Every done run is uploaded. Downloads are a per-device setting: `onOpen` (default on phones) or `all` (default on desktops). Remote-only runs appear **in every run list and picker** with their verdict line and a "☁ In Drive" badge, and Sweep reuses them instead of re-running. | Pulling everything on phones. |
 | D15 | Settings | **Synced:** `framing` and `pace`. `pace` only seeds the pace of new drafts; existing definitions carry `roundsPerHour` explicitly, so their ids never change.<br>**Per device:** `theme` and everything else. | (open question 13: theme stays per device) |
 | D16 | Integrity | A downloaded bundle is verified **before one atomic write**:<br>• the file's sha256 against the stub;<br>• `resultsDigest` recomputed by the decoder (except for trimmed bundles, §7.6) and compared with the stub.<br>Lib entries are fingerprint-checked, and definition ids are re-hashed. Newer-format data is kept opaquely, never dropped.<br>**No byte-identity claim:** bundles may now carry `displayName`. Reuse is keyed on **runId + digest**. | n/a |
@@ -53,7 +55,7 @@ How to use this doc:
 | D20 | Client ID and config | The ID is public. It is set at build time as `VITE_GOOGLE_CLIENT_ID` from the repo variable `GOOGLE_CLIENT_ID`, with a committed fallback in `config.ts`. Local development uses `.env.local`; `*.local` is gitignored from S0. | n/a |
 | D21 | CSP, early | **A production meta CSP lands in S0, and the whole existing e2e suite runs under it** from then on. `oauth-return` is a **Vite multi-page entry**, so it is bundled and falls under the same CSP. The SW keeps ignoring cross-origin requests, and Drive calls use `cache: 'no-store'`. | Adding the CSP last (S6): late surprises. |
 | D22 | Code location | The pure engine goes in **`src/core/sync`**, with allowed edges `contracts`, `experiment` and `store`. **No `money`** (fixes rev 1's inconsistency). Browser adapters go in `src/app/services/sync/`. | n/a |
-| D23 | Sign-in gate | S3 ships a small **"Test Google sign-in"** button in Settings, shown only when a client ID is configured. It signs in, calls `about.get`, lists the app folder and revokes. **The owner checks it on the Pixel, in the installed app, before wave 4 (S5a) starts.** | Finding out in S6, after everything is built. |
+| D23 | Sign-in gate | A small **"Test Google sign-in"** row in the Account card. S4 builds the row; S3 implements `testSignIn()`. It is shown only when a client ID is configured. **The owner checks three things on the Pixel, in Chrome and in the installed app, before wave 4 (S5a) starts:**<br>• the popup;<br>• the redirect round trip;<br>• **Reconnect after expiry** (a "Expire token now" button in the row forces it).<br>The row then calls `about.get`, lists the app folder and revokes. | Finding out in S6, after everything is built. |
 
 ---
 
@@ -147,7 +149,7 @@ export interface SyncEntry<K extends SyncKind = SyncKind> {
   key: SyncKey; kind: K; id: string;
   hlc: Hlc;                        // minted from the edit time (syncDirty.last)
   basis: Hlc | null;               // parent: the entry this was edited from; null = created fresh
-  vv: Record<DeviceId, number>;    // per-key version vector (transitive parent pointers)
+  vv: Record<DeviceId, number>;    // per-key version vector; vv[self] = a fresh value of syncMeta.vvCounter
   hash: string;                    // fingerprint (§7.2); '' for a tombstone
   deleted?: true;
   v: number;                       // record schema; newer than known → kept opaquely
@@ -215,11 +217,15 @@ export const SYNCED_STORES: Partial<Record<StoreName, SyncKind>> = { definitions
   layouts: 'layout', groups: 'group', settings: 'setting', runs: 'run', runParts: 'run', summaries: 'run',
   checkpoints: 'run', breakdowns: 'run', samples: 'run' };
 
-interface SyncIndexRecord { key: SyncKey; kind: SyncKind; entry: SyncEntry; local: 0 | 1 }  // last agreed state
+interface SyncIndexRecord { key: SyncKey; kind: SyncKind;
+  entry: SyncEntry;   // the fold winner, published as-is (never re-stamped)
+  seen: Record<DeviceId, number>;   // join of every vv folded for this key: basis of the next local edit; local only
+  local: 0 | 1 }
 interface SyncDirtyRecord { key: SyncKey; last: number /* latest edit time */; n: string /* nonce */ }
 interface SyncMetaRecord { k: string; v: unknown }
 // syncMeta keys: device · prefs · account {accountId,email,boundAt} · clock · seen {fileId: version}
 //   · files {root?, ownLib?} · uploads {resumeKey: uri} · last · conflicts (≤50) · gcAt · libSha · copies
+//   · vvCounter (N1: monotone, never reset by any reset path; only a new device id starts over)
 ```
 
 - The tracker writes `{ key, last: Date.now(), n: random }` on every tracked write.
@@ -271,13 +277,17 @@ export const SUPPORTED_V: Record<SyncKind, number>;
 export function descends(a: SyncEntry, b: SyncEntry): boolean;                    // vv(a) ≥ vv(b)
 export function concurrent(a: SyncEntry, b: SyncEntry): boolean;
 // merge.ts
-export interface MergeOut { winner: SyncEntry; losers: SyncEntry[] }               // losers → conflicted copies
-export function mergeEntries(a: SyncEntry, b: SyncEntry): MergeOut;               // commutative, associative
-export function joinDef(a: SyncEntry<'def'>, b: SyncEntry<'def'>, deletedRuns: ReadonlySet<string>): SyncEntry<'def'>;
+export interface Folded { winner: SyncEntry; losers: SyncEntry[]; seen: Record<DeviceId, number> }
+/** Order-independent fold of every entry known for one key (§7.4). Never mutates an input entry. */
+export function foldEntries(all: readonly SyncEntry[], deletedRuns: ReadonlySet<string>): Folded;
+export function equivalent(a: SyncEntry, b: SyncEntry): boolean;                 // same hash and deleted flag
+export function joinDef(maximal: readonly SyncEntry<'def'>[], deletedRuns: ReadonlySet<string>): SyncEntry<'def'>;
 export function copyOf(loser: SyncEntry, deviceName: string, taken: ReadonlySet<string>): Promise<SyncEntry | null>;
 export type Resolution = { do: 'skip-older' } | { do: 'apply'; entry: SyncEntry } | { do: 'keep-local' }
   | { do: 'join'; entry: SyncEntry } | { do: 'opaque'; reason: string };
-export function resolve(base: SyncEntry | undefined, localDirty: SyncEntry | undefined, remote: SyncEntry): { res: Resolution; losers: SyncEntry[] };
+/** foldEntries over remote ∪ {base} ∪ {local candidate}, mapped to an action; losers → copies. */
+export function resolve(remote: readonly SyncEntry[], base: SyncIndexRecord | undefined,
+  localCandidate: SyncEntry | undefined, deletedRuns: ReadonlySet<string>): { res: Resolution; losers: SyncEntry[]; seen: Record<DeviceId, number> };
 // libfile.ts
 export function encodeLib(f: LibFileV1): Promise<Uint8Array>; export function decodeLib(b: Uint8Array): Promise<LibFileV1>;
 export const LIB_NAME: (d: DeviceId) => string; export const ROOT_NAME = 'spinner-sync.json';
@@ -512,17 +522,18 @@ cycle({ uploadRuns = true, timeBudgetMs = 120_000 }):
 
 PULL+APPLY(files):
   remote ← for each lib whose version ≠ seen[id] (≤4 parallel): decodeLib; verifyEntry each (bad → notice, skip)
-           fold with mergeEntries per key → { winner, losers }      (losers: peers' concurrent entries)
+           grouped per key: remote[key] = every entry from every lib file (a SET; no pairwise folding)
   deletedRuns ← run tombstones in remote ∪ syncIndex
   for each key in order (def, strategy, layout, group, setting, run):
      raw.update([...], async (r, w) => {
-        base ← syncIndex[key]; dirty ← r.get('syncDirty', key); local ← dirty ? snapshotEntry(key) : undefined
-        { res, losers } ← resolve(base?.entry, local, remote[key].winner)
-        apply res:  skip-older | apply (write value / delete; syncIndex ← entry; drop the mark if the local edit lost)
+        base ← syncIndex[key]; dirty ← r.get('syncDirty', key)
+        local ← dirty ? candidate(key) : undefined     (vv = base.seen + { self: ++vvCounter }, hlc from dirty.last)
+        { res, losers, seen } ← resolve(remote[key], base, local, deletedRuns)
+        apply res:  skip-older | apply (write value / delete; syncIndex ← { entry, seen }; drop the mark if the local edit lost)
                     | keep-local (syncIndex ← remote, so the next push descends from it; the mark stays)
                     | join (def: write the joined record; syncIndex ← joined entry; the mark stays if local ≠ joined)
                     | opaque (syncIndex ← entry, local 0; never dropped)
-        for l in losers ∪ remote[key].losers: c ← copyOf(l, deviceNameOf(l), taken)  (null when the copy id is in
+        for l in losers: c ← copyOf(l, deviceNameOf(l), taken)  (null when the copy id is in
               syncMeta.copies or syncIndex, live or tombstone) ; write c's record + a syncDirty mark ; notice
      })
   seen[f.id] ← f.version for fully applied files
@@ -538,41 +549,58 @@ run to finish"). Then:
 - **Replace:** raw-delete every record in the synced stores, run `resetLocalSyncState()`, then run
   `cycle()`.
 
-### 7.4 Concurrency and resolution (B1)
+### 7.4 Concurrency and resolution (B1, N1–N3)
 
-`resolve(base, local, remote)`. Here `local` is the entry the dirty local record *would* push:
-`basis = base.hlc`, `vv = base.vv + self`, and an HLC taken from its edit time.
+For each key, the engine folds the **set** `S` = every entry from every lib file, plus our base
+entry, plus (when the record is dirty) our **local candidate**. The candidate has
+`basis = base.entry.hlc`, `vv = base.seen + { self: ++vvCounter }`, and an HLC from its edit time.
 
-| Case | Result |
+```
+foldEntries(S):
+  1. classes ← group S by (hash, deleted)                         (N3: equivalence)
+     rep(class) ← its lowest-HLC entry with vv = join(class vvs)   (identical content only)
+  2. maximal ← reps not strictly dominated (vv) by another rep     (N2: no pairwise mutation)
+  3. kind 'def': winner ← joinDef(maximal)  (live beats deleted; deterministic join; §7.5); losers ← []
+     otherwise:  winner ← max(maximal) by (live over deleted, then higher HLC)
+                 losers ← maximal \ {winner}, live only, sorted by HLC
+                 kind 'setting' | 'run': losers ← []   (plain LWW; no copies, no notice)
+  4. seen ← join(vv of every entry in S except the candidate) ∪ base.seen
+```
+
+Mapping the fold to an action:
+
+| Fold result | Action |
 |---|---|
-| `base` descends `remote` (`vv(base) ≥ vv(remote)`) | `skip-older` |
-| no local edit, and remote descends base (or there is no base) | `apply` remote |
-| no local edit, and remote is concurrent with base. This is the both-pushed-before-pulling race: base is **our pushed** entry, and a peer edited from an older one | `mergeEntries(base, remote)`. The winner is applied or kept; the loser becomes a copy |
-| local edit, and remote descends base | `local` and `remote` are concurrent: `mergeEntries(local, remote)` |
-| def, any case | `join` (§7.5). Content is identical by construction, so never a copy |
+| `winner` is the base entry, and there is no candidate | `skip-older`; `seen` is updated |
+| `winner` is the candidate (it dominates everything, or wins among the maximal) and no published entry is equivalent to it | `keep-local`: the mark stays, and the push mints from `seen`, so the new entry descends from everything folded |
+| `winner` is equivalent to the candidate and also published | `apply` that published entry and drop the mark: our edit already exists |
+| any other winner | `apply` it. The candidate, when live and not equivalent to the winner, is among the losers, so it becomes a copy |
 | `v > SUPPORTED_V`, or an unknown kind | `opaque` |
 
-`mergeEntries(a, b)`:
+Properties:
 
-```
-if a ≡ b (same hlc) or descends(a, b) → { winner: a }
-if descends(b, a)                      → { winner: b }
-concurrent:
-  winner = (a.deleted ≠ b.deleted) ? the live one : the higher HLC      (an edit beats a delete)
-  loser  = the other
-  winner.vv = join(a.vv, b.vv)          (the winner absorbs the loser's history: later merges see a descendant)
-  losers = loser.deleted ? [] : [loser]                                  (a deleted loser needs no copy)
-  kind 'setting': losers = []           (plain LWW; no copy, no notice)
-  kind 'run': losers = []               (owner-only, or shared with the same digest: LWW, no notice; §7.6)
-```
+- **Order independence (N2):** the fold is a function of the set; a test permutes every read order.
+- **No lost update (B1):**
+  - Both devices push before either pulls: both entries are maximal, so one wins and the other is
+    copied.
+  - A local edit after a reset: `vvCounter` is monotone, so the new candidate dominates all of our
+    own older entries (N1).
+- **No copy of a copy (N3):** two devices that both create the same conflicted copy produce
+  equivalent entries, which collapse into one with no loser.
+- **The winner is published as-is.** `seen` stays local, so no device publishes ancestry it does not
+  have.
 
-`mergeEntries` is commutative and associative on the winner, and the losers form a set. The
-prototype's `model.test.mts` checks this, along with:
+The prototype's `model.test.mts` checks all of this:
 
 - the exact race where both devices push before either pulls;
 - a chain A → C → D, which must not count as a conflict;
 - an edit beating a delete;
-- a 30-seed fuzz at step granularity.
+- **N1** (3 edits, the lib file is lost, reset, edit: the edit survives);
+- **N2** (every permutation of 3- and 4-entry sets gives one result);
+- **N3** (three devices all create the same copy: one copy, no "(a) (a)");
+- a fuzz: 3 devices, 400 steps, losing the own lib file and Replace included. It asserts
+  convergence, that no edit is lost, that copies exist only of base ids, and that each content is
+  copied at most once.
 
 **The conflicted copy is deterministic**, so any device produces the same one:
 
@@ -581,9 +609,16 @@ prototype's `model.test.mts` checks this, along with:
   - A layout copy sets `layout.id = copyId`; `layoutHash` is unchanged.
   - A group copy takes `copyId` as its id.
 - **name:** `"<name> (<device name of hlcDevice(loser.hlc)>)"`, trimmed to 80 characters.
-- **entry:** a new key with `basis: null`, `vv: { self: 1 }`, and the loser's edit time.
-- **Two devices may both create the copy.** Their fingerprints are identical, so the entries merge
-  as `skip-older`/`apply` and no second copy appears.
+- **entry:** a new key with `basis: null`, `vv: { self: ++vvCounter }`, and an HLC from the loser's
+  edit time.
+- **Two devices may both create the copy.** Their content (id, name, value) is identical, so the
+  entries are **equivalent** and collapse in the fold with no loser (N3).
+  - The name uses the device of the loser's class representative (its lowest HLC), so every device
+    that sees the same set names it the same.
+  - Re-seed never re-mints unchanged records (§7.9 step 6). Equivalence classes therefore span
+    devices only for genuinely identical edits.
+  - In the worst case (an account switch re-minting old content), a second, differently named copy
+    can appear. Nothing is ever lost.
 - **A known copy id is never recreated.** If the id is already in `syncMeta.copies` or `syncIndex`
   (even as a tombstone), no copy is made, so a deleted copy stays deleted.
 - **Notice:** `“Big Martingale” was changed on two devices. Both are kept: “Big Martingale (Pixel)”.`
@@ -594,7 +629,7 @@ prototype's `model.test.mts` checks this, along with:
 
 | Kind | Concurrent edits | Edit vs delete | Validation on apply |
 |---|---|---|---|
-| **def** | **join**, never a copy:<br>• `runIds` = sorted union minus `deletedRuns`;<br>• `displayName`/`displayNameAt` from the side with the later `displayNameAt` (a missing `displayName` with a later `displayNameAt` is a rename-back);<br>• `createdAt` min, `updatedAt` max;<br>• `origin`/`derivedFrom` from the earlier `createdAt`;<br>• unknown keys: the union, taking the winner-by-HLC's value on a clash.<br>The joined entry has `hlc = max`, `vv = join`, and **no new mint**, so it is identical on every device. | the edit wins (the join of live and deleted is the live record) | `definitionId(rec.definition) === id`; else opaque, with a notice |
+| **def** | **join**, never a copy:<br>• `runIds` = sorted union minus `deletedRuns`;<br>• `displayName`/`displayNameAt` from the entry with the later `displayNameAt`, **ties broken by the higher entry HLC** (a missing `displayName` with a later `displayNameAt` is a rename-back);<br>• `createdAt` min, `updatedAt` max;<br>• `origin`/`derivedFrom` from the earlier `createdAt`;<br>• unknown keys: the union, taking the winner-by-HLC's value on a clash.<br>The join runs over the **maximal** entries of the fold, so a later delete that descends from everything still wins. The joined entry has `hlc = max`, `vv = join(maximal)`, and **no new mint**, so it is identical on every device that folds the same set.<br>**Dangling ids:** `runIds` may name a run that is neither local nor a stub (it is still uploading, or was GC'd). Display and the Library count filter `runIds` against local runs ∪ remote stubs (S5b). | the edit wins (the join of live and deleted is the live record) | `definitionId(rec.definition) === id`; else opaque, with a notice |
 | **strategy** | winner by HLC; the loser becomes a copy | the edit wins | `hash === sha256(canonicalJson(strategy))` and `rec.id === strategy.id` |
 | **layout** | winner by HLC; the loser becomes a copy | the edit wins | `hash === layoutHash(layout)`; built-in ids refused |
 | **group** | **whole-record LWW** (never a union); the loser becomes a copy "Sweep … (Pixel)" | the edit wins | shape check; `runIds` keeps its order |
@@ -621,7 +656,9 @@ prototype's `model.test.mts` checks this, along with:
 
 **Ownership:**
 
-- A run created on this device has `owner = self`.
+- A run created on this device has `owner = self`. **A run that arrived by download keeps
+  `owner = meta.synced.from`.** The downloader never rewrites it as its own; it only pushes a
+  tombstone if the user deletes it.
 - A run that entered through `importRun` (it has `meta.imported`) has **no owner**. Two devices
   importing the same file produce entries with the same runId and digest. Their fingerprints match
   (`importedAt` is excluded), so they never conflict, and LWW picks one stub.
@@ -704,12 +741,19 @@ the result is still deterministic.
      delete the others once they are more than 1 h old.
 2. **Stale devices:** delete a lib file whose `writtenAt` is more than 180 days old. Its entries are
    already in everyone's merged state. If that device ever returns, it re-seeds (step 6).
-3. **Tombstones (age + acknowledgement):** drop tombstone *T* from our lib file only when:
-   - it is **older than 30 days** (`hlcWall`), **and**
-   - **every** remaining lib file holds *T* or an entry that descends from it. A device
-     acknowledges *T* by rewriting its lib file with *T* in it.
+3. **Tombstones (age + acknowledgement).** Drop tombstone *T* (key *k*) from our lib file only when
+   both conditions hold:
+   - *T* is **older than 30 days** (`hlcWall`);
+   - **every** other remaining lib file **acknowledges** *T*, in one of three ways:
+     - it holds *T* or an entry that descends from it;
+     - it **has no entry for *k* at all, and its `writtenAt` is later than *T*'s wall time**.
+       Every lib file is a device's whole merged state, so a device that wrote after *T* existed
+       and lacks *k* must already have dropped *T* itself.
 
-   After step 2, no stale copy remains that could resurrect the record.
+   The second form removes the "mutual waiting" leak: once one device drops *T*, the others still
+   see it acknowledged. Step 2 runs first, so no stale lib file remains that could resurrect *k*.
+   An imperfect drop is still harmless: in the worst case a tombstone of about 200 B stays in a lib
+   file forever.
 4. **Orphan bundles:** delete `run.*` files that no live run entry in any lib file references (by
    runId + digest16), once they are more than 1 h old. **The keep rule:** a bundle stays while any
    lib file (ours or a peer's) holds a live `run:<runId>` entry with that digest. This covers shared
@@ -718,19 +762,27 @@ the result is still deterministic.
    - **Who:** any device holding a done run locally whose index entry names a bundle: the owner, or
      any holder of a shared run.
    - **When:** the listing lacks that name, or shows a size different from `stub.bundle.bytes`.
+     This includes the case where our upload was **skipped** because a remote stub already had
+     the digest, yet that stub's bundle file is missing.
    - **What:** re-upload under the same name, take the new sha256, and push the stub. This is the
      self-heal path for `missing`.
    - **Corrupt files:** a downloader that sees `corrupt` posts a notice. The holder fixes it on its
      next GC when the size differs. When only the content differs (rare), Library → Runs offers
      "Re-upload" (S5b).
-6. **Re-seed (should-fix 5).** This applies when our own lib file is missing (GC'd as stale, or
-   deleted by hand), `syncIndex` is not empty, and the root is not erased.
-   - **Why:** pushing the old base would re-assert stale state.
-   - **What:** call `resetLocalSyncState()`, which keeps prefs, the device id, the account and the
-     copies, then `begin('merge')`, which waits for an idle run.
-   - **Effect:** local records come back as fresh entries. A record that others deleted, and whose
-     tombstone is gone, comes back too. The notice says it was kept on this device, and differences
-     become copies.
+6. **Re-seed (rev 3).** This applies when our own lib file is missing (GC'd as stale, or deleted
+   by hand), `syncIndex` is non-empty, and the root is not erased.
+   - **What happens:** the device **keeps `syncIndex` and `vvCounter`**, and simply writes a new lib
+     file in the next cycle (pull before push, as always).
+   - **Why it is safe:** our old base entries are published again, but every newer peer edit
+     dominates them by vv, so they never win.
+   - **Why it beats a reset:**
+     - Unchanged records are not re-minted, so there are no false copies of stale content.
+     - Edits made since the last push are normal candidates.
+     - Rev 2's reset-then-merge would have turned every stale record into a copy, and without a
+       persistent counter it lost new edits (N1).
+   - **The one resurrection case:** a record deleted by others whose tombstone was dropped while
+     this device was away for more than 180 days. It comes back as "kept on this device",
+     documented.
 7. **Pacing:** deletes use the write bucket. GC is skipped when `navigator.connection?.saveData` is
    on.
 
@@ -738,7 +790,8 @@ the result is still deterministic.
 
 - **Binding:** `syncMeta.account = { accountId, email, boundAt }`. When a different `permissionId`
   signs in, a sheet offers two choices:
-  - **Sync this device's data to b@**: `resetLocalSyncState`, then `begin('merge')`;
+  - **Sync this device's data to b@**: `resetLocalSyncState` (it keeps the device id and
+    `vvCounter`), then `begin('merge')`;
   - **Cancel**: revoke.
 - **Remove my data from Drive:**
   1. Rewrite the root with `erased: { at, by }`.
@@ -824,7 +877,7 @@ Signed out                              Signed in
 │ folder, never your other files.│      │ 12 runs only in Drive (31 MB)  │
 │ How sync works ›               │      │ [ Download all ]               │
 │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │      │ Download runs                  │
-│ Test Google sign-in  (D23)     │      │ (•) When I open them           │
+│ Test Google sign-in  (D23) [▸] │      │ (•) When I open them           │
 └────────────────────────────────┘      │ ( ) All, in the background     │
 Popup failed / installed Android:       │ ⚠ 1 notice                 ›   │
 │ [ G  Sign in in this window  ] │      │ Devices: Pixel 11 (this),      │
@@ -999,8 +1052,15 @@ Replace asks again before deleting.
   - Fingerprint vectors pinned per kind (§7.2), including "a change to `updatedAt` only gives the
     same hash".
   - `vv` descent.
-  - `mergeEntries` properties over 1,000 seeded cases: commutative, associative, idempotent, and
-    the losers form a set.
+  - `foldEntries`:
+    - **every permutation** of sets of up to 5 entries gives an identical result (N2);
+    - equivalent entries collapse into the lowest HLC with their vvs joined, and with no loser
+      (N3);
+    - no input entry is mutated;
+    - 1,000 seeded random sets.
+  - **N1:** push 3 edits, lose the own lib file, reset, edit. The edit wins, and `vvCounter` was
+    never reset by any reset path (re-seed, Replace, account switch, erase, delete-all).
+  - `displayNameAt` ties are broken by the entry HLC.
   - `joinDef`:
     - with and without `displayName`/`displayNameAt` (rename-back);
     - `runIds` sorted, minus deleted runs;
@@ -1028,6 +1088,8 @@ Replace asks again before deleting.
       - every device's last local value before settling exists on every device, either as itself
         or as a copy;
       - every concurrent pair produces exactly one copy, and one notice on each device that saw it;
+      - **copy counts:** copies exist only of base ids (never a copy of a copy), and each content
+        is copied at most once;
       - no copy of a deleted copy is ever made;
       - a merge never changes the order of a group's `runIds`.
   - **Crash injection:** fault the *k*-th remote call for every *k* across a cycle, then sync again.
@@ -1046,7 +1108,8 @@ Replace asks again before deleting.
     - GC: a tombstone is dropped only after 30 days plus every acknowledgement; a stale device's
       file goes after 180 days; an orphan goes after 1 h, while a shared bundle is kept; a missing
       bundle is re-uploaded by its holder;
-    - re-seed when the own lib file is missing;
+    - re-seed when the own lib file is missing: the index is kept, nothing is re-minted, and there
+      are no false copies;
     - the erase marker;
     - first-sync merge and replace, including waiting for an active run;
     - a cycle with no changes makes **exactly 1 request**.
@@ -1064,7 +1127,8 @@ Replace asks again before deleting.
 - `reconnect()` and `signIn()` are called synchronously inside the click.
 - The amber glyph follows §8.2 exactly.
 - `RemoteRunCard` covers all its states.
-- The Test sign-in button appears only when a client ID is configured.
+- The Test sign-in row (in Account, S4) appears only when a client ID is configured, and its
+  "Expire token now" button drives the Reconnect path.
 
 ### 11.3 E2E (Playwright, `res browser`, `PW_WORKERS ≤ 2`)
 
@@ -1102,12 +1166,14 @@ The CSP is enforced on **every** spec from S0 on. axe runs at 360 px.
 
 **The gate** comes after wave 2 (D23), on the deploy that includes S3. On the Pixel:
 
-1. In Chrome (not the installed app), tap Settings → Test Google sign-in. Expect the consent screen
+1. In Chrome (not the installed app), tap Settings → Account → Test Google sign-in (popup). Expect the consent screen
    with the unverified/test-user notice and only the "its own configuration data" permission. Then
    expect your email and "0 files".
 2. In the installed app, tap the same button. Expect the redirect flow: the app reloads, then shows
    your email.
-3. Report which flows worked, and whether the popup also works in the installed app (button: "Try
+3. In both, tap "Expire token now", then **Reconnect**. Expect one tap with no questions: a quick
+   popup flash, or a redirect hop in the installed app.
+4. Report which flows worked, and whether the popup also works in the installed app (button: "Try
    popup instead").
 
 **The full plan**, after S6:
@@ -1220,14 +1286,18 @@ Google.
   - `tests/build/csp.test.ts`: the built `index.html` has the meta CSP.
 - **Batons:**
   - `eslint.config.js` and `tests/build/layering.test.ts`, in one commit: `CORE_MODULES += 'sync'`,
-    `CORE_ALLOWED.sync = ['contracts', 'experiment', 'store']`, and `testing` gains `sync`;
+    `CORE_ALLOWED.sync = ['contracts', 'experiment', 'store']`, and `testing` gains `sync`. It also adds
+    an `oauth` zone (`src/oauth/`) that may import only `@core/*` contracts and `src/pwa`, never
+    `src/app`;
   - `src/core/index.ts` (append);
   - `src/env.d.ts` (`ImportMetaEnv.VITE_GOOGLE_CLIENT_ID?`);
   - `vite.config.ts` (register the CSP plugin);
   - `.gitignore` (`*.local`);
   - `tests/app/shell.test.tsx` (`strictBackend` gains `update`);
-  - a shared e2e fixture `tests/e2e/fixtures.ts` that fails on `securitypolicyviolation`, or
-    `playwright.config.ts` if needed.
+  - `tests/e2e/helpers.ts`, the guard fixture that **every existing spec already imports** (all 14).
+    S0 adds `page.addInitScript` with a `securitypolicyviolation` listener that `console.error`s,
+    so the existing guard fails any spec with a violation. No spec needs editing. S0 owns this
+    change by baton.
 - **Acceptance:**
   - typecheck, lint and the layering test pass;
   - contract constants are pinned;
@@ -1253,7 +1323,8 @@ Google.
 
 - **Owns:** `src/core/sync/{hlc,fingerprint,vv,merge,libfile}.ts` and their tests.
 - **Acceptance:** as §11.1 pure, including porting the prototype's `model.test.mts` cases onto the
-  real `mergeEntries` and `resolve`.
+  real `foldEntries` and `resolve`: N1, N2 (permutations), N3, and the fuzz with its copy-count
+  asserts.
 
 ### WP-S3 Auth, Drive client, sign-in gate (wave 2)
 
@@ -1262,11 +1333,14 @@ Google.
   - `oauth-return.html` (at the repo root, a Vite entry) and `src/oauth/return.ts`;
   - `tests/e2e/fakes/{drive-server,gis-fake,auth-page}.ts`;
   - `tests/app/sync/*.test.ts`;
-  - the **Test Google sign-in** row, `src/app/screens/Settings/TestSignIn.tsx`.
+  - `testSignIn()` and `expireTokenForTest()` in `services/sync/test-signin.ts`. The **row itself
+    is S4's** (it lives in the Account card), so S3 holds no Settings baton.
+  - `src/oauth/return.ts` **imports nothing from `src/app/`**. It may import `src/core` contracts
+    or `src/pwa` only; the layering rule's `other` zone is not enough, so S0 adds the
+    `oauth → core` edge to the boundary check (S0's eslint baton).
 - **Batons:**
   - `vite.config.ts`: `build.rollupOptions.input` adds `oauth-return.html`; the CSP plugin covers
     it;
-  - `src/app/screens/Settings/index.tsx`: one line, mount `TestSignIn`;
   - `.github/workflows/pages.yml`: `env: VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}` on the
     build step, so the gate deploy has the ID.
 - **Acceptance:**
@@ -1282,8 +1356,11 @@ Google.
 
 ### WP-S4 Sync UI (wave 2, against the S0 stub)
 
-- **Owns:** `src/app/screens/Settings/Account.tsx`,
-  `src/app/components/{SyncIndicator,SyncSheets,RemoteRunCard}.tsx`, and their tests.
+- **Owns:**
+  - `src/app/screens/Settings/Account.tsx`, including the **Test Google sign-in row** (D23). It
+    calls the S0 stub's `testSignIn()`, which S3 makes real.
+  - `src/app/components/{SyncIndicator,SyncSheets,RemoteRunCard}.tsx`, and their tests.
+  - S4 is the **only** wave-2 holder of the `Settings/index.tsx` baton.
 - **Batons:**
   - `Settings/index.tsx`: Account first; "Delete everything on this device"; the About paragraph;
   - `TopBar.tsx` and `Nav.tsx`, one line each;
@@ -1344,7 +1421,8 @@ Google.
   - `Sweep/sweep.ts`: reuse remote done runs by `simKey`, never re-run them;
   - `Compare/index.tsx`: the picker, plus inline download;
   - `Define/index.tsx`: the compare sheet;
-  - `Library/index.tsx`: badge, greyed stubs, Remove download, Re-upload;
+  - `Library/index.tsx`: badge, greyed stubs, Remove download, Re-upload; the definition's run
+    count filters `runIds` against local runs ∪ stubs;
   - `Home/index.tsx`;
   - `Analyze/data.tsx` and `Watch/deps.ts`: a `remote` state that shows `RemoteRunCard`;
   - `Define/data.ts` and `services/layouts.ts`: export the `touch` functions.
@@ -1405,12 +1483,24 @@ the app tsconfig and ESLint, and Prettier already ignores `docs/`. It contains:
 - `prototype.test.mts`, 5 tests:
   - Drive: multipart upload, paging, a resumable 13 MB upload with resume, and error mapping;
   - GIS: sign-in, expiry, silent reconnect, revoke, scope, blocked popup, timeout and unconfigured.
-- `model.mts` and `model.test.mts`, the **B1 merge model**, 5 tests:
-  - the exact race where both devices push before either pulls;
+- `model.mts` and `model.test.mts`, the **merge model** (rev 3), 7 tests:
+  - the B1 race where both devices push before either pulls;
   - a chain A → C → D, with no false conflict;
   - an edit beating a delete;
-  - associativity and commutativity;
-  - a 30-seed, 3-device fuzz at step granularity, asserting convergence and that no edit is lost.
+  - **N1**: reset, then edit; the edit survives;
+  - **N2**: every permutation of fold order gives one result;
+  - **N3**: three devices create the same copy, and there is no copy of the copy;
+  - a 3-device, 400-step fuzz at step granularity. It includes losing the own lib file and
+    Replace, and asserts convergence, that no edit is lost, and copy counts. The default is 100
+    seeds; `MODEL_SEEDS=1000` passes.
+
+  **The fuzz found two more defects while it was being written; both are fixed in the design:**
+  1. **A local candidate must consume a real counter value.** A candidate that only "peeked" at
+     `vvCounter + 1` was absorbed into an equivalent tombstone's joined vv. A later, different
+     entry then reused that value and looked already seen, and its edit was lost.
+  2. **Re-seed must keep the index.** Rev 2's reset-then-merge turned every stale record into a
+     concurrent candidate. The copies were named differently on different devices, which gave a
+     copy of a copy.
 
 | # | Risk | Mitigation |
 |---|---|---|
@@ -1423,7 +1513,51 @@ the app tsconfig and ESLint, and Prettier already ignores `docs/`. It contains:
 
 ---
 
-## 16. Changelog: rev 2 (PR #36 review)
+## 16. Changelog
+
+### Rev 3 (PR #36 re-review)
+
+**Blocking:**
+
+- **N1:**
+  - `vv[self]` comes from a persistent, monotone `syncMeta.vvCounter`. It survives re-seed,
+    Replace, account switch, erase and delete-all (D7).
+  - A local candidate consumes a fresh counter value.
+  - A model test covers reset, then edit.
+- **N2:**
+  - `mergeEntries` is replaced by `foldEntries(set)`: equivalence classes, then the maximal
+    elements, then the winner. No entry is mutated.
+  - `seen` (the join of all folded vvs) is stored locally in `syncIndex.seen` and never published.
+  - A test covers every permutation.
+- **N3:**
+  - Equal fingerprint plus equal deleted flag means equivalent: collapse into the lowest HLC, with
+    the vvs joined and no loser.
+  - The fuzz asserts copy counts.
+- **Re-seed, revised (found by the fuzz):** it keeps `syncIndex` and `vvCounter` and just rewrites
+  the lib file (§7.9 step 6). This replaces rev 2's reset-then-merge, which made false copies.
+
+**Should-fix:**
+
+1. A downloaded run keeps `owner = meta.synced.from`.
+2. Tombstone GC accepts "no entry for the key and written after *T*" as an acknowledgement, which
+   ends the mutual-waiting leak. A leftover tombstone would be a harmless ~200 B (§7.9 step 3).
+3. Definition `runIds` are filtered against local runs ∪ stubs, for display and the Library count
+   (S5b).
+4. `displayNameAt` ties are broken by the entry HLC.
+5. Batons:
+   - The Test sign-in row moves into S4's Account card. S3 implements only `testSignIn()`, so S4 is
+     the only wave-2 holder of the `Settings/index.tsx` baton.
+   - The CSP-violation check goes in `tests/e2e/helpers.ts`, which all 14 specs already import;
+     S0 owns it by baton, and no spec needs editing.
+
+**Nits:**
+
+- `src/oauth/return.ts` imports nothing from `src/app/`; S0 adds the boundary edge.
+- D23's gate covers the popup, the redirect round trip, and Reconnect after expiry (an "Expire
+  token now" button).
+- GC step 5 re-uploads a bundle when our upload was skipped but the remote stub's file is missing.
+
+### Rev 2 (PR #36 review)
 
 **Blocking:**
 
