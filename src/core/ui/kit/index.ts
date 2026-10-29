@@ -10,3 +10,4 @@ export { Sheet, type SheetProps } from './Sheet';
 export { Stat, type StatProps } from './Stat';
 export { Tabs, type TabDef, type TabsProps } from './Tabs';
 export { ToastHost, showToast, dismissToast, clearToasts, type ToastItem } from './Toast';
+export { RelativeTime, relativeTime, fullTime, runTimestamp, useNow } from './RelativeTime';

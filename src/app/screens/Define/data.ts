@@ -13,6 +13,7 @@ import {
   createRunSink,
   definitionId,
   encodeShareLink,
+  experimentName,
   exportDefinitionFile,
   runMetrics,
   type Repo,
@@ -23,6 +24,7 @@ import { getPool } from '../../services/pool';
 import { activeRun, DRY_RUN_TAG, getCoreRepo, startRun } from '../../services/runs';
 import { setQuickCheckRunner } from '../../services/quickCheck';
 import { verdictFromMetrics, type VerdictInput } from '../../services/verdict';
+import { refreshLibrary } from '../../state/library';
 import { createStore } from '../../state/store';
 
 /** The library repo: the same one the run service writes to (services/runs). */
@@ -55,6 +57,17 @@ export async function saveDefinition(
   await repo.putDefinition(rec);
   touch();
   return id;
+}
+
+/**
+ * Renames a saved experiment in place (see core/store/definitions.ts): the record id, and so the
+ * `definitionId`, `runKey` and run ids of its runs, do not change. Every screen resolves the name
+ * through the record, so nothing else is rewritten.
+ */
+export async function renameDefinition(id: string, name: string): Promise<void> {
+  await (await libraryRepo()).renameDefinition(id, name);
+  touch();
+  void refreshLibrary();
 }
 
 export async function deleteDefinition(id: string): Promise<void> {
@@ -100,7 +113,8 @@ export async function loadDefinitionOfRun(runId: string): Promise<NormalizedDefi
   const repo = await libraryRepo();
   const meta = await repo.getRun(runId);
   if (!meta) return null;
-  return (await repo.getDefinition(meta.definitionId))?.definition ?? null;
+  const rec = await repo.getDefinition(meta.definitionId);
+  return rec ? { ...rec.definition, name: experimentName(rec) } : null;
 }
 
 // ------------------------------------------------------------------ quick check

@@ -10,6 +10,7 @@ import {
   isGzip,
   normalizeDefinition,
   decompressBytes,
+  experimentName,
 } from '@core';
 import { roulette } from '@game/roulette';
 import {
@@ -97,7 +98,7 @@ export async function importBytes(
     runId: res.runId,
     definitionId: r.data.meta.definitionId,
     status: res.status,
-    name: r.data.definition.name,
+    name: experimentName(r.data),
     data: r.data,
   };
 }

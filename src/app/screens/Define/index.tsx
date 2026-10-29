@@ -4,7 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import type { Json } from '@core/contracts/experiment';
 import type { Diagnostic, StrategyDefinition } from '@core/contracts/strategy';
-import { decodeShareLink, importDefinitionFile, SHARE_FALLBACK_NOTICE } from '@core';
+import {
+  decodeShareLink,
+  importDefinitionFile,
+  SHARE_FALLBACK_NOTICE,
+  validateDefinitionName,
+  experimentName,
+} from '@core';
 import {
   Button,
   Card,
@@ -18,6 +24,8 @@ import {
   Segmented,
   Select,
   Sheet,
+  RelativeTime,
+  runTimestamp,
   Toggle,
   showToast,
   useId,
@@ -54,6 +62,7 @@ import {
   loadDefinitionOfRun,
   measuredRate,
   QUICK_SESSIONS,
+  renameDefinition,
   saveDefinition,
   saveStrategy,
   shareOf,
@@ -205,7 +214,9 @@ function LibrarySheet(p: { onPick: (s: StrategyDefinition) => void; onClose: () 
 }
 
 function CompareSheet(p: { onPick: (runId: string) => void; onClose: () => void }) {
-  const [items, setItems] = useState<{ runId: string; name: string; seed: number }[] | null>(null);
+  const [items, setItems] = useState<
+    { runId: string; name: string; seed: number; at: string }[] | null
+  >(null);
   useEffect(() => {
     void (async () => {
       const repo = await libraryRepo();
@@ -215,8 +226,9 @@ function CompareSheet(p: { onPick: (runId: string) => void; onClose: () => void 
         const d = await repo.getDefinition(r.definitionId);
         out.push({
           runId: r.runId,
-          name: d?.definition.name ?? 'Untitled experiment',
+          name: d ? experimentName(d) : 'Untitled experiment',
           seed: d?.definition.run.seed ?? 0,
+          at: runTimestamp(r),
         });
       }
       setItems(out);
@@ -239,7 +251,9 @@ function CompareSheet(p: { onPick: (runId: string) => void; onClose: () => void 
                 onClick={() => p.onPick(r.runId)}
               >
                 <span class="row-title">{r.name}</span>
-                <span class="row-sub">seed {r.seed}</span>
+                <span class="row-sub">
+                  <RelativeTime iso={r.at} /> · seed {r.seed}
+                </span>
               </button>
             </li>
           ))}
@@ -436,7 +450,10 @@ export function Define({ params, query }: ScreenProps) {
             return;
           }
           setDoc({
-            ...definitionToDoc(rec.definition, { kind: 'library', id: rec.id }),
+            ...definitionToDoc(
+              { ...rec.definition, name: experimentName(rec) },
+              { kind: 'library', id: rec.id },
+            ),
             derivedFrom: rec.id,
           });
           setNotice('Editing a saved definition. Changes are saved as a new definition.');
@@ -722,6 +739,24 @@ export function Define({ params, query }: ScreenProps) {
     }
   };
 
+  /** Renames the saved definition this draft was opened from; the rest of the draft is untouched. */
+  const renameSaved = async () => {
+    const id = doc.derivedFrom;
+    if (!id) return;
+    const check = validateDefinitionName(doc.name);
+    if (!check.ok) {
+      showToast(check.error, { tone: 'error' });
+      return;
+    }
+    try {
+      await renameDefinition(id, check.name);
+      patch({ name: check.name });
+      showToast(`Renamed the saved definition to ${check.name}`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not rename.', { tone: 'error' });
+    }
+  };
+
   const doDry = async () => {
     if (!analysis.normalized) return;
     setBusy('dry');
@@ -821,8 +856,17 @@ export function Define({ params, query }: ScreenProps) {
             id="exp-name"
             value={doc.name}
             onInput={(e) => patch({ name: e.currentTarget.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && doc.derivedFrom) {
+                e.preventDefault();
+                void renameSaved();
+              }
+            }}
           />
         </Field>
+        {doc.derivedFrom ? (
+          <Button onClick={() => void renameSaved()}>Rename saved definition</Button>
+        ) : null}
       </div>
 
       <div class="define-grid">

@@ -1,11 +1,24 @@
 // Compare (architecture.md §6.3): 2 to 6 runs of the same game, side by side, with differences.
+import { experimentName } from '@core';
 import { useEffect, useState } from 'preact/hooks';
+import type { DefinitionRecord } from '@core/contracts/experiment';
 import type { RunData, RunMeta } from '@core/contracts/run';
-import { Button, Card, CompareView, Field, Select, type CompareRun } from '@core/ui';
+import {
+  Button,
+  Card,
+  CompareView,
+  Field,
+  relativeTime,
+  runTimestamp,
+  Select,
+  useNow,
+  type CompareRun,
+} from '@core/ui';
 import { navigate } from '../../router';
 import { dryRunDefinitionIds, getCoreRepo } from '../../services/runs';
 import { settingsStore } from '../../services/settings';
 import { useStore } from '../../state/store';
+import { pickerLabels } from '../pickerLabels';
 import { NotFoundCard, loadRunData, tableMaxFor } from '../Analyze/data';
 import type { ScreenProps } from '../types';
 
@@ -29,6 +42,8 @@ export function Compare({ query }: ScreenProps) {
   const framing = useStore(settingsStore, (s) => s.framing);
   const [datas, setDatas] = useState<(RunData | null)[] | null>(null);
   const [library, setLibrary] = useState<RunMeta[]>([]);
+  const [defs, setDefs] = useState<Map<string, DefinitionRecord>>(new Map());
+  const now = useNow();
   const [add, setAdd] = useState('');
 
   useEffect(() => {
@@ -42,25 +57,46 @@ export function Compare({ query }: ScreenProps) {
     };
   }, [key]);
   useEffect(() => {
-    void Promise.all([getCoreRepo().then((r) => r.listRuns()), dryRunDefinitionIds()])
-      .then(([l, dry]) =>
-        setLibrary(l.filter((m) => m.status === 'done' && !dry.has(m.definitionId))),
-      )
+    void Promise.all([
+      getCoreRepo().then((r) => Promise.all([r.listRuns(), r.listDefinitions()])),
+      dryRunDefinitionIds(),
+    ])
+      .then(([[l, d], dry]) => {
+        setDefs(new Map(d.map((x) => [x.id, x])));
+        setLibrary(l.filter((m) => m.status === 'done' && !dry.has(m.definitionId)));
+      })
       .catch(() => undefined);
   }, []);
 
   const loaded = (datas ?? []).filter((d): d is RunData => d !== null);
   const missing = datas ? ids.filter((_, i) => datas[i] === null) : [];
-  const labels = loaded.map((d) => d.definition.name);
-  const runs: CompareRun[] = loaded.map((d, i) => ({
-    id: d.meta.runId,
-    label:
-      labels.filter((l) => l === labels[i]).length > 1
-        ? `${labels[i]} (${d.meta.runId.slice(-8)})`
-        : labels[i]!,
-    data: d,
-  }));
+  const labels = loaded.map((d) => experimentName(d));
+  const runs: CompareRun[] = loaded.map((d, i) => {
+    const same = loaded.filter((_, k) => labels[k] === labels[i]);
+    const sameSessions = same.filter((o) => o.meta.sessions === d.meta.sessions);
+    return {
+      id: d.meta.runId,
+      label:
+        same.length <= 1
+          ? labels[i]!
+          : sameSessions.length <= 1
+            ? `${labels[i]} (${d.meta.sessions.toLocaleString('en-US')} sessions)`
+            : `${labels[i]} (${d.meta.sessions.toLocaleString('en-US')} sessions, seed ${d.definition.run.seed})`,
+      data: d,
+    };
+  });
   const candidates = library.filter((m) => !ids.includes(m.runId));
+  const optionLabels = pickerLabels(
+    candidates.map((m) => {
+      const rec = defs.get(m.definitionId);
+      return {
+        name: rec ? experimentName(rec) : 'Untitled experiment',
+        when: relativeTime(runTimestamp(m), now),
+        sessions: m.sessions,
+        seed: rec?.definition.run.seed,
+      };
+    }),
+  );
   const sameGame = loaded.every((d) => d.meta.gameId === loaded[0]?.meta.gameId);
 
   return (
@@ -69,7 +105,7 @@ export function Compare({ query }: ScreenProps) {
       <ul class="chip-row" aria-label="Runs being compared">
         {ids.map((id, i) => (
           <li key={id} class="run-chip">
-            <span>{runs.find((r) => r.id === id)?.label ?? id.slice(-8)}</span>
+            <span>{runs.find((r) => r.id === id)?.label ?? 'Run'}</span>
             <button
               type="button"
               aria-label={`Remove ${runs.find((r) => r.id === id)?.label ?? id}`}
@@ -92,10 +128,7 @@ export function Compare({ query }: ScreenProps) {
                   onChange={setAdd}
                   options={[
                     { value: '', label: 'Choose a run' },
-                    ...candidates.map((m) => ({
-                      value: m.runId,
-                      label: `${m.runId.slice(-8)} · ${m.createdAt.slice(0, 10)} · ${m.sessions.toLocaleString('en-US')} sessions`,
-                    })),
+                    ...candidates.map((m, k) => ({ value: m.runId, label: optionLabels[k]! })),
                   ]}
                 />
               </Field>

@@ -7,7 +7,13 @@ import type {
   Json,
   NormalizedDefinition,
 } from '@core/contracts/experiment';
-import { applySweepValue, newRunId, normalizeDefinition, sweepPathAllowed } from '@core';
+import {
+  applySweepValue,
+  newRunId,
+  normalizeDefinition,
+  sweepPathAllowed,
+  experimentName,
+} from '@core';
 import { createStore } from '../../state/store';
 import { game } from '../../services/game';
 import { getController, getCoreRepo, resumeStored, runKeys, startRun } from '../../services/runs';
@@ -145,7 +151,7 @@ export async function createSweep(
     v: 1,
     id: newRunId(base.id),
     kind: 'sweep',
-    name: `${base.definition.name} · sweep ${path}`,
+    name: `${experimentName(base)} · sweep ${path}`,
     baseDefinitionId: base.id,
     sweep: { path, values },
     variantDefinitionIds: ids,

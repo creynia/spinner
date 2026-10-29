@@ -4,6 +4,7 @@ import type { LayoutRecord } from '../contracts/layout';
 import type { RunData, RunMeta } from '../contracts/run';
 import { newRunId } from '../experiment';
 import type { Backend } from './backend';
+import { mergeDisplayName, renameDefinitionRecord, type StoredRunData } from './definitions';
 import { loadRun, writeCompacted } from './sink';
 
 export interface ImportResult {
@@ -16,6 +17,8 @@ export interface Repo {
   listDefinitions(): Promise<DefinitionRecord[]>;
   getDefinition(id: string): Promise<DefinitionRecord | undefined>;
   putDefinition(rec: DefinitionRecord): Promise<void>;
+  /** Changes `definition.name` only; the id, and so every `runKey`, stays. Throws on a bad name. */
+  renameDefinition(id: string, name: string): Promise<DefinitionRecord>;
   listStrategies(): Promise<StrategyRecord[]>;
   getStrategy(id: string): Promise<StrategyRecord | undefined>;
   putStrategy(rec: StrategyRecord): Promise<void>;
@@ -59,6 +62,7 @@ export function createRepo(backend: Backend): Repo {
       (await backend.getAll<DefinitionRecord>('definitions', 'byUpdated')).reverse(),
     getDefinition: (id) => backend.get('definitions', id),
     putDefinition: (rec) => putOne('definitions', rec),
+    renameDefinition: (id, name) => renameDefinitionRecord(backend, id, name),
     listStrategies: async () =>
       (await backend.getAll<StrategyRecord>('strategies', 'byUpdated')).reverse(),
     getStrategy: (id) => backend.get('strategies', id),
@@ -134,8 +138,13 @@ export function createRepo(backend: Backend): Repo {
       let meta = data.meta;
       const have = await backend.get<RunMeta>('runs', meta.runId);
       if (have) {
-        if (have.resultsDigest === meta.resultsDigest)
+        if (have.resultsDigest === meta.resultsDigest) {
+          // the run is already here, but the file may carry a newer rename
+          const rec = await backend.get<DefinitionRecord>('definitions', meta.definitionId);
+          const merged = rec ? mergeDisplayName(rec, data as StoredRunData) : null;
+          if (merged) await putOne('definitions', merged);
           return { status: 'exists', runId: meta.runId };
+        }
         let id = newRunId(meta.definitionId);
         while (await backend.get('runs', id)) id = newRunId(meta.definitionId);
         meta = { ...meta, runId: id };
