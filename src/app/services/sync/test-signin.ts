@@ -77,10 +77,17 @@ export async function resumeTestSignIn(): Promise<TestSignInResult | null> {
 
 /**
  * Loads the GIS script ahead of the tap, so the popup opens inside the click's user activation.
- * Call when the Account card renders. Failures are ignored here (the tap reports them).
+ * Failures are ignored here (the tap reports them). Without `eager` it loads only when sign-in is
+ * already in play (a token, an email hint or a gate redirect in flight), so opening Settings
+ * doesn't contact Google for people who never use sync; the card calls it with `eager` when the
+ * pointer or focus reaches the test block. Never while offline.
  */
-export function preloadSignIn(): void {
-  if (GOOGLE_CLIENT_ID) loadGis().catch(() => undefined);
+export function preloadSignIn(opts: { eager?: boolean } = {}): void {
+  if (!GOOGLE_CLIENT_ID) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  const s = getAuth().source.state.state;
+  if (!opts.eager && !flag.get() && s !== 'signed-in' && s !== 'expired') return;
+  loadGis().catch(() => undefined);
 }
 
 /** Revokes the grant at Google and forgets the session (the gate's clean-up). */
