@@ -142,9 +142,46 @@ describe('merge model', () => {
     for (const d of devs) {
       expect(d.store.size).toBe(2);
       expect([...d.store.keys()].filter(isCopyId)).toHaveLength(1);
-      expect([...d.store.values()].some((v) => /\(.*\) \(/.test(v.name))).toBe(false);
+      expect([...d.store.values()].some((v) => /\(conflict .*\(conflict /.test(v.name))).toBe(false);
     }
   });
+
+  it('S-A: small content pool, partition then heal: zero copies of copies, names view-independent', () => {
+    for (let seed = 1; seed <= SEEDS; seed++) {
+      let s = seed * 7919;
+      const rnd = (n: number) => ((s = (s * 1103515245 + 12345) >>> 0) >>> 8) % n;
+      const { devs, settle, dump } = world(3);
+      const pool = ['red', 'black']; // identical edits on different devices are common
+      // partition: d0 alone, d1+d2 together (each side syncs only via its own remote)
+      const left = new Remote();
+      const right = new Remote();
+      const side = (d: Device) => (d.id === 'd0' ? left : right);
+      for (let step = 0; step < 300; step++) {
+        const d = devs[rnd(3)]!;
+        const op = rnd(9);
+        const id = ['p', 'q'][rnd(2)]!;
+        const real = d.remote;
+        (d as unknown as { remote: Remote }).remote = step < 200 ? side(d) : real; // heal at 200
+        if (op < 4) d.edit(id, pool[rnd(2)]!);
+        else if (op < 5) d.del(id);
+        else if (op < 7) d.pull();
+        else d.push();
+        (d as unknown as { remote: Remote }).remote = real;
+      }
+      // heal: merge both partitions' lib files into the real remote, then settle
+      for (const part of [left, right]) for (const [dev, m] of part.libs) {
+        const have = devs[0]!.remote.libs.get(dev);
+        devs[0]!.remote.libs.set(dev, new Map([...(have ?? []), ...m]));
+      }
+      settle();
+      const first = dump(devs[0]!);
+      for (const d of devs) expect(dump(d), `seed ${seed}`).toBe(first);
+      for (const [id, v] of devs[0]!.store) {
+        expect(id, `seed ${seed}`).toMatch(/^[pq](-[0-9a-z]{6})?$/); // no copy of a copy
+        if (id.length > 1) expect(v.name, `seed ${seed}`).toMatch(/^[pq] \(conflict [0-9a-z]{6}\)$/);
+      }
+    }
+  }, 600_000);
 
   it('seeded fuzz: 3 devices, 400 steps, converge, keep last edits, no copy of a copy', () => {
     for (let seed = 1; seed <= SEEDS; seed++) {

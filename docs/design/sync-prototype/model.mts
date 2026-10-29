@@ -42,11 +42,18 @@ export const joinVv = (...vs: Vv[]): Vv => {
 export const fp = (e: Entry): string => (e.deleted ? 'DEL' : `${e.value?.name}|${e.value?.body}`);
 const vvKey = (v: Vv): string => JSON.stringify(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1)));
 
-export function copyIdOf(loser: Entry): string {
+/** 6 chars from the loser's fingerprint (id + content). Stands in for `loser.hash.slice(0, 6)`. */
+export function hex6(loser: Entry): string {
   let h = 2166136261;
   for (const ch of `${loser.id}|${fp(loser)}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-  return `${loser.id}-${(h >>> 0).toString(36).padStart(7, '0').slice(0, 6)}`;
+  return (h >>> 0).toString(36).padStart(7, '0').slice(0, 6);
 }
+export const copyIdOf = (loser: Entry): string => `${loser.id}-${hex6(loser)}`;
+/**
+ * S-A: the copy's whole content (id, name, value) is a pure function of the loser's fingerprint.
+ * The device name goes only into the notice, never into the record.
+ */
+export const copyNameOf = (loser: Entry): string => `${loser.value?.name} (conflict ${hex6(loser)})`;
 export const isCopyId = (id: string): boolean => /-[0-9a-z]{6}$/.test(id);
 
 export interface Folded {
@@ -208,7 +215,7 @@ export class Device {
     const cid = copyIdOf(l);
     if (this.copies.has(cid) || this.index.has(cid) || this.store.has(cid)) return;
     this.copies.add(cid);
-    this.store.set(cid, { name: `${l.value.name} (${l.hlc[2]})`, body: l.value.body });
+    this.store.set(cid, { name: copyNameOf(l), body: l.value.body });
     this.dirty.set(cid, l.hlc[0]); // the loser's edit time
   }
 

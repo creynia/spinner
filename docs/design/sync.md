@@ -11,7 +11,8 @@ The owner has fixed two inputs:
   full run results.
 
 **Rev 2** applies the PR #36 review: B1–B6, should-fixes 1–12 and the nits. **Rev 3** applies the
-re-review: N1–N3, should-fixes 1–5 and the nits. §16 lists the changes for both.
+re-review: N1–N3, should-fixes 1–5 and the nits. **Rev 3.1** applies the approval conditions
+S-A, S-B and S-C. §16 lists the changes.
 
 - `decisions.md` ("Google Drive sync") and open questions 13–18 are already recorded.
 - Where rev 2 refines a recorded decision, §1 says so. The two refinements are merging by version
@@ -23,7 +24,7 @@ How to use this doc:
 - A **sign-in gate** after wave 2 has the owner test Google sign-in on the Pixel before the engine
   is wired in.
 - §4 holds the contracts that WP-S0 freezes.
-- The prototype in `docs/design/sync-prototype/` (§15) passes all 12 of its tests, 7 of them in
+- The prototype in `docs/design/sync-prototype/` (§15) passes all 13 of its tests, 8 of them in
   the merge model. The model fuzz passes 1,000 seeds; it defaults to 100, and `MODEL_SEEDS=1000`
   raises it. Run it with `npx vitest run --root docs/design/sync-prototype`.
 
@@ -39,12 +40,12 @@ How to use this doc:
 | D4 | GIS script | Loaded lazily from `accounts.google.com/gsi/client`, only when the Account card renders or on sign-in. Not an npm dependency, no SRI: Google forbids self-hosting it and does not version it. A documented exception to pinning. | Not allowed or not possible. |
 | D5 | Drive layout | A root marker, **one lib file per device** (written only by that device), and **one bundle per done run** (`run.<runId>.<digest16>.spinner.json.gz`, the existing gzip export format). | One file per record: thousands of requests. One shared manifest: Drive v3 has no compare-and-swap. |
 | D6 | Merge (B1, N2, N3) | A state-based CRDT. **Each entry carries `basis`** (the HLC of its parent) **and a per-key version vector `vv`**, the transitive form of the parent pointers: A descends from B iff `vv(A) ≥ vv(B)`.<br>**Merging is a fold over the whole set** of entries known for a key: every lib file, our base and our local candidate. **It never mutates an entry** (N2):<br>1. **Equivalent** entries (same fingerprint and deleted flag) collapse into the lowest-HLC one, with their vvs joined. This only merges identical content, and it ends "copy of a copy" (N3).<br>2. Take the **maximal** elements under strict vv dominance.<br>3. The **winner** among them is an edit over a delete, then the higher HLC.<br>4. **Every other maximal live entry is a loser** and becomes a deterministic conflicted copy, plus a notice.<br>The join of all folded vvs (`seen`) is kept **locally** as the basis of the next edit and is never published as the winner's own vv. The engine **re-lists and re-pulls just before writing its lib file** and re-runs the fold. | Pairwise `mergeEntries` that joined the winner's vv: it fabricated ancestry and depended on the fold order (rev 2 defect N2). Plain LWW: loses an edit when both devices push before either pulls. |
-| D7 | Clocks (B5, N1) | HLC per device. **Entries are minted from the edit time** (`syncDirty.last`), not the push time. **This device's vv component comes from one persistent, monotone counter `syncMeta.vvCounter`.** Every new entry, including the local candidate in a fold, consumes a fresh value. The counter **survives every reset**: re-seed, Replace, account switch, erase, "Delete everything on this device". Only a new device id (fresh browser storage) starts a new component. Our own older entries are therefore always dominated, never concurrent, and never win over a newer local edit. | A per-key count from the base: after a reset it restarts at 1, and the peers' `{self:3}` beats the new edit (rev 2 defect N1). |
+| D7 | Clocks (B5, N1) | HLC per device. **Entries are minted from the edit time** (`syncDirty.last`), not the push time. **This device's vv component comes from one persistent, monotone counter `syncMeta.vvCounter`.** Every new entry, including the local candidate in a fold, consumes a fresh value. The counter **survives every reset**: re-seed, Replace, account switch, erase, "Delete everything on this device". Only a new device id (fresh browser storage) starts a new component. Our own older entries are therefore always dominated, never concurrent, and never win over a newer local edit.<br>**Persistence (S-B):**<br>• The counter is written in the **same transaction that reserves the values** (`raw.update` over `syncMeta` + `syncDirty`, *before* the lib upload), so a crash can only leave gaps, never reuse a value.<br>• On every start the engine sets `vvCounter = max(stored, every vv[self] in syncIndex entries and seen, and every vv[self] in any remote entry it reads)`. This also heals a store restored from an old backup. | A per-key count from the base: after a reset it restarts at 1, and the peers' `{self:3}` beats the new edit (rev 2 defect N1). |
 | D8 | Change tracking | A **tracking `Backend` decorator** writes a `syncDirty` mark **in the same IndexedDB transaction** as each tracked write. The engine writes through the raw backend. Other tabs broadcast their marks to the tab holding the sync lock. | Instrumenting each of the 15+ writers. |
 | D9 | Schema | **DB v3** adds `syncIndex`, `syncDirty` and `syncMeta`. `V2_STORE_NAMES` is frozen and the upgrade is guarded by `contains`. Existing records are unchanged. The only changes to existing types are additive: `RunMeta.synced?`, and the encoder now returns its digest. | Fields on existing records: touches frozen contracts and every writer. |
-| D10 | Fingerprints | `hash = sha256(canonicalJson(fingerprintValue(kind, value)))`, defined per type (§7.2). It **excludes `updatedAt`** and other volatile fields, so a re-save that changes nothing pushes nothing. | A hash of the raw record: every save churns. |
+| D10 | Fingerprints | `hash = sha256(canonicalJson(fingerprintValue(kind, value)))`, defined per type (§7.2). It **excludes `updatedAt`** and other volatile fields, so a re-save that changes nothing pushes nothing. **A conflicted copy is a pure function of the loser's fingerprint (S-A):**<br>• id `<id-base>-<hex6>`;<br>• name `"<name> (conflict <hex6>)"`;<br>• value the loser's, re-keyed;<br>where `hex6 = loser.hash.slice(0, 6)`. It never depends on which device or which class representative a device happened to see, so every device builds a byte-identical copy. The device name appears **only in the notice**. | Naming copies after a device: views differ between devices, which gave "x (a)" on one and "x (b)" on another, and then copies of copies. |
 | D11 | Definitions (B5) | Content-addressed and immutable, so they **never conflict on content**. The record metadata is a **join over the maximal entries of the fold**:<br>• `runIds`: union, **sorted**, minus deleted runs;<br>• `displayName`: field-level LWW **by `displayNameAt`** (from rename PR #37), with **ties broken by the entry HLC**; a rename-back keeps `displayNameAt` as a tombstone;<br>• `createdAt`: min; `updatedAt`: max;<br>• **unknown keys are preserved**.<br>The join takes the max HLC and the joined `vv`, and mints nothing, so devices cannot ping-pong. | Entry-level LWW: a rename and a new run on another device would lose one of them. |
-| D12 | Strategies, layouts, groups | All three have **mutable whole records under stable ids** (strategy and layout slugs; group random ids). They use **entry-level LWW plus the D6 concurrency rule**.<br>• A concurrent loser becomes a conflicted copy with id `<id-base>-<6 hex of its fingerprint>` and name "… (device name)".<br>• A strategy copy re-keys `strategy.id` and recomputes `hash`. A layout copy keeps `layoutHash`, which ignores id and name.<br>• Groups are **never unioned** (B4): `runIds` is ordered (sweep index, compare baseline first). | A union of group `runIds`: breaks sweep and compare order. |
+| D12 | Strategies, layouts, groups | All three have **mutable whole records under stable ids** (strategy and layout slugs; group random ids). They use **entry-level LWW plus the D6 concurrency rule**.<br>• A concurrent loser becomes a conflicted copy (D10): id `<id-base>-<hex6>`, name "… (conflict <hex6>)", with the device named only in the notice.<br>• A strategy copy re-keys `strategy.id` and recomputes `hash`. A layout copy keeps `layoutHash`, which ignores id and name.<br>• Groups are **never unioned** (B4): `runIds` is ordered (sweep index, compare baseline first). | A union of group `runIds`: breaks sweep and compare order. |
 | D13 | Runs (B3, B6) | **Only `done` runs get a bundle.**<br>• Paused, cancelled and errored runs sync as **stubs only** (status, counts, error).<br>• Running and queued runs are not pushed.<br>• A run made here has `owner` = this device; only the owner writes its entry. **A downloaded run keeps `owner = meta.synced.from`**, so a downloader never takes ownership.<br>• A **run imported** (file or gallery) with the same runId and digest on several devices is **one shared entry with no owner**: any device may write it, the upload is skipped when a remote stub already has the digest, and LWW decides with no notice.<br>• **Dry runs and benchmark runs** (`DRY_RUN_TAG`) are never synced.<br>• No resume on another device in v1. | Partial bundles for cancelled runs: cancelled is terminal, never compacted, and has no `resultsDigest` (`controller.ts`). |
 | D14 | Run download | Every done run is uploaded. Downloads are a per-device setting: `onOpen` (default on phones) or `all` (default on desktops). Remote-only runs appear **in every run list and picker** with their verdict line and a "☁ In Drive" badge, and Sweep reuses them instead of re-running. | Pulling everything on phones. |
 | D15 | Settings | **Synced:** `framing` and `pace`. `pace` only seeds the pace of new drafts; existing definitions carry `roundsPerHour` explicitly, so their ids never change.<br>**Per device:** `theme` and everything else. | (open question 13: theme stays per device) |
@@ -507,15 +508,22 @@ is dropped and nothing is pushed.
 cycle({ uploadRuns = true, timeBudgetMs = 120_000 }):
   lock 'spinner:sync' (ifAvailable) else return 'busy' ; token? else needs-auth
   files ← list() ; checkRoot(files)                                  (§7.10: newer layout → error; erased → off)
+  on start: vvCounter ← max(stored, vv[self] over syncIndex entries+seen, over remote entries as read)  (S-B)
   if ownLib missing && syncIndex non-empty && !firstSync → reseed()  (§7.9 step 6)
+     "missing" = files.ownLib unset, or an update() on files.ownLib returned 404 — never "absent from
+     one listing", which can lag behind a create
   PULL+APPLY(files)                                                   ── below
   if uploadRuns && !isRunActive(): uploadPendingRuns(deadline)        (§7.6; bundles before lib)
   SNAPSHOT: for d in syncDirty: s ← snapshot(d) → pending[d.key]       (tickAt(d.last); basis/vv from the base)
   RECHECK (B1 window): files' ← list() ; if any peer lib version changed since PULL → PULL+APPLY(files') again,
                        then re-run resolve for every pending key against the new base (a pending key whose
                        remote moved is re-snapshotted; concurrency → copies, as in APPLY)
+  RESERVE (S-B): raw.update(['syncMeta']): persist vvCounter (after every candidate and mint)   ← BEFORE upload
   lib ← syncIndex entries ⊕ pending, sorted ; bytes ← encodeLib(lib)
-  unless sha256(bytes) == libSha → ownLib ? update(ownLib.id, bytes) : create(LIB_NAME(self), bytes)
+  ownLib ← syncMeta.files.ownLib (NOT the listing: Drive listings can lag a fresh create)
+  unless sha256(bytes) == libSha →
+     ownLib ? update(ownLib.id, bytes)                    (404 on that id → ownLib is really gone: create)
+            : listing has LIB_NAME(self) ? adopt its id, update : create(LIB_NAME(self), bytes) → files.ownLib
   commit (raw.update): syncIndex ← pending ; delete syncDirty[k] iff its nonce n is unchanged ; libSha, seen, clock, last
   if prefs.runDownload == 'all': download remote-only runs, newest first, until deadline
   GC if gcAt older than 24 h (§7.9) ; emit status
@@ -597,7 +605,9 @@ The prototype's `model.test.mts` checks all of this:
 - an edit beating a delete;
 - **N1** (3 edits, the lib file is lost, reset, edit: the edit survives);
 - **N2** (every permutation of 3- and 4-entry sets gives one result);
-- **N3** (three devices all create the same copy: one copy, no "(a) (a)");
+- **N3** (three devices all create the same copy: one copy, no copy of a copy);
+- **S-A** (a small content pool where identical edits are common, a partition, then a heal: zero
+  copies of copies, and every copy is named `"<name> (conflict <hex6>)"`);
 - a fuzz: 3 devices, 400 steps, losing the own lib file and Replace included. It asserts
   convergence, that no edit is lost, that copies exist only of base ids, and that each content is
   copied at most once.
@@ -608,20 +618,20 @@ The prototype's `model.test.mts` checks all of this:
   - A strategy copy sets `strategy.id = copyId` and recomputes `hash`.
   - A layout copy sets `layout.id = copyId`; `layoutHash` is unchanged.
   - A group copy takes `copyId` as its id.
-- **name:** `"<name> (<device name of hlcDevice(loser.hlc)>)"`, trimmed to 80 characters.
+- **name:** `"<name> (conflict <hex6>)"` with `hex6 = loser.hash.slice(0, 6)`; `<name>` is trimmed so
+  the whole name fits in 80 characters. Like the id, it is a **pure function of the loser's
+  fingerprint** (S-A).
 - **entry:** a new key with `basis: null`, `vv: { self: ++vvCounter }`, and an HLC from the loser's
   edit time.
-- **Two devices may both create the copy.** Their content (id, name, value) is identical, so the
-  entries are **equivalent** and collapse in the fold with no loser (N3).
-  - The name uses the device of the loser's class representative (its lowest HLC), so every device
-    that sees the same set names it the same.
-  - Re-seed never re-mints unchanged records (§7.9 step 6). Equivalence classes therefore span
-    devices only for genuinely identical edits.
-  - In the worst case (an account switch re-minting old content), a second, differently named copy
-    can appear. Nothing is ever lost.
+- **Two devices may both create the copy.** Its id, name and value depend only on the loser's
+  fingerprint, so every device builds an identical copy. The entries are **equivalent** and
+  collapse in the fold with no loser (N3), whichever entry of the loser's class a device saw.
 - **A known copy id is never recreated.** If the id is already in `syncMeta.copies` or `syncIndex`
   (even as a tombstone), no copy is made, so a deleted copy stays deleted.
-- **Notice:** `“Big Martingale” was changed on two devices. Both are kept: “Big Martingale (Pixel)”.`
+- **Notice** (the only place a device is named; per device, not synced): `“Big Martingale” was
+  changed on two devices (Pixel and Laptop). Both are kept: the other version is “Big Martingale
+  (conflict 3fa9c1)”.` The devices are `hlcDevice` of the winner's and the loser's HLCs, resolved
+  through the lib files' `device.name`.
 - **Stages are safe.** They hold their own `x-chips` copy of the layout, so nothing dangles.
   `from.id` keeps pointing at the winner, the same Update / Keep model as today.
 
@@ -632,7 +642,7 @@ The prototype's `model.test.mts` checks all of this:
 | **def** | **join**, never a copy:<br>• `runIds` = sorted union minus `deletedRuns`;<br>• `displayName`/`displayNameAt` from the entry with the later `displayNameAt`, **ties broken by the higher entry HLC** (a missing `displayName` with a later `displayNameAt` is a rename-back);<br>• `createdAt` min, `updatedAt` max;<br>• `origin`/`derivedFrom` from the earlier `createdAt`;<br>• unknown keys: the union, taking the winner-by-HLC's value on a clash.<br>The join runs over the **maximal** entries of the fold, so a later delete that descends from everything still wins. The joined entry has `hlc = max`, `vv = join(maximal)`, and **no new mint**, so it is identical on every device that folds the same set.<br>**Dangling ids:** `runIds` may name a run that is neither local nor a stub (it is still uploading, or was GC'd). Display and the Library count filter `runIds` against local runs ∪ remote stubs (S5b). | the edit wins (the join of live and deleted is the live record) | `definitionId(rec.definition) === id`; else opaque, with a notice |
 | **strategy** | winner by HLC; the loser becomes a copy | the edit wins | `hash === sha256(canonicalJson(strategy))` and `rec.id === strategy.id` |
 | **layout** | winner by HLC; the loser becomes a copy | the edit wins | `hash === layoutHash(layout)`; built-in ids refused |
-| **group** | **whole-record LWW** (never a union); the loser becomes a copy "Sweep … (Pixel)" | the edit wins | shape check; `runIds` keeps its order |
+| **group** | **whole-record LWW** (never a union); the loser becomes a copy "Sweep … (conflict 3fa9c1)" | the edit wins | shape check; `runIds` keeps its order |
 | **setting** | LWW, no notice | n/a | key ∈ `SYNCED_SETTING_KEYS`; passed through `sanitizeSettings` |
 | **run** | owner-only, or shared imported runs with the same digest: LWW, no notice. The same runId with a **different digest** (a 2⁻⁴⁰ collision or a hand-edited import): the local run is re-keyed by `importRun`'s rule, with a notice | the delete wins, unless `isRunActive(runId)`: then the run is kept and re-pushed, with a notice. A re-import after a delete descends from the tombstone and lives | §7.6 |
 
@@ -1053,7 +1063,9 @@ Replace asks again before deleting.
     same hash".
   - `vv` descent.
   - `foldEntries`:
-    - **every permutation** of sets of up to 5 entries gives an identical result (N2);
+    - **every permutation** of sets of up to 5 entries gives an identical result (N2). This covers
+      **`joinDef` over the set** as well (S-C): the joined definition is order-independent and no
+      input is mutated (deep-frozen inputs);
     - equivalent entries collapse into the lowest HLC with their vvs joined, and with no loser
       (N3);
     - no input entry is mutated;
@@ -1065,7 +1077,12 @@ Replace asks again before deleting.
     - with and without `displayName`/`displayNameAt` (rename-back);
     - `runIds` sorted, minus deleted runs;
     - unknown keys preserved.
-  - Deterministic `copyOf` ids.
+  - `copyOf` is a pure function of the loser's fingerprint: id and name `"<name> (conflict <hex6>)"`
+    are identical across devices and across class representatives (S-A).
+  - **A small-content-pool fuzz.** Values come from a pool of 2 to 3 strings, so identical edits on
+    different devices are common. 3 devices are partitioned 1 | 2 for most steps, then healed and
+    settled. Assert convergence, **zero copies of copies**, and that every copy name matches
+    `/ \(conflict [0-9a-f]{6}\)$/` (S-A).
   - Every row of §7.4 and §7.5.
   - A lib file round trip, and the decode refusals.
 - **core/sync engine, with `createMemoryRemote({ hook })`:**
@@ -1092,6 +1109,11 @@ Replace asks again before deleting.
         is copied at most once;
       - no copy of a deleted copy is ever made;
       - a merge never changes the order of a group's `runIds`.
+  - **Crash injection at the upload/commit boundary (S-B):** crash after RESERVE but before the lib
+    upload, after the upload but before the local commit, and mid-commit. After a restart, no vv
+    value is ever reused (the counter is ≥ every vv[self] anywhere), and the next cycle converges.
+  - **Listing lag (S-B):** the memory remote can hide a freshly created file from `list()` for N
+    calls. `ownLib` is taken from `syncMeta.files`, so no duplicate lib file and no false re-seed.
   - **Crash injection:** fault the *k*-th remote call for every *k* across a cycle, then sync again.
     The devices must converge, and nothing local may change except by a rule.
   - **Runs:**
@@ -1323,8 +1345,8 @@ Google.
 
 - **Owns:** `src/core/sync/{hlc,fingerprint,vv,merge,libfile}.ts` and their tests.
 - **Acceptance:** as §11.1 pure, including porting the prototype's `model.test.mts` cases onto the
-  real `foldEntries` and `resolve`: N1, N2 (permutations), N3, and the fuzz with its copy-count
-  asserts.
+  real `foldEntries` and `resolve`: N1, N2 (permutations, including `joinDef`), N3, the S-A
+  small-pool partition-and-heal fuzz, and the main fuzz with its copy-count asserts.
 
 ### WP-S3 Auth, Drive client, sign-in gate (wave 2)
 
@@ -1377,7 +1399,9 @@ Google.
 - **Acceptance:**
   - B1 through the engine;
   - the call-level fuzz, 50 seeds, over the library kinds (no runs yet);
-  - crash injection;
+  - crash injection, including the upload/commit boundary and the `vvCounter` restart rule (S-B);
+  - listing lag on `ownLib` (S-B);
+  - the S-A small-pool partition-and-heal fuzz through the engine: zero copies of copies;
   - fingerprint no-op saves;
   - dry-run exclusion;
   - opaque entries;
@@ -1464,7 +1488,7 @@ New in rev 2:
 
 | # | Question | Recommended default | Alternatives |
 |---|---|---|---|
-| Q19 | How is a conflicted copy named? | `"<name> (<device name>)"`. The device name is set at first sign-in from the UA ("Pixel 11", "Chrome on Linux") and can be renamed in Account. | "(conflict, 29 Oct)" |
+| Q19 | How is a conflicted copy named? | **Revised (S-A):** `"<name> (conflict abc123)"`, where `abc123` comes from the losing version's content, so every device names it the same. The notice names the devices ("changed on Pixel and Laptop"). The device name is set at first sign-in from the UA and can be renamed in Account. | `"<name> (<device name>)"` (rejected: devices disagree on it) |
 | Q20 | Should paused, cancelled and errored runs from another device show in lists? | **Yes, greyed** ("Paused on Laptop · 43%"), so you know the work exists. | Hide them until done. |
 | Q21 | What happens to a library definition that uses a strategy which became a conflicted copy? | Nothing: definitions inline their strategy (content-addressed), so nothing references the library id. | n/a |
 
@@ -1483,13 +1507,15 @@ the app tsconfig and ESLint, and Prettier already ignores `docs/`. It contains:
 - `prototype.test.mts`, 5 tests:
   - Drive: multipart upload, paging, a resumable 13 MB upload with resume, and error mapping;
   - GIS: sign-in, expiry, silent reconnect, revoke, scope, blocked popup, timeout and unconfigured.
-- `model.mts` and `model.test.mts`, the **merge model** (rev 3), 7 tests:
+- `model.mts` and `model.test.mts`, the **merge model** (rev 3.1), 8 tests:
   - the B1 race where both devices push before either pulls;
   - a chain A → C → D, with no false conflict;
   - an edit beating a delete;
   - **N1**: reset, then edit; the edit survives;
   - **N2**: every permutation of fold order gives one result;
   - **N3**: three devices create the same copy, and there is no copy of the copy;
+  - **S-A**: a small content pool with a partition, then a heal, gives zero copies of copies, and
+    every copy name is `"<name> (conflict <hex6>)"`;
   - a 3-device, 400-step fuzz at step granularity. It includes losing the own lib file and
     Replace, and asserts convergence, that no edit is lost, and copy counts. The default is 100
     seeds; `MODEL_SEEDS=1000` passes.
@@ -1514,6 +1540,25 @@ the app tsconfig and ESLint, and Prettier already ignores `docs/`. It contains:
 ---
 
 ## 16. Changelog
+
+### Rev 3.1 (approval conditions)
+
+- **S-A:**
+  - A conflicted copy's whole content (id, name `"<name> (conflict <hex6>)"`, value) is a pure
+    function of the loser's fingerprint. The device name goes only into the notice.
+  - The "differently named second copy" worst case is removed.
+  - D10, D12, §7.4, §7.5, Q19 and the S2a/S2b tests are updated, with a new small-pool
+    partition-and-heal fuzz.
+  - `open-questions.md` row 19 is updated, and `model.mts` matches; 13/13 prototype tests pass, and
+    the model passes 1,000 seeds.
+- **S-B:**
+  - `vvCounter` is persisted in a RESERVE transaction before the lib upload.
+  - On start, `vvCounter = max(stored, every vv[self] seen locally or remotely)`.
+  - `ownLib` comes from `syncMeta.files`, and is "missing" only when an `update` on it returns 404
+    (Drive listings can lag behind a create).
+  - S2b gains crash injection at the upload/commit boundary and a listing-lag test.
+- **S-C:** §11.1 states that the S2a permutation test covers `joinDef` over the set
+  (order-independent, inputs not mutated).
 
 ### Rev 3 (PR #36 re-review)
 
