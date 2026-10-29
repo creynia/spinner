@@ -162,8 +162,8 @@ export function keyOf(store: StoreName, rec: Record<string, unknown>): IDBValidK
 /**
  * `syncMeta` rows that survive "Delete everything on this device" (sync.md D7, D19): the device id,
  * the never-reset `vvCounter`, and the settings that describe this device or account. The rest
- * (`seen`, `libSha`, `uploads`, `conflicts`) describes data that is gone, so the next sync pulls
- * Drive's copy back as new.
+ * (`seen`, `libSha`, `uploads`, `conflicts`, `bundles`) describes data that is gone, so the next
+ * sync pulls Drive's copy back as new.
  */
 const KEEP_SYNC_META = new Set([
   'device',

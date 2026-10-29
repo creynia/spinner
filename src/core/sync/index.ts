@@ -18,7 +18,10 @@ export {
 } from './merge';
 export { decodeLib, encodeLib, LIB_NAME, ROOT_NAME, runBundleName } from './libfile';
 export {
+  createCtx,
   createSyncEngine,
+  runCycle,
+  SYNC_META_KEEP,
   type DownloadRunOptions,
   type SyncBackend,
   type SyncEngine,
