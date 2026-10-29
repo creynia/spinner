@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DefinitionRecord } from '../contracts/experiment';
 import type { SyncEntry, SyncIndexRecord } from '../contracts/sync';
 import { entryOf } from './fingerprint';
-import { copyOf, equivalent, foldEntries, joinDef, resolve } from './merge';
+import { copyIdOf, copyOf, equivalent, foldEntries, joinDef, resolve } from './merge';
 import { bare, DEVICES, deepFreeze, foldSig, hlcOf, perms, rng } from './testkit';
 import { concurrent, descends } from './vv';
 
@@ -366,7 +366,16 @@ describe('joinDef', () => {
     expect(foldEntries([a, b, del], none).winner.deleted).toBe(true);
   });
 
-  it('a def entry of a newer schema is not joined', () => {
+  it('a single live entry is normalised the same way (sorted, minus deleted runs)', () => {
+    const a = defE(A, 1, { [A]: 1 }, defRec({ runIds: ['r3', 'r9', 'r1'] }));
+    const j = joinDef([a], new Set(['r9']));
+    expect(j.value!.runIds).toEqual(['r1', 'r3']);
+    expect(j.vv).toEqual({ [A]: 1 });
+    const clean = defE(A, 1, { [A]: 1 }, defRec({ runIds: ['r1', 'r3'] }));
+    expect(joinDef([clean], none)).toEqual(clean);
+  });
+
+  it('a def entry of a newer schema is not joined by foldEntries', () => {
     const a = defE(A, 1, { [A]: 1 }, defRec({ runIds: ['r1'] }));
     const b = { ...defE(B, 2, { [B]: 1 }, defRec({ runIds: ['r2'] })), v: 2 } as SyncEntry<'def'>;
     const f = foldEntries([a, b], none);
@@ -492,11 +501,39 @@ describe('copyOf', () => {
     expect(c.id).toBe(`${'g'.repeat(33)}-${loser.hash.slice(0, 6)}`);
   });
 
-  it('null when the copy id is taken (live or tombstoned); never for def, setting, run or a tombstone', async () => {
+  it('a taken copy id grows by the next 6 hex digits; the name keeps hex6 (§7.7)', async () => {
     const loser = await mk('group', A, 'N');
-    const id = `big-${loser.hash.slice(0, 6)}`;
-    expect(await copyOf(loser, new Set([id]), mint(B, 1))).toBeNull();
+    const h = loser.hash;
+    const first = `big-${h.slice(0, 6)}`;
+    expect(copyIdOf(loser)).toBe(first);
+    const c1 = (await copyOf(loser, new Set([first]), mint(B, 1)))!;
+    expect(c1.id).toBe(`big-${h.slice(0, 12)}`);
+    expect((c1.value as { name: string }).name).toBe(`N (conflict ${h.slice(0, 6)})`);
+    const c2 = (await copyOf(loser, new Set([first, `big-${h.slice(0, 12)}`]), mint(B, 1)))!;
+    expect(c2.id).toBe(`big-${h.slice(0, 18)}`);
+    // the edit is never dropped while a longer id is free
+    const all = new Set(Array.from({ length: 10 }, (_, i) => `big-${h.slice(0, 6 * (i + 1))}`));
+    expect(await copyOf(loser, all, mint(B, 1))).toBeNull(); // 64 hex digits exhausted: 10 prefixes
     expect(await copyOf(loser, new Set(['other']), mint(B, 1))).not.toBeNull();
+  });
+
+  it('the name never ends in a lone surrogate', async () => {
+    const loser = await mk('group', A, '😀'.repeat(60));
+    const name = ((await copyOf(loser, none, mint(B, 1)))!.value as { name: string }).name;
+    expect(Array.from(name).length).toBeLessThanOrEqual(80);
+    expect(
+      /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(name),
+    ).toBe(false);
+  });
+
+  it('copyIdOf is null for kinds that are never copied', () => {
+    expect(copyIdOf(bare('setting', 'framing', A, 1, { [A]: 1 }, 'p'))).toBeNull();
+    expect(copyIdOf(bare('group', 'big', A, 1, { [A]: 1 }, null))).toBeNull();
+  });
+
+  it('null for def, setting, run and a tombstone', async () => {
+    const loser = await mk('group', A, 'N');
+    expect(loser).toBeTruthy();
     for (const e of [
       defE(A, 1, { [A]: 1 }, defRec()),
       bare('setting', 'framing', A, 1, { [A]: 1 }, 'p'),
@@ -626,12 +663,32 @@ describe('resolve', () => {
     expect(resolve([alien], undefined, undefined, none).res.do).toBe('opaque');
   });
 
-  it('a concurrent newer-schema loser is never copied', () => {
+  it('a concurrent newer-schema edit is never overwritten: opaque, no copies', () => {
     const win = g(B, 9, { [B]: 1 }, 'win');
     const newer = { ...g(A, 1, { [A]: 1 }, 'n'), v: 2 } as SyncEntry;
     const r = resolve([win, newer], undefined, undefined, none);
-    expect(r.res.do).toBe('apply');
+    expect(r.res.do).toBe('opaque');
     expect(r.losers).toEqual([]);
+  });
+
+  it('a local v1 candidate with a higher HLC does not beat a concurrent v2 edit', () => {
+    const base = g(A, 5, { [A]: 3 }, 'v3');
+    const theirs = { ...g(B, 6, { [A]: 3, [B]: 1 }, 'theirs'), v: 2 } as SyncEntry;
+    const cand = g(A, 99, { [A]: 4 }, 'mine');
+    const r = resolve([theirs], rec(base, { [A]: 3 }), cand, none);
+    expect(r.res.do).toBe('opaque');
+    expect(r.losers).toEqual([]);
+    // once the v2 entry is dominated (a later edit descends it), the key is interpretable again
+    const later = g(C, 100, { [A]: 3, [B]: 1, [C]: 1 }, 'later');
+    expect(resolve([theirs, later], rec(base, { [A]: 3 }), cand, none).res.do).not.toBe('opaque');
+  });
+
+  it('a def with a concurrent newer-schema entry is opaque, not joined', () => {
+    const a = defE(A, 1, { [A]: 1 }, defRec({ runIds: ['r1'] }));
+    const b = { ...defE(B, 2, { [B]: 1 }, defRec({ runIds: ['r2'] })), v: 2 } as SyncEntry<'def'>;
+    expect(resolve([a, b], undefined, undefined, none).res.do).toBe('opaque');
+    const cand = defE(C, 3, { [C]: 1 }, defRec({ runIds: ['r3'] }));
+    expect(resolve([b], rec(a), cand, none).res.do).toBe('opaque');
   });
 
   it('empty input: skip-older', () => {

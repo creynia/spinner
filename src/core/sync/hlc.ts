@@ -32,7 +32,10 @@ function parts(h: Hlc): { wall: number; counter: number; device: DeviceId } {
   return { wall, counter, device: h.slice(b + 1) };
 }
 
-const clampWall = (ms: number): number => Math.min(WALL_MAX, Math.max(0, Math.floor(ms)));
+/** Walls beyond this (year 3000) are forged or corrupt: `recv` throws, `verifyEntry` refuses. */
+export const HLC_WALL_LIMIT = 32_503_680_000_000;
+
+const clampWall = (ms: number): number => Math.min(HLC_WALL_LIMIT, Math.max(0, Math.floor(ms)));
 
 /**
  * `last`, when given, is where the clock resumes (its wall and counter; its device is ignored).
@@ -53,7 +56,8 @@ export function createClock(device: DeviceId, now: () => number, last?: Hlc): Hl
         w = at;
         c = 0;
       } else if (c >= COUNTER_MAX) {
-        w = Math.min(WALL_MAX, w + 1);
+        if (w >= WALL_MAX) throw new Error('HLC overflow');
+        w += 1;
         c = 0;
       } else {
         c += 1;
@@ -62,6 +66,7 @@ export function createClock(device: DeviceId, now: () => number, last?: Hlc): Hl
     },
     recv(remote: Hlc): void {
       const p = parts(remote);
+      if (p.wall > HLC_WALL_LIMIT) throw new RangeError(`HLC wall too far ahead: ${remote}`);
       if (p.wall > w || (p.wall === w && p.counter > c)) {
         w = p.wall;
         c = p.counter;

@@ -9,16 +9,22 @@ import { descends } from './vv';
 export interface Folded {
   winner: SyncEntry;
   losers: SyncEntry[];
+  /**
+   * The join of the vv of EVERY entry passed in, a local candidate's included. `resolve` computes
+   * its own `seen` (published entries and the base only), which is what the engine stores.
+   */
   seen: Record<DeviceId, number>;
 }
 
 type Vv = Record<DeviceId, number>;
 
 const joinVv = (vs: Iterable<Vv>): Vv => {
-  const out: Vv = {};
-  for (const v of vs) for (const [d, n] of Object.entries(v)) out[d] = Math.max(out[d] ?? 0, n);
+  // a Map, so a key such as `__proto__` is just data
+  const out = new Map<string, number>();
+  for (const v of vs)
+    for (const [d, n] of Object.entries(v)) out.set(d, Math.max(out.get(d) ?? 0, n));
   // key order must not depend on the order of the inputs (serialised output is order-independent)
-  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return Object.fromEntries([...out].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 };
 const vvKey = (v: Vv): string =>
   JSON.stringify(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
@@ -48,9 +54,8 @@ export function equivalent(a: SyncEntry, b: SyncEntry): boolean {
   return a.hash === b.hash && isDeleted(a) === isDeleted(b);
 }
 
-/** Order-independent fold of every entry known for one key (§7.4). Never mutates an input entry. */
-export function foldEntries(all: readonly SyncEntry[], deletedRuns: ReadonlySet<string>): Folded {
-  if (all.length === 0) throw new Error('foldEntries: empty set');
+/** Steps 1 and 2 of the fold: equivalence classes collapse, then the maximal elements. */
+function maximalReps(all: readonly SyncEntry[]): SyncEntry[] {
   // 1. equivalence classes collapse into the lowest-HLC entry, with their vvs joined (N3)
   const classes = new Map<string, SyncEntry[]>();
   for (const e of all) {
@@ -65,9 +70,17 @@ export function foldEntries(all: readonly SyncEntry[], deletedRuns: ReadonlySet<
     reps.push({ ...low, vv: joinVv(cls.map((c) => c.vv)) });
   }
   // 2. maximal elements under strict vv dominance (no pairwise mutation)
-  const maximal = reps.filter(
-    (e) => !reps.some((o) => o !== e && descends(o, e) && !descends(e, o)),
-  );
+  return reps.filter((e) => !reps.some((o) => o !== e && descends(o, e) && !descends(e, o)));
+}
+
+/**
+ * Order-independent fold of every entry known for one key (§7.4). Never mutates an input entry.
+ * A `def` fold that has an opaque (newer-schema) maximal entry does not join; `resolve` reports
+ * such a key as opaque.
+ */
+export function foldEntries(all: readonly SyncEntry[], deletedRuns: ReadonlySet<string>): Folded {
+  if (all.length === 0) throw new Error('foldEntries: empty set');
+  const maximal = maximalReps(all);
   const seen = joinVv(all.map((e) => e.vv));
   // 3. winner
   const kind = all[0]!.kind;
@@ -98,6 +111,9 @@ const DEF_KNOWN = new Set([
   'runIds',
 ]);
 
+const normRunIds = (ids: readonly string[], deletedRuns: ReadonlySet<string>): string[] =>
+  [...new Set(ids)].filter((id) => !deletedRuns.has(id)).sort();
+
 /**
  * The join of the maximal definition entries (§7.5): a pure function of the set. `hlc` is the
  * highest live HLC, `vv` the join of every maximal vv; nothing is minted.
@@ -114,7 +130,12 @@ export function joinDef(
     const top = [...maximal].sort(cmpEntry).at(-1)!;
     return { ...top, vv };
   }
-  if (live.length === 1) return { ...live[0]!, vv };
+  if (live.length === 1) {
+    const only = live[0]!;
+    const ids = (only.value as DefinitionRecord).runIds ?? [];
+    const norm = normRunIds(ids, deletedRuns);
+    if (norm.length === ids.length && norm.every((x, i) => x === ids[i])) return { ...only, vv };
+  }
 
   const top = live.at(-1)!; // highest HLC
   const recs = live.map((e) => e.value as DefinitionRecord & Record<string, unknown>);
@@ -123,9 +144,10 @@ export function joinDef(
   const unknown: Record<string, unknown> = {};
   for (const r of recs) for (const k of Object.keys(r)) if (!DEF_KNOWN.has(k)) unknown[k] = r[k];
 
-  const runIds = [...new Set(recs.flatMap((r) => r.runIds ?? []))]
-    .filter((id) => !deletedRuns.has(id))
-    .sort();
+  const runIds = normRunIds(
+    recs.flatMap((r) => r.runIds ?? []),
+    deletedRuns,
+  );
 
   // displayName: later displayNameAt wins, ties by the higher entry HLC (`live` is ascending)
   let nameFrom = 0;
@@ -191,27 +213,62 @@ const nameOf = (n: unknown, fallback: string): string => (typeof n === 'string' 
 /** The copy's id and name: a pure function of the loser's fingerprint (S-A). */
 function copyName(name: string, hex6: string): string {
   const suffix = ` (conflict ${hex6})`;
-  return `${name.slice(0, NAME_MAX - suffix.length).trimEnd()}${suffix}`;
+  // by code points, so the name never ends in a lone surrogate
+  const base = Array.from(name)
+    .slice(0, NAME_MAX - suffix.length)
+    .join('');
+  return `${base.trimEnd()}${suffix}`;
+}
+
+/** The copy id for the `n`th attempt: 6 hex digits of the fingerprint, then 12, 18, ... (§7.7). */
+const copyIdAt = (loser: SyncEntry, n: number): string | null =>
+  loser.hash.length >= 6 * (n + 1)
+    ? `${slugBase(loser.id)}-${loser.hash.slice(0, 6 * (n + 1))}`
+    : null;
+
+const copyable = (loser: SyncEntry): boolean =>
+  COPY_KINDS.has(loser.kind) &&
+  !isDeleted(loser) &&
+  loser.value !== null &&
+  opaqueReason(loser) === undefined &&
+  loser.hash !== '';
+
+/**
+ * The first-choice id of `loser`'s copy (`<slug>-<hex6>`), or null when the loser is never copied.
+ * The engine checks it against `syncMeta.copies` and tombstones BEFORE calling `copyOf`, so a copy
+ * the user deleted stays deleted (the accepted behaviour: if the user deletes a copy and the
+ * identical content comes back, no new copy is made).
+ */
+export function copyIdOf(loser: SyncEntry): string | null {
+  return copyable(loser) ? copyIdAt(loser, 0) : null;
 }
 
 /**
  * The copy of a losing entry. Its id and name `"<name> (conflict <hex6>)"` are a pure function of
  * the loser's fingerprint, identical across devices (S-A). The copy is a fresh entry minted by
  * this device: `hlc = mint.hlc`, `basis = null`, `vv = { [mint.self]: mint.counter }` where
- * `counter` is a fresh `vvCounter` value the caller consumed. `null` when the copy id is in
- * `taken` (live or tombstoned), and for kinds that are never copied (def, setting, run), a
- * tombstone, or an entry this build cannot interpret.
+ * `counter` is a fresh `vvCounter` value the caller consumed.
+ *
+ * `taken` holds the ids that hold UNRELATED content (live records and tombstones in the store and
+ * the index). When the first-choice id (`copyIdOf`) is taken, the id grows by the next 6 hex digits
+ * of the fingerprint (12, 18, ...) until it is free (§7.7); the name always keeps hex6. The caller
+ * must NOT put a copy it already made in `taken` expecting `null`: it checks `copyIdOf` against
+ * `syncMeta.copies` itself (see `copyIdOf`). `null` for kinds that are never copied (def, setting,
+ * run), a tombstone, or an entry this build cannot interpret.
  */
 export async function copyOf(
   loser: SyncEntry,
   taken: ReadonlySet<string>,
   mint: { hlc: Hlc; self: DeviceId; counter: number },
 ): Promise<SyncEntry | null> {
-  if (!COPY_KINDS.has(loser.kind) || isDeleted(loser) || loser.value === null) return null;
-  if (opaqueReason(loser) !== undefined || loser.hash === '') return null;
+  if (!copyable(loser)) return null;
   const hex6 = loser.hash.slice(0, 6);
-  const copyId = `${slugBase(loser.id)}-${hex6}`;
-  if (taken.has(copyId)) return null;
+  let copyId: string | null = null;
+  for (let n = 0; copyId === null; n++) {
+    const c = copyIdAt(loser, n);
+    if (c === null) return null; // every prefix of the fingerprint is taken
+    if (!taken.has(c)) copyId = c;
+  }
   const src = loser.value as unknown as Record<string, unknown>;
   switch (loser.kind) {
     case 'strategy': {
@@ -277,11 +334,15 @@ export function resolve(
   const all = localCandidate ? [...published, localCandidate] : published;
   if (all.length === 0) return { res: { do: 'skip-older' }, losers: [], seen };
 
+  // An opaque (newer-schema) entry that is maximal must not be overwritten, by a winner or by a
+  // push whose `seen` would dominate it: the key stays as it is and the local mark stays.
+  for (const m of maximalReps(all)) {
+    const reason = opaqueReason(m);
+    if (reason !== undefined) return { res: { do: 'opaque', reason }, losers: [], seen };
+  }
   const f = foldEntries(all, deletedRuns);
   const w = f.winner;
-  const reason = opaqueReason(w);
-  const losers = f.losers.filter((l) => opaqueReason(l) === undefined);
-  if (reason !== undefined) return { res: { do: 'opaque', reason }, losers, seen };
+  const losers = f.losers;
 
   if (localCandidate && equivalent(w, localCandidate)) {
     const twins = published.filter((e) => equivalent(e, localCandidate));

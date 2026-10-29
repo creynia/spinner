@@ -3,6 +3,7 @@ import type { SyncEntry, SyncKind } from '../contracts/sync';
 import { SYNC_KINDS } from '../contracts/sync';
 import { definitionId } from '../experiment';
 import { entryOf, fingerprintValue, SUPPORTED_V, verifyEntry } from './fingerprint';
+import { HLC_WALL_LIMIT } from './hlc';
 import { deepFreeze, hlcOf } from './testkit';
 
 const A = 'aaaaaaaaaa';
@@ -146,6 +147,16 @@ describe('entryOf', () => {
     expect(parent.seen[A]).toBe(1); // untouched
   });
 
+  it('throws when counter does not exceed parent.seen[self] (the vv would not dominate)', async () => {
+    const parent = { hlc: hlcOf(5, A), seen: { [A]: 4 } };
+    await expect(
+      entryOf('group', 'g', records.group as never, hlcOf(9, A), parent, A, 4),
+    ).rejects.toThrow(/counter/);
+    await expect(
+      entryOf('group', 'g', records.group as never, hlcOf(9, A), parent, A, 5),
+    ).resolves.toBeTruthy();
+  });
+
   it('a fresh entry has basis null and vv { self: counter }', async () => {
     const e = await entryOf(
       'setting',
@@ -216,6 +227,11 @@ describe('verifyEntry', () => {
     );
     expect(await verifyEntry({ ...e, hlc: 'nope' })).toBe('bad-id');
     expect(await verifyEntry({ ...e, vv: { [A]: -1 } })).toBe('bad-id');
+    expect(await verifyEntry({ ...e, vv: { notadevice: 1 } })).toBe('bad-id');
+    const proto = JSON.parse('{"__proto__": 1}') as Record<string, number>;
+    expect(await verifyEntry({ ...e, vv: proto })).toBe('bad-id');
+    // a forged far-future HLC
+    expect(await verifyEntry({ ...e, hlc: hlcOf(HLC_WALL_LIMIT + 1, A) })).toBe('bad-id');
   });
 
   it('unknown-kind and newer', async () => {

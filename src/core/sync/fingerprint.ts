@@ -2,7 +2,8 @@
 import type { Json } from '../contracts/game';
 import type { DeviceId, Hlc, SyncEntry, SyncKind, SyncValueByKind } from '../contracts/sync';
 import { canonicalJson, definitionId, sha256Hex } from '../experiment';
-import { HLC_PATTERN } from '../contracts/sync';
+import { DEVICE_ID_PATTERN, HLC_PATTERN } from '../contracts/sync';
+import { HLC_WALL_LIMIT, hlcWall } from './hlc';
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -52,6 +53,11 @@ export async function entryOf<K extends SyncKind>(
   self: DeviceId,
   counter: number,
 ): Promise<SyncEntry<K>> {
+  if (parent && (parent.seen[self] ?? 0) >= counter) {
+    throw new Error(
+      `entryOf: counter ${counter} does not exceed parent.seen[${self}] = ${parent.seen[self]}`,
+    );
+  }
   const raw: unknown = value;
   const v = isObj(raw) && typeof raw.v === 'number' ? raw.v : SUPPORTED_V[kind];
   const entry: SyncEntry<K> = {
@@ -87,7 +93,11 @@ export async function verifyEntry(
     !HLC_PATTERN.test(e.hlc) ||
     (e.basis !== null && (typeof e.basis !== 'string' || !HLC_PATTERN.test(e.basis))) ||
     !isObj(e.vv) ||
-    !Object.values(e.vv).every((n) => Number.isSafeInteger(n) && n >= 0) ||
+    !Object.entries(e.vv).every(
+      ([d, n]) => DEVICE_ID_PATTERN.test(d) && Number.isSafeInteger(n) && n >= 0,
+    ) ||
+    hlcWall(e.hlc) > HLC_WALL_LIMIT ||
+    (e.basis !== null && hlcWall(e.basis) > HLC_WALL_LIMIT) ||
     !Number.isSafeInteger(e.v) ||
     e.v < 1
   ) {

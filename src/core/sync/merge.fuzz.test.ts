@@ -6,20 +6,24 @@ import type { ExperimentGroup } from '../contracts/experiment';
 import type { DeviceId, SyncEntry, SyncIndexRecord } from '../contracts/sync';
 import { entryOf } from './fingerprint';
 import { createClock, hlcWall, type HlcClock } from './hlc';
-import { copyOf, foldEntries, resolve } from './merge';
+import { copyIdOf, copyOf, foldEntries, resolve } from './merge';
 import { rng } from './testkit';
+import { descends } from './vv';
 
 interface Val {
   name: string;
   body: string;
 }
-const COPY_ID = /-[0-9a-f]{6}$/;
+const COPY_ID = /-[0-9a-f]{6,}$/;
 const none = new Set<string>();
 
 /** Drive: per device, a map of the entries that device last wrote. */
 class Remote {
   libs = new Map<DeviceId, Map<string, SyncEntry>>();
+  /** Every entry ever published, once (by key and hlc). */
+  log = new Map<string, SyncEntry>();
   write(dev: DeviceId, entries: Map<string, SyncEntry>): void {
+    for (const e of entries.values()) this.log.set(`${e.key}|${e.hlc}`, structuredClone(e));
     this.libs.set(dev, new Map([...entries].map(([k, e]) => [k, structuredClone(e)])));
   }
   read(): SyncEntry[] {
@@ -47,6 +51,10 @@ class Device {
   /** N1: persistent and monotone across every reset (`syncMeta.vvCounter`). */
   vvCounter = 0;
   needsPull = false;
+  /** Every (device, counter) ever minted, across all devices of the world. */
+  static minted = new Set<string>();
+  /** Published entries that a later local edit or delete (on top of them) superseded. */
+  static superseded = new Set<string>();
   readonly clock: HlcClock;
   constructor(
     readonly id: DeviceId,
@@ -56,11 +64,27 @@ class Device {
     this.clock = createClock(id, now);
   }
 
+  /** A fresh vvCounter value; asserts that no (self, counter) is ever minted twice. */
+  next(): number {
+    const n = ++this.vvCounter;
+    const k = `${this.id}:${n}`;
+    if (Device.minted.has(k)) throw new Error(`vv value reused: ${k}`);
+    Device.minted.add(k);
+    return n;
+  }
+
+  private supersede(id: string): void {
+    const base = this.index.get(`group:${id}`)?.entry;
+    if (base) Device.superseded.add(`${base.key}|${base.hlc}`);
+  }
+
   edit(id: string, body: string): void {
+    this.supersede(id);
     this.store.set(id, { name: this.store.get(id)?.name ?? id, body });
     this.dirty.set(id, this.now());
   }
   del(id: string): void {
+    this.supersede(id);
     this.store.delete(id);
     this.dirty.set(id, this.now());
   }
@@ -90,7 +114,7 @@ class Device {
       this.clock.tickAt(at),
       row ? { hlc: row.entry.hlc, seen: row.seen } : undefined,
       this.id,
-      ++this.vvCounter,
+      this.next(),
     );
   }
 
@@ -132,12 +156,21 @@ class Device {
           throw new Error('unexpected opaque');
       }
       for (const l of losers) {
-        const taken = new Set([...this.copies, ...this.store.keys(), ...this.index.keys()]);
-        const c = await copyOf(l, taken, {
+        const first = copyIdOf(l);
+        if (first === null || this.copies.has(first)) continue; // a copy we made stays made
+        const mint = () => ({
           hlc: this.clock.tickAt(hlcWall(l.hlc)),
           self: this.id,
-          counter: ++this.vvCounter,
+          counter: this.next(),
         });
+        // the engine's contract: an id that already holds this very copy (made by another device)
+        // is not "taken"; an id that holds unrelated content (live or tombstone) is.
+        const ideal = (await copyOf(l, none, mint()))!;
+        const held = this.index.get(ideal.key)?.entry;
+        if (held && held.hash === ideal.hash) continue;
+        const taken = new Set<string>();
+        if (this.store.has(first) || this.index.has(`group:${first}`)) taken.add(first);
+        const c = taken.size ? await copyOf(l, taken, mint()) : ideal;
         if (!c) continue;
         this.copies.add(c.id);
         this.store.set(c.id, fromGroup(c.value as ExperimentGroup));
@@ -160,6 +193,8 @@ class Device {
 }
 
 function world(n: number) {
+  Device.minted = new Set();
+  Device.superseded = new Set();
   let t = 1000;
   const now = () => (t += 1);
   const remote = new Remote();
@@ -343,48 +378,67 @@ describe('merge model on the real functions', () => {
     expect(copiesSeen).toBeGreaterThan(0);
   }, 600_000);
 
-  it('main fuzz: 3 devices, 400 steps, converge, keep last edits, copy counts', async () => {
-    let copiesSeen = 0;
-    for (let seed = 1; seed <= SEEDS; seed++) {
-      const rnd = rng(seed);
-      const { devs, settle, dump } = world(3);
-      const ids = ['p', 'q', 'r'];
-      for (let step = 0; step < 400; step++) {
-        const d = devs[rnd(3)]!;
-        const op = rnd(11);
-        const id = ids[rnd(3)]!;
-        if (op < 4) d.edit(id, `${d.id}-${step}`);
-        else if (op < 5) d.del(id);
-        else if (op < 8) await d.pull();
-        else if (op < 10) await d.push();
-        else if (rnd(2) === 0)
-          d.remote.libs.delete(d.id); // own lib lost: the index is kept
-        else d.replace(); // Replace: local wiped, vvCounter kept (N1)
+  it.each([true, false])(
+    'main fuzz (Replace %s): converge, keep edits, copy counts',
+    async (withReplace) => {
+      let copiesSeen = 0;
+      for (let seed = 1; seed <= SEEDS; seed++) {
+        const rnd = rng(seed);
+        const { devs, settle, dump } = world(3);
+        const ids = ['p', 'q', 'r'];
+        for (let step = 0; step < 400; step++) {
+          const d = devs[rnd(3)]!;
+          const op = rnd(11);
+          const id = ids[rnd(3)]!;
+          if (op < 4) d.edit(id, `${d.id}-${step}`);
+          else if (op < 5) d.del(id);
+          else if (op < 8) await d.pull();
+          else if (op < 10) await d.push();
+          else if (rnd(2) === 0)
+            d.remote.libs.delete(d.id); // own lib lost: the index is kept
+          else if (withReplace) d.replace(); // Replace: local wiped, vvCounter kept (N1)
+        }
+        const lastLocal = devs.flatMap((d) =>
+          [...d.dirty.keys()]
+            .filter((id) => !COPY_ID.test(id))
+            .map((id) => d.store.get(id)?.body)
+            .filter(Boolean),
+        );
+        await settle();
+        const first = dump(devs[0]!);
+        for (const d of devs) expect(dump(d), `seed ${seed}`).toBe(first);
+        const all = new Set([...devs[0]!.store.values()].map((v) => v.body));
+        for (const b of lastLocal) expect(all.has(b!), `seed ${seed} lost ${b}`).toBe(true);
+        // copies are only of the three base ids, and each content is copied at most once
+        for (const id of devs[0]!.store.keys())
+          expect(id, `seed ${seed}`).toMatch(/^[pqr](-[0-9a-f]{6})?$/);
+        const copyBodies = [...devs[0]!.store]
+          .filter(([k]) => COPY_ID.test(k))
+          .map(([, v]) => `${v.name}|${v.body}`);
+        expect(new Set(copyBodies).size, `seed ${seed}`).toBe(copyBodies.length);
+        copiesSeen += copyBodies.length;
+        // no published edit is lost: every maximal live entry ever published (read by anyone) has its
+        // body in the final stores, as itself or as a copy. Without Replace nothing legitimately
+        // discards a published edit that no later entry descends from.
+        if (!withReplace) {
+          const log = [...devs[0]!.remote.log.values()];
+          for (const e of log) {
+            if (e.deleted || Device.superseded.has(`${e.key}|${e.hlc}`)) continue;
+            const dominated = log.some(
+              (o) => o.key === e.key && o !== e && descends(o, e) && !descends(e, o),
+            );
+            if (dominated) continue;
+            const body = fromGroup(e.value as ExperimentGroup).body;
+            expect(all.has(body), `seed ${seed} lost published ${e.key} ${body}`).toBe(true);
+          }
+        }
+        // no vv value is ever reused: each device's counter is >= its component anywhere
+        for (const d of devs)
+          for (const e of d.remote.read())
+            expect(e.vv[d.id] ?? 0, `seed ${seed}`).toBeLessThanOrEqual(d.vvCounter);
       }
-      const lastLocal = devs.flatMap((d) =>
-        [...d.dirty.keys()]
-          .filter((id) => !COPY_ID.test(id))
-          .map((id) => d.store.get(id)?.body)
-          .filter(Boolean),
-      );
-      await settle();
-      const first = dump(devs[0]!);
-      for (const d of devs) expect(dump(d), `seed ${seed}`).toBe(first);
-      const all = new Set([...devs[0]!.store.values()].map((v) => v.body));
-      for (const b of lastLocal) expect(all.has(b!), `seed ${seed} lost ${b}`).toBe(true);
-      // copies are only of the three base ids, and each content is copied at most once
-      for (const id of devs[0]!.store.keys())
-        expect(id, `seed ${seed}`).toMatch(/^[pqr](-[0-9a-f]{6})?$/);
-      const copyBodies = [...devs[0]!.store]
-        .filter(([k]) => COPY_ID.test(k))
-        .map(([, v]) => `${v.name}|${v.body}`);
-      expect(new Set(copyBodies).size, `seed ${seed}`).toBe(copyBodies.length);
-      copiesSeen += copyBodies.length;
-      // no vv value is ever reused: each device's counter is >= its component anywhere
-      for (const d of devs)
-        for (const e of d.remote.read())
-          expect(e.vv[d.id] ?? 0, `seed ${seed}`).toBeLessThanOrEqual(d.vvCounter);
-    }
-    expect(copiesSeen).toBeGreaterThan(0); // the fuzz really exercises copies
-  }, 600_000);
+      expect(copiesSeen).toBeGreaterThan(0); // the fuzz really exercises copies
+    },
+    600_000,
+  );
 });

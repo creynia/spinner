@@ -71,6 +71,20 @@ describe('hlc', () => {
     expect(hlcWall(h)).toBe(hlcWall(`000000064.zzzz.${A}`) + 1);
   });
 
+  it('never repeats or regresses at the top of the range: it throws instead', () => {
+    const top = `${(36 ** 9 - 1).toString(36)}.zzzz.${A}`;
+    const c = createClock(A, () => 0, top);
+    expect(() => c.tickAt(1)).toThrow(/overflow/);
+    expect(c.last).toBe(top);
+  });
+
+  it('recv refuses a forged far-future HLC and stays unpoisoned', () => {
+    const c = createClock(A, () => 0);
+    const before = c.tickAt(1000);
+    expect(() => c.recv(`${(36 ** 9 - 1).toString(36)}.0000.${B}`)).toThrow(RangeError);
+    expect(c.last).toBe(before);
+  });
+
   it('cmpHlc is string order, ties impossible across devices', () => {
     const a = createClock(A, () => 0).tickAt(1000);
     const b = createClock(B, () => 0).tickAt(1000);
