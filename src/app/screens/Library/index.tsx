@@ -120,6 +120,9 @@ export function Library({ query }: ScreenProps) {
   const [runs, setRuns] = useState<RunMeta[] | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  // A rename bumps `updatedAt`, so the row can move when the list reloads; moving it drops focus.
+  // Put focus back on that row's Rename button once the reloaded list renders.
+  const refocus = useRef<{ id: string; name: string } | null>(null);
   const version = useStore(libraryVersion, (v) => v);
   const edit = useEditPage(tab, query);
 
@@ -152,6 +155,17 @@ export function Library({ query }: ScreenProps) {
       live = false;
     };
   }, [version]);
+
+  useEffect(() => {
+    const want = refocus.current;
+    const rec = want && definitions?.find((d) => d.id === want.id);
+    // Wait for the reload that carries the new name; the list before it is stale.
+    if (!want || !rec || experimentName(rec) !== want.name) return;
+    const btn = document.getElementById(`rename-${want.id}`);
+    if (!btn) return;
+    refocus.current = null;
+    if (document.activeElement === document.body || document.activeElement === null) btn.focus();
+  }, [definitions]);
 
   const q = text.trim().toLowerCase();
   const matches = (...parts: (string | undefined)[]) =>
@@ -355,6 +369,7 @@ export function Library({ query }: ScreenProps) {
                       <Button
                         onClick={() => setRenaming({ id: d.id, name: experimentName(d) })}
                         aria-label={`Rename ${experimentName(d)}`}
+                        id={`rename-${d.id}`}
                       >
                         Rename
                       </Button>
@@ -423,7 +438,12 @@ export function Library({ query }: ScreenProps) {
       </Tabs>
 
       {renaming ? (
-        <RenameExperiment id={renaming.id} name={renaming.name} onClose={() => setRenaming(null)} />
+        <RenameExperiment
+          id={renaming.id}
+          name={renaming.name}
+          onClose={() => setRenaming(null)}
+          onRenamed={(name) => (refocus.current = { id: renaming.id, name })}
+        />
       ) : null}
       {pending ? (
         <Sheet open title={`Delete ${pending.kind}?`} onClose={() => setPending(null)}>
