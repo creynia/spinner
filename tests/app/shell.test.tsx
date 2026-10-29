@@ -450,11 +450,11 @@ describe('Settings', () => {
       'Request persistent storage',
       'Export definitions',
       'Import definitions',
-      'Delete all data',
+      'Delete everything on this device',
       'Check for updates',
     ])
       expect(getByText(t)).toBeTruthy();
-    fireEvent.click(getByText('Delete all data'));
+    fireEvent.click(getByText('Delete everything on this device'));
     expect(container.querySelector('[role=dialog]')).not.toBeNull();
     fireEvent.click(getByText('Cancel'));
     expect(container.querySelector('[role=dialog]')).toBeNull();

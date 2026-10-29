@@ -1,0 +1,131 @@
+/* Sync UI (sync.md §8): indicator, Account card pieces, sheets, RemoteRunCard. Tokens only. */
+.sync-ind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sync-ind-top {
+  margin-left: auto;
+  color: #ffffff;
+  opacity: 0.85;
+}
+.sync-ind-top + .running-chip {
+  margin-left: 0;
+}
+.sync-ind-top.attention {
+  color: var(--amber-on-felt);
+  opacity: 1;
+}
+.sync-ind-rail {
+  display: none;
+  margin-top: auto;
+  flex-direction: column;
+  color: var(--muted);
+}
+.sync-ind-rail.attention {
+  color: var(--amber);
+}
+.sync-ind svg {
+  flex: 0 0 auto;
+}
+.sync-ind-label {
+  display: none;
+}
+@media (min-width: 400px) {
+  .sync-ind-label {
+    display: inline;
+  }
+}
+.sync-ind-rail .sync-ind-label {
+  display: inline;
+  font-size: 0.75rem;
+}
+@media (min-width: 768px) {
+  .sync-ind-top {
+    display: none;
+  }
+  .sync-ind-rail {
+    display: inline-flex;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sync-spin {
+    animation: sync-spin 1.2s linear infinite;
+    transform-origin: 12px 15px;
+  }
+}
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sync-status {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 8px 0;
+  font-weight: 600;
+}
+.sync-status.attention {
+  color: var(--amber);
+}
+.sync-status .glyph {
+  flex: 0 0 auto;
+}
+.sync-warn {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--amber);
+  border-radius: 10px;
+}
+.sync-progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin: 4px 0 8px;
+  accent-color: var(--accent);
+}
+.sync-test {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.sync-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.sync-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.sync-list li:last-child {
+  border-bottom: 0;
+}
+.sync-sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sync-sheet-actions .btn {
+  width: 100%;
+}
+.remote-run-card {
+  max-width: 100%;
+}
