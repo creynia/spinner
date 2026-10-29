@@ -16,7 +16,7 @@ S-A, S-B and S-C. §16 lists the changes.
 
 - `decisions.md` ("Google Drive sync") and open questions 13–18 are already recorded.
 - Where rev 2 refines a recorded decision, §1 says so. The two refinements are merging by version
-  vectors and bundles for done runs only. The orchestrator updates `decisions.md`.
+  vectors and bundles for done runs only. `decisions.md` records them (done in WP-S6).
 
 How to use this doc:
 
@@ -24,9 +24,9 @@ How to use this doc:
 - A **sign-in gate** after wave 2 has the owner test Google sign-in on the Pixel before the engine
   is wired in.
 - §4 holds the contracts that WP-S0 freezes.
-- The prototype in `docs/design/sync-prototype/` (§15) passes all 13 of its tests, 8 of them in
-  the merge model. The model fuzz passes 1,000 seeds; it defaults to 100, and `MODEL_SEEDS=1000`
-  raises it. Run it with `npx vitest run --root docs/design/sync-prototype`.
+- The prototype (§15) that proved the design was deleted in WP-S6. It is in git history before that
+  commit. Its tests live on in `src/core/sync` (`merge.fuzz.test.ts`, the engine fuzz) and
+  `src/app/services/sync`.
 
 ---
 
@@ -137,7 +137,7 @@ goes in new side stores.
 
 ## 4. Contracts (WP-S0 freezes these)
 
-### 4.1 `src/core/contracts/sync.ts` (new; full text in `sync-prototype/contracts-sync.mts`)
+### 4.1 `src/core/contracts/sync.ts`
 
 ```ts
 export type DeviceId = string;                 // 10 chars Crockford base32
@@ -394,7 +394,7 @@ Notes on this flow:
 
 ### 5.3 Drive client
 
-The prototype's `drive.mts` stands as designed:
+The Drive client (`src/app/services/sync/drive.ts`, ported from the prototype) is:
 
 - list with paging;
 - multipart upload up to 5 MB;
@@ -403,7 +403,7 @@ The prototype's `drive.mts` stands as designed:
 - `cache: 'no-store'`;
 - the error mapping.
 
-TS 6 needs request bodies typed `Uint8Array<ArrayBuffer>` (the prototype's `asBody`).
+TS 6 needs request bodies typed `Uint8Array<ArrayBuffer>` (`asBody`).
 
 ### 5.4 Redirect
 
@@ -617,7 +617,7 @@ Properties:
 - **The winner is published as-is.** `seen` stays local, so no device publishes ancestry it does not
   have.
 
-The prototype's `model.test.mts` checks all of this:
+The merge model tests (`src/core/sync/merge.fuzz.test.ts`, ported from the prototype) check all of this:
 
 - the exact race where both devices push before either pulls;
 - a chain A → C → D, which must not count as a conflict;
@@ -785,11 +785,15 @@ the result is still deterministic.
 3. **Tombstones (age + acknowledgement).** Drop tombstone *T* (key *k*) from our lib file only when
    both conditions hold:
    - *T* is **older than 30 days** (`hlcWall`);
-   - **every** other remaining lib file **acknowledges** *T*, in one of three ways:
+   - **every** other remaining lib file **acknowledges** *T*, in one of two ways:
      - it holds *T* or an entry that descends from it;
-     - it **has no entry for *k* at all, and its `writtenAt` is later than *T*'s wall time**.
-       Every lib file is a device's whole merged state, so a device that wrote after *T* existed
-       and lacks *k* must already have dropped *T* itself.
+     - it **has no entry for *k* at all, and the lib file's server-side `modifiedTime` is more than
+       1 day later than *T*'s wall time**. Every lib file is a device's whole merged state, so a
+       device that wrote after *T* existed and lacks *k* must already have dropped *T* itself.
+       The check uses the **file's `modifiedTime` as Drive reports it, never the peer's own
+       `lib.writtenAt`** (hardened in S6): a peer whose clock runs ahead would otherwise claim to
+       have written after *T* without having pulled it. The extra day covers the skew between the
+       tombstone's HLC wall time (an edit time on some device) and Drive's clock.
 
    The second form removes the "mutual waiting" leak: once one device drops *T*, the others still
    see it acknowledged. Step 2 runs first, so no stale lib file remains that could resurrect *k*.
@@ -898,6 +902,21 @@ the result is still deterministic.
   app falls back to the memory backend with "data from a newer version". **Sync is disabled whenever
   the backend is memory**, so a rolled-back device can never push a wave of tombstones. Nothing is
   deleted.
+
+### 7.14 Accepted limits (recorded in S6)
+
+- **Opaque keys re-download.** While any key is opaque (it was written by a newer app version and
+  is kept as is), a no-change cycle re-downloads the lib files that carry that key, because their
+  content cannot be reduced to what this version understands. The cost goes away when the app
+  updates.
+- **Stubs of unfinished runs can be slow.** A paused, cancelled or errored run's stub can take up
+  to 5 minutes to sync. Active-run marks are ignored until the run ends (D13), and the next cycle
+  starts from the 5-minute timer rather than from the run ending.
+- **`copies` survives an account switch.** The `copies` set (ids of conflicted copies already made)
+  is kept when the account changes, so the same conflict copy can be suppressed if it recurs in the
+  new account. Only erasing the remote clears it.
+- **No Delete on remote-only run rows.** The spec does not say how a stub whose results are not on
+  this device is tombstoned. See open-questions.md row 23 for the recommended answer.
 
 ---
 
@@ -1318,7 +1337,7 @@ Wave 4:  (after ★)        S5a app service ◄┘                   │
                                 │                              │
 Wave 5:                   S5b screen integration ◄─────────────┘   (all listRuns consumers, RunRow)
                                 │
-Wave 6:                   S6 e2e two-device, docs, delete the prototype
+Wave 6:                   S6 e2e two-device, docs, delete the prototype (done)
 ```
 
 There are ten WPs, at most four at once (wave 2). The gate overlaps wave 3; the engine does not need
@@ -1503,7 +1522,7 @@ Google.
     elsewhere.
 - **Batons:** `.github/workflows/ci.yml` (a dummy `VITE_GOOGLE_CLIENT_ID` for e2e).
 - **Acceptance:** all §11.3 scenarios on `phone-360` and `desktop`; `npm run check` green.
-- The orchestrator updates `decisions.md` with the rev 2 refinements (§16).
+- `decisions.md` gets the rev 2 to 3.1 refinements (§16); done in S6.
 
 ---
 
@@ -1532,8 +1551,9 @@ New in rev 2:
 
 ## 15. Prototype and risks
 
-`docs/design/sync-prototype/` is throwaway code; S6 deletes it. The `.mts` extension keeps it out of
-the app tsconfig and ESLint, and Prettier already ignores `docs/`. It contains:
+The prototype was throwaway code under `docs/design/sync-prototype/`. WP-S6 deleted it; it is in git
+history before that commit, and its code and tests were ported into `src/core/sync` and
+`src/app/services/sync`. It contained:
 
 - `contracts-sync.mts`. Rev 2 adds `basis` and `vv`, removes `name` from the stub, and makes `owner`
   optional.
@@ -1576,6 +1596,14 @@ the app tsconfig and ESLint, and Prettier already ignores `docs/`. It contains:
 ---
 
 ## 16. Changelog
+
+### WP-S6 (implementation notes)
+
+- §7.9 step 3, second form: the check uses the peer lib file's server-side `modifiedTime` (more
+  than 1 day after *T*), not `lib.writtenAt`.
+- §7.14 records the accepted limits (opaque keys re-download, slow unfinished-run stubs, `copies`
+  kept across an account switch).
+- The prototype directory is deleted.
 
 ### Rev 3.1 (approval conditions)
 

@@ -147,13 +147,16 @@ export async function runGc(ctx: SyncCtx): Promise<void> {
   }
 
   // ---- the remaining peers' libs, for steps 3 and 4
-  const peers: LibFileV1[] = [];
+  const peers: { lib: LibFileV1; modifiedAt: number }[] = [];
   let peersReadable = true;
   for (const f of live()) {
     const d = libDevice(f.name);
     if (d === null || d === deviceId) continue;
     try {
-      peers.push(await decodeLib(await remote.download(f.id, o)));
+      peers.push({
+        lib: await decodeLib(await remote.download(f.id, o)),
+        modifiedAt: Date.parse(f.modifiedTime),
+      });
     } catch (e) {
       if (e instanceof RemoteError && e.code !== 'not-found') throw e;
       peersReadable = false; // damaged, newer than we know, or just deleted: be conservative
@@ -170,10 +173,13 @@ export async function runGc(ctx: SyncCtx): Promise<void> {
       const t = r.entry;
       if (!t.deleted || marks.has(r.key)) continue;
       if (now - hlcWall(t.hlc) <= TOMBSTONE_DAYS * DAY) continue;
+      // Form 2 trusts the file's server-side `modifiedTime`, never the peer's own `writtenAt`: a
+      // peer whose clock runs ahead has not pulled the tombstone just because it claims it wrote
+      // after it. The file must also be a day newer, which covers the HLC's own clock skew.
       const acknowledged = peers.every((p) => {
-        const e = p.entries.find((x) => x.key === r.key);
+        const e = p.lib.entries.find((x) => x.key === r.key);
         if (e) return descends(e, t);
-        return Date.parse(p.writtenAt) > hlcWall(t.hlc);
+        return p.modifiedAt > hlcWall(t.hlc) + DAY;
       });
       if (acknowledged) drop.push(r);
     }
@@ -196,7 +202,8 @@ export async function runGc(ctx: SyncCtx): Promise<void> {
   if (peersReadable) {
     const referenced = new Set<string>();
     for (const r of rows) for (const n of refsOf(r.entry)) referenced.add(n);
-    for (const p of peers) for (const e of p.entries) for (const n of refsOf(e)) referenced.add(n);
+    for (const { lib: p } of peers)
+      for (const e of p.entries) for (const n of refsOf(e)) referenced.add(n);
     // our own uploads whose stub is not pushed yet (kept for runs that still exist here)
     for (const [runId, ref] of Object.entries(await readBundles(raw))) {
       if ((await raw.get('runs', runId)) !== undefined) referenced.add(ref.name);

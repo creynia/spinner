@@ -17,6 +17,7 @@ import {
   worldClock,
   wrapRemote,
   records,
+  strategy,
   type Dev,
   useIdb,
 } from './engine-testkit';
@@ -492,6 +493,36 @@ describe.each([false, true])('engine <-> S2c (idb %s)', (idb) => {
       const r = await b.cycle();
       expect(r.pushed).toBe(0);
       expect(await marks(b)).toEqual([]);
+      expect((await b.raw.get<{ local: number }>('syncIndex', 'run:r1'))!.local).toBe(1);
+    });
+
+    it('skip-older: an unchanged run entry re-delivered in a newer lib file marks a local run with an equal-hash mark as local', async () => {
+      const inner = createMemoryRemote();
+      const a = await makeDevice({ id: A, idb, now: clock, remote: inner });
+      const b = await makeDevice({ id: B, idb, now: clock, remote: inner });
+      const imp = {
+        imported: {
+          appVersion: '1',
+          importedAt: 'T1',
+          fileSha256: 'f',
+          trimmed: false,
+          partial: false,
+        },
+      };
+      await userPut(a, 'run', runMeta('r1', 'paused', imp));
+      await a.cycle();
+      await b.cycle();
+      expect((await b.raw.get<{ local: number }>('syncIndex', 'run:r1'))!.local).toBe(0);
+      // b imports the same file: an equal-hash mark, not yet cycled
+      await userPut(
+        b,
+        'run',
+        runMeta('r1', 'paused', { imported: { ...imp.imported, importedAt: 'T2' } }),
+      );
+      // a writes its lib file again (a new version) with the run entry unchanged in it
+      await userPut(a, 'strategy', await strategy('s1', 'x'));
+      await a.cycle();
+      await b.cycle();
       expect((await b.raw.get<{ local: number }>('syncIndex', 'run:r1'))!.local).toBe(1);
     });
 

@@ -1,4 +1,4 @@
-// WP-S2a: the prototype's model.test.mts, ported onto the real entryOf / resolve / copyOf and the
+// WP-S2a: the removed prototype's merge model tests (see git history before WP-S6), ported onto the real entryOf / resolve / copyOf and the
 // real clock (sync.md §7.4, §11.1): B1, transitive descent, edit vs delete, N1, N3, the S-A
 // small-pool partition-and-heal fuzz, and the main fuzz with its copy-count asserts.
 import { describe, expect, it } from 'vitest';

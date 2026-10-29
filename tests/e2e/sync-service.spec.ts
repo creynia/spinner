@@ -3,52 +3,16 @@
 // edit made on one device reaching the other, Sign out, and Remove my data from Drive. The popup
 // falls back to a redirect round trip when it is blocked. The CSP is enforced (any violation fails),
 // axe runs and no state may overflow horizontally.
-import type { Browser, BrowserContext, Page } from '@playwright/test';
-import { expect, expectAxeClean, screenCheck, test, type Guard } from './helpers';
+import type { Page } from '@playwright/test';
+import { expect, expectAxeClean, screenCheck, test } from './helpers';
 import { routeAuthPage } from './fakes/auth-page';
-import { createFakeDrive, routeDrive, type FakeDrive } from './fakes/drive-server';
+import { createFakeDrive, routeDrive } from './fakes/drive-server';
+import { secondDevice as newDevice } from './fakes/route';
 import { gisFakeScript, isFakeToken, routeGis } from './fakes/gis-fake';
 
 const row = (page: Page, name: string) =>
   page.locator('li.lay-card').filter({ has: page.getByRole('heading', { name, exact: true }) });
 const status = (page: Page) => page.locator('[data-sync-status]');
-
-/** A second browser profile: its own IndexedDB and localStorage, the same fake Drive. */
-async function secondDevice(
-  browser: Browser,
-  use: Record<string, unknown>,
-  baseURL: string,
-  drive: FakeDrive,
-): Promise<{ page: Page; ctx: BrowserContext; guard: Guard }> {
-  const ctx = await browser.newContext({
-    baseURL,
-    ...(use.viewport ? { viewport: use.viewport as { width: number; height: number } } : {}),
-    ...(use.userAgent ? { userAgent: use.userAgent as string } : {}),
-    ...(use.isMobile !== undefined ? { isMobile: use.isMobile as boolean } : {}),
-    ...(use.hasTouch !== undefined ? { hasTouch: use.hasTouch as boolean } : {}),
-  });
-  await routeDrive(ctx, drive);
-  await routeGis(ctx);
-  const page = await ctx.newPage();
-  const errors: string[] = [];
-  await page.addInitScript(() => {
-    document.addEventListener('securitypolicyviolation', (e) => {
-      console.error(`CSP violation: ${e.violatedDirective} blocked ${e.blockedURI}`);
-    });
-  });
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  page.on('pageerror', (e) => errors.push(e.message));
-  const guard: Guard = {
-    async check(state) {
-      const [scroll, client] = await page.evaluate<[number, number]>(
-        '[document.documentElement.scrollWidth, document.documentElement.clientWidth]',
-      );
-      expect(scroll, `device B ${state}: horizontal overflow`).toBeLessThanOrEqual(client);
-      expect(errors, `device B ${state}: console errors`).toEqual([]);
-    },
-  };
-  return { page, ctx, guard };
-}
 
 /** Duplicates the n-th built-in layout and returns the copy's name. */
 async function addLayout(page: Page, n: number): Promise<string> {
@@ -105,7 +69,7 @@ test('sign in, first sync, an edit reaches the other device, Sign out, Remove my
   expect(names).toEqual([expect.stringMatching(/^lib\..+\.json\.gz$/), 'spinner-sync.json']);
 
   // ---- device B: its own data, signs in to a Drive that already has A's
-  const b = await secondDevice(browser, info.project.use, baseURL!, drive);
+  const b = await newDevice(browser, info.project.use, baseURL!, drive);
   const nameB = await addLayout(b.page, 1);
   expect(nameB).not.toBe(nameA);
   await openAccount(b.page);

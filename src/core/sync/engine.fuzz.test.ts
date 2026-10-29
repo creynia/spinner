@@ -11,7 +11,8 @@
 //   - no key whose maximal entries are all tombstones is alive on any device;
 //   - no (device, counter) is minted twice, across restarts;
 //   - zero copies of copies;
-//   - the devices converge to identical stores, with no dirty marks left.
+//   - the devices converge to identical stores, with no dirty marks left;
+//   - every device's last user op on a key minted an entry or was a no-op against the base.
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

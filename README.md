@@ -33,6 +33,14 @@ On a desktop the same screens go side by side ([Analyze](docs/screenshots/analyz
 
 No. Every roulette bet has a house edge; no betting system changes it. This is a simulation for understanding risk, not advice. If gambling is a problem for you, seek help (e.g. a national gambling helpline).
 
+## Privacy
+
+Sync is optional. Everything stays in your browser unless you sign in with Google.
+
+> **Google Drive sync (optional).** If you sign in with Google, spinner keeps a copy of your library and runs in a hidden app folder in your own Google Drive. spinner can see only that folder (the `drive.appdata` scope), never your other files, and there is no spinner server: your data goes only between this browser and Google. To remove it, use Settings → Account → Remove my data from Drive, or Google Drive → Settings → Manage apps → spinner → Delete hidden app data. You can revoke access at myaccount.google.com/permissions.
+
+The data is not end-to-end encrypted: it is readable by you and by Google. Signing out keeps your local data. The design is in [`docs/design/sync.md`](docs/design/sync.md) (§10).
+
 ## Develop
 
 Requires Node >= 22.12 (see `.nvmrc`).
