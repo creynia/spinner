@@ -178,17 +178,21 @@ async function run(o: Opts) {
    * is already a tombstone).
    */
   const superseded = new Set<string>();
-  function supersede(d: Dev, kind: SyncKind, id: string): void {
+  function supersede(d: Dev, kind: SyncKind, id: string, newHash: string | null): void {
     for (const e of mintedEntries) {
-      if (e.key === `${kind}:${id}` && hlcDevice(e.hlc) === d.id) superseded.add(sig(e));
+      if (e.key !== `${kind}:${id}` || hlcDevice(e.hlc) !== d.id) continue;
+      // writing the same content again, or deleting what is deleted already, changes nothing: the
+      // last user op decides, so it also takes back an earlier delete or edit of the same content
+      if (newHash === null ? e.deleted === true : e.hash === newHash) superseded.delete(sig(e));
+      else superseded.add(sig(e));
     }
   }
   async function put(d: Dev, kind: SyncKind, id: string, rec: unknown): Promise<void> {
-    supersede(d, kind, id);
+    supersede(d, kind, id, await hashOf(kind, rec));
     await userPut(d, kind, rec);
   }
   async function del(d: Dev, kind: SyncKind, id: string): Promise<void> {
-    supersede(d, kind, id);
+    supersede(d, kind, id, null);
     await userDel(d, kind, id);
   }
   async function runOp(j: number): Promise<void> {
@@ -424,19 +428,32 @@ export async function check(o: Opts, label: string): Promise<number> {
     layout: layoutBody,
   };
   let copies = 0;
-  for (const [key, ms] of accounting ? maximal : []) {
+  for (const [key, ms] of maximal) {
     const kind = ms[0]!.kind;
+    const id = ms[0]!.id;
+    // Resurrection, over ALL maximal entries (phantoms included). Strict: every one is a tombstone
+    // and none is superseded. Body-agnostic (the pool run too): no entry is neither a tombstone
+    // nor superseded, and at least one tombstone is not superseded.
+    const open = ms.filter((e) => !superseded.has(sig(e)));
+    const dead = accounting
+      ? ms.every((e) => e.deleted === true) && open.length === ms.length
+      : open.length > 0 && open.every((e) => e.deleted === true);
+    if (dead) {
+      for (const d of devs) {
+        if (!(await records(d, kind)).has(id)) continue;
+        const f = (e: SyncEntry): string =>
+          `${e.hlc.slice(5, 12)} ${JSON.stringify(e.vv)} ${e.deleted ? 'DEL' : 'live'}${phantoms.has(e) ? ' phantom' : ''}${superseded.has(sig(e)) ? ' superseded' : ''}`;
+        expect.fail(
+          `${where} resurrected ${key} on ${d.id}\n maximal: ${ms.map(f).join('; ')}\n history:\n  ${(byKey.get(key) ?? []).map(f).join('\n  ')}`,
+        );
+      }
+    }
+    if (!accounting) continue;
     const real = ms.filter((e) => !phantoms.has(e));
     if (real.length === 0) continue; // only phantoms: nothing here must survive
     const liveAll = real.filter((e) => !e.deleted);
     const live = liveAll.filter((e) => !superseded.has(sig(e)));
-    const id = ms[0]!.id;
-    if (liveAll.length === 0) {
-      for (const d of devs) {
-        expect((await records(d, kind)).has(id), `${where} resurrected ${key}`).toBe(false);
-      }
-      continue;
-    }
+    if (liveAll.length === 0) continue;
     if (kind in bodies) {
       const all = new Set([...finalStores.get(kind)!.values()].map(bodies[kind]!));
       for (const e of live) {

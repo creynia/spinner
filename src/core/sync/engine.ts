@@ -23,7 +23,7 @@ import {
   type SyncRootV1,
 } from '../contracts/sync';
 import { canonicalJson, utf8Decode, utf8Encode } from '../experiment';
-import { isQuotaError, type Backend } from '../store';
+import { evictRunResults, isQuotaError, type Backend } from '../store';
 import type { SyncCtx } from './ctx';
 import {
   applyRemote,
@@ -100,9 +100,14 @@ export interface DownloadRunOptions {
 }
 
 /**
- * `syncMeta` rows that `resetLocalSyncState` must keep: the device id and `vvCounter` always (N1),
- * and `copies` for every reset except erase and delete-all (a deleted copy stays deleted through
- * re-seed, account switch and Replace; sync.md §7.7).
+ * `syncMeta` rows that survive every reset path (sync.md D7, D19, §7.7):
+ *  - `deleteAll` ("Delete everything on this device") keeps `device`, `vvCounter`, `prefs`,
+ *    `account`, `clock`, `files` and `copies`, and clears the rest (`conflicts`, `bundles`, ...);
+ *  - `resetLocalSyncState` (account switch or Replace) keeps `device`, `vvCounter`, `copies` and
+ *    `conflicts`, and clears `files`, `bundles`, `seen`, `last`, `libSha` and the index;
+ *  - only `eraseRemote` also clears `copies`.
+ * `SYNC_META_KEEP` is what every path keeps. Accepted caveat: a kept `copies` set can suppress the
+ * same conflict copy recurring in a new account (the loser is skipped, the edit is not copied).
  */
 export const SYNC_META_KEEP = ['device', 'vvCounter', 'copies'] as const;
 
@@ -160,6 +165,8 @@ export async function createCtx(deps: SyncEngineDeps): Promise<SyncCtx> {
     names: new Map<DeviceId, string>(),
     deletedRuns: new Set<string>(),
     changed: new Set<SyncKind>(),
+    deferred: new Map<SyncKey, string>(),
+    deferredFiles: new Map<string, string>(),
     counts: { applied: 0, copies: 0, pushed: 0 },
   } as unknown as Internal;
   const ctx: SyncCtx = {
@@ -306,23 +313,31 @@ function noteEntries(st: Internal, entries: Iterable<SyncEntry>): void {
 
 /**
  * `deletedRuns`: ids of runs whose entry is a tombstone after folding, so a run that was deleted
- * and then re-imported (a live entry that descends the tombstone) is not in it. Definitions drop
- * these ids from `runIds` when they are joined.
+ * and then imported again (a live entry that descends the tombstone, pulled or made here) is not
+ * in it. Definitions drop these ids from `runIds` when they are joined. Every pulled run key is
+ * folded with its base; a live local run with a dirty mark counts as the (live) candidate.
  */
 async function noteRuns(
   st: Internal,
   rows: readonly SyncIndexRecord[],
   pulled?: Pulled,
 ): Promise<void> {
+  const localLive = async (key: SyncKey, id: string): Promise<boolean> =>
+    (await st.raw.get('syncDirty', key)) !== undefined &&
+    (await st.raw.get('runs', id)) !== undefined;
   if (!pulled) {
-    for (const r of rows) if (r.kind === 'run' && r.entry.deleted) st.deletedRuns.add(r.entry.id);
+    for (const r of rows) {
+      if (r.kind === 'run' && r.entry.deleted && !(await localLive(r.key, r.entry.id))) {
+        st.deletedRuns.add(r.entry.id);
+      }
+    }
     return;
   }
   for (const [key, list] of pulled.remote) {
-    if (!key.startsWith('run:') || !list.some((e) => e.deleted)) continue;
+    if (!key.startsWith('run:')) continue;
     const base = await st.raw.get<SyncIndexRecord>('syncIndex', key);
     const winner = foldEntries(base ? [...list, base.entry] : list, new Set()).winner;
-    if (winner.deleted) st.deletedRuns.add(winner.id);
+    if (winner.deleted && !(await localLive(key, winner.id))) st.deletedRuns.add(winner.id);
     else st.deletedRuns.delete(winner.id);
   }
 }
@@ -359,13 +374,34 @@ function failure(e: unknown): {
   if (isQuotaError(e)) {
     return {
       outcome: 'error',
-      error: { code: 'unknown', message: `local storage is full: ${message}` },
+      error: { code: 'local-full', message: `local storage is full: ${message}` },
     };
   }
   return { outcome: 'error', error: { code: 'unknown', message } };
 }
 
 const DAY = 24 * 3600 * 1000;
+
+/**
+ * Idempotent clean-up: the index says a run is deleted (and it is not kept as active here) but its
+ * results are still on this device, e.g. after a crash between the apply and the eviction.
+ */
+async function evictDeleted(st: Internal, rows: readonly SyncIndexRecord[]): Promise<void> {
+  const gone = rows.filter((r) => r.kind === 'run' && r.entry.deleted && r.local === 0);
+  if (gone.length === 0) return;
+  const have = new Set((await st.raw.getAllKeys('runs')).map(String));
+  for (const r of gone) {
+    // a run with a dirty mark was imported again here: it competes with the tombstone instead
+    if (
+      have.has(r.entry.id) &&
+      !st.ctx.deps.isRunActive(r.entry.id) &&
+      (await st.raw.get('syncDirty', r.key)) === undefined
+    ) {
+      await evictRunResults(st.raw, r.entry.id);
+      st.changed.add('run');
+    }
+  }
+}
 
 /** Done runs with a bundle that this device has not downloaded, newest first. */
 function remoteOnly(rows: readonly SyncIndexRecord[]): RunStub[] {
@@ -379,6 +415,14 @@ function remoteOnly(rows: readonly SyncIndexRecord[]): RunStub[] {
 /**
  * One sync cycle (§7.3). Exported for WP-S2c's `beginFirst`, which seeds or wipes first and then
  * runs this. The Web Lock and the token check belong to the app service (S5a).
+ *
+ * Requests: a cycle with nothing to pull or push makes 1 (the listing). It makes 2 once every 7
+ * days (the lib file is re-uploaded to refresh its `writtenAt`/`modifiedTime`, which GC reads for
+ * staleness) and 2 while the listing lags the own lib (the lib is then updated every cycle, as the
+ * listing cannot confirm it exists).
+ *
+ * Outcomes: `rate` and `server` errors are outcome `error` with code `network` (retryable);
+ * `network` is `offline`; an IndexedDB quota error is `error` with code `local-full`.
  */
 export async function runCycle(
   ctx: SyncCtx,
@@ -390,6 +434,8 @@ export async function runCycle(
   st.changed = new Set();
   st.counts = { applied: 0, copies: 0, pushed: 0 };
   st.deletedRuns = new Set();
+  st.deferred = new Map();
+  st.deferredFiles = new Map();
   const deadline = deps.now() + (o.timeBudgetMs ?? 120_000);
   const done = (outcome: CycleResult['outcome'], error?: CycleResult['error']): CycleResult => ({
     outcome,
@@ -430,15 +476,14 @@ export async function runCycle(
       rows.map((r) => r.entry),
     );
     await noteRuns(st, rows);
+    await evictDeleted(st, rows);
     for (const r of rows) {
       const n = r.seen[st.self] ?? 0;
       if (n > st.vv.n) st.vv.n = n;
     }
     const pulled = await pull(st, files);
     await notePulled(st, pulled);
-    if (await applyRemote(st, pulled, reapplyUpgraded(rows))) {
-      Object.assign(st.seen, pulled.versions);
-    }
+    await applyRemote(st, pulled, reapplyUpgraded(rows));
     await persistProgress(st);
 
     if (o.uploadRuns !== false && !deps.isRunActive()) {
@@ -453,7 +498,7 @@ export async function runCycle(
       if (changedLibs(st, files).length === 0) break;
       const again = await pull(st, files);
       await notePulled(st, again);
-      if (await applyRemote(st, again, new Map())) Object.assign(st.seen, again.versions);
+      await applyRemote(st, again, new Map());
       await persistProgress(st);
       pending = await snapshotAll(st);
     }

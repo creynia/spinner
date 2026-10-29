@@ -20,6 +20,7 @@ import {
   type Dev,
   useIdb,
 } from './engine-testkit';
+import type { Backend } from '../store';
 import { createSyncEngine } from './engine';
 import { entryOf } from './fingerprint';
 import { encodeLib, LIB_NAME } from './libfile';
@@ -79,6 +80,7 @@ vi.mock('./erase', () => ({
 
 const A = 'aaaaaaaaaa';
 const B = 'bbbbbbbbbb';
+const C = 'cccccccccc';
 useIdb(() => new IDBFactory());
 
 let clock: () => number;
@@ -424,6 +426,133 @@ describe.each([false, true])('engine <-> S2c (idb %s)', (idb) => {
       await a.cycle();
       expect((await indexEntry(a, 'run:r1'))!.deleted).toBe(true);
       expect(await a.raw.get('runs', 'r1')).toBeUndefined(); // the delete wins on A
+    });
+
+    it('a run imported again after a delete is listed by its definition (deletedRuns is folded, not seeded)', async () => {
+      const inner = createMemoryRemote();
+      const a = await makeDevice({ id: A, idb, now: clock, remote: inner });
+      const b = await makeDevice({ id: B, idb, now: clock, remote: inner });
+      const d = await def('reimport', {}, ['r1']);
+      await userPut(a, 'def', d.rec);
+      await userPut(a, 'run', runMeta('r1', 'paused', { definitionId: d.id }));
+      for (let i = 0; i < 3; i++) {
+        await a.cycle();
+        await b.cycle();
+      }
+      // b deletes the run and drops it from the definition
+      await userDel(b, 'run', 'r1');
+      await userPut(b, 'def', { ...d.rec, runIds: [] });
+      for (let i = 0; i < 3; i++) {
+        await b.cycle();
+        await a.cycle();
+      }
+      // a imports it again (a live entry that descends the tombstone) while b renames the definition
+      await userPut(a, 'run', runMeta('r1', 'paused', { definitionId: d.id }));
+      await userPut(a, 'def', { ...d.rec, runIds: ['r1'] });
+      await userPut(b, 'def', {
+        ...d.rec,
+        runIds: [],
+        displayName: 'renamed',
+        displayNameAt: '2026-05-01T00:00:00.000Z',
+      });
+      for (let i = 0; i < 4; i++) {
+        await a.cycle();
+        await b.cycle();
+      }
+      for (const x of [a, b]) {
+        const rec = (await x.raw.get<{ runIds: string[] }>('definitions', d.id))!;
+        expect(rec.runIds, x.id).toContain('r1');
+      }
+    });
+
+    it('a run re-saved unchanged that exists here is local in the index after the mark is dropped', async () => {
+      const inner = createMemoryRemote();
+      const a = await makeDevice({ id: A, idb, now: clock, remote: inner });
+      const b = await makeDevice({ id: B, idb, now: clock, remote: inner });
+      const imp = {
+        imported: {
+          appVersion: '1',
+          importedAt: 'T1',
+          fileSha256: 'f',
+          trimmed: false,
+          partial: false,
+        },
+      };
+      await userPut(a, 'run', runMeta('r1', 'paused', imp));
+      await a.cycle();
+      await b.cycle();
+      expect((await indexEntry(b, 'run:r1'))?.deleted).toBeUndefined();
+      expect((await b.raw.get<{ local: number }>('syncIndex', 'run:r1'))!.local).toBe(0);
+      // b imports the same file: same fingerprint (importedAt is not part of it)
+      await userPut(
+        b,
+        'run',
+        runMeta('r1', 'paused', { imported: { ...imp.imported, importedAt: 'T2' } }),
+      );
+      const r = await b.cycle();
+      expect(r.pushed).toBe(0);
+      expect(await marks(b)).toEqual([]);
+      expect((await b.raw.get<{ local: number }>('syncIndex', 'run:r1'))!.local).toBe(1);
+    });
+
+    it('a remote delete is evicted after its transaction: a retry that keeps the run keeps its results; a missed eviction is repeated', async () => {
+      const inner = createMemoryRemote();
+      let fired = 0;
+      let racing = false;
+      const wrapRaw = (x: Backend): Backend => ({
+        ...x,
+        kind: x.kind,
+        get: (s, k) => x.get(s, k),
+        getAll: (s, i, r) => x.getAll(s, i, r),
+        getAllKeys: (s, r) => x.getAllKeys(s, r),
+        tx: (s, m, f) => x.tx(s, m, f),
+        update: async (stores, fn) => {
+          if (racing && fired === 0 && stores.includes('runs') && stores.includes('syncIndex')) {
+            fired++;
+            await x.tx(['runs', 'syncDirty'], 'readwrite', (t) => {
+              t.put('runs', runMeta('r1', 'paused'));
+              t.put('syncDirty', { key: 'run:r1', last: Date.now(), n: 'racing' });
+            });
+          }
+          return x.update(stores, fn);
+        },
+      });
+      const a = await makeDevice({ id: A, idb, now: clock, remote: inner });
+      const b = await makeDevice({ id: B, idb, now: clock, remote: inner, wrapRaw });
+      await userPut(a, 'run', runMeta('r1', 'paused'));
+      for (let i = 0; i < 2; i++) {
+        await a.cycle();
+        await b.cycle();
+      }
+      await b.raw.tx(['runs', 'summaries'], 'readwrite', (t) => {
+        t.put('runs', runMeta('r1', 'paused'));
+        t.put('summaries', { runId: 'r1' });
+      });
+      await userDel(a, 'run', 'r1');
+      await a.cycle();
+      racing = true;
+      await b.cycle();
+      expect(fired).toBe(1);
+      // the user's write won the retry: the run and its results are still here
+      expect(await b.raw.get('runs', 'r1')).toBeDefined();
+      expect(await b.raw.get('summaries', 'r1')).toBeDefined();
+      // a run whose eviction was missed (index: deleted, local 0; results still here) is evicted
+      const inner2 = createMemoryRemote();
+      const a2 = await makeDevice({ id: A, idb, now: clock, remote: inner2 });
+      await userPut(a2, 'run', runMeta('r1', 'paused'));
+      await a2.cycle();
+      await userDel(a2, 'run', 'r1');
+      await a2.cycle();
+      const c = await makeDevice({ id: C, idb, now: clock, remote: inner2 });
+      await c.cycle();
+      await c.raw.tx(['runs', 'summaries'], 'readwrite', (t) => {
+        t.put('runs', runMeta('r1', 'paused'));
+        t.put('summaries', { runId: 'r1' });
+      });
+      const r = await c.cycle();
+      expect(await c.raw.get('runs', 'r1')).toBeUndefined();
+      expect(await c.raw.get('summaries', 'r1')).toBeUndefined();
+      expect(r.changed).toContain('run');
     });
 
     it('a remote delete of a run that is active here keeps the run and re-pushes it when done, with a notice', async () => {

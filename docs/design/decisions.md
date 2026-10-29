@@ -120,3 +120,9 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
 - **Integrity:** every download is verified (file sha256, recomputed `resultsDigest`, definition-id rehash) before one atomic write. Newer-format data is kept, never dropped.
 - **Downloads:** every run is uploaded. Phones download a run when it is opened; desktops download everything in the background.
 - **No `CORE_VERSION` bump.** The only contract change to existing types is the additive `RunMeta.synced?`.
+- **Sync meta keep-lists (S2b review):**
+  - `deleteAll` keeps `device`, `vvCounter`, `prefs`, `account`, `clock`, `files` and `copies`, and clears `conflicts` and `bundles` with the rest.
+  - `resetLocalSyncState` (account switch or Replace) clears `files` and `bundles`, and keeps `device`, `vvCounter`, `copies` and `conflicts`.
+  - Only `eraseRemote` also clears `copies`.
+  - Accepted caveat: a kept `copies` set can suppress the same conflict copy recurring in a new account.
+  - Engine facts: a no-change cycle makes 1 request (2 every 7 days for the lib refresh, and 2 while the listing lags the own lib). `rate` and `server` errors map to outcome `error` with code `network`; an IndexedDB quota error maps to code `local-full`.

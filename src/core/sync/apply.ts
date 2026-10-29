@@ -31,6 +31,7 @@ import { entryOf, hashOf, SUPPORTED_V, verifyEntry } from './fingerprint';
 import { hlcDevice, hlcWall } from './hlc';
 import { decodeLib, LibFileError } from './libfile';
 import { copyIdChain, copyOf, equivalent, foldEntries, isCopyOf, resolve } from './merge';
+import { descends } from './vv';
 import type { RemoteFile } from '../contracts/sync';
 
 // ------------------------------------------------------------------ shared helpers
@@ -92,6 +93,7 @@ export const syncKey = (kind: SyncKind, id: string): SyncKey => `${kind}:${id}`;
 export class EngineError extends Error {
   constructor(
     readonly code:
+      | 'local-full'
       | 'newer-layout'
       | 'access-removed'
       | 'account-mismatch'
@@ -147,6 +149,10 @@ export interface Internal {
   // per cycle
   deletedRuns: Set<string>;
   changed: Set<SyncKind>;
+  /** Keys left opaque this cycle -> HLC of the opaque entry kept as their base. */
+  deferred: Map<SyncKey, string>;
+  /** Lib files that carry a deferred key's other entries: id -> version; they stay unseen. */
+  deferredFiles: Map<string, string>;
   counts: { applied: number; copies: number; pushed: number };
 }
 
@@ -196,8 +202,7 @@ async function runStub(
   if (meta.status === 'done') {
     const digest = meta.resultsDigest;
     const d16 = digest?.slice(0, 16);
-    const bundles = await metaGet(st.raw, 'bundles' as SyncMetaKey);
-    const mine = (bundles as unknown as Record<string, RunBundleRef> | undefined)?.[meta.runId];
+    const mine = (await metaGet(st.raw, 'bundles'))?.[meta.runId];
     if (mine && d16 && mine.name.includes(`.${d16}.`)) bundle = mine;
     const prev = base && !base.entry.deleted ? (base.entry.value as RunStub | null) : null;
     if (!bundle && prev && prev.resultsDigest === digest && prev.bundle) bundle = prev.bundle;
@@ -305,6 +310,8 @@ export interface Pulled {
   remote: Map<SyncKey, SyncEntry[]>;
   /** The lib files read, id -> version, to mark `seen` once they are fully applied. */
   versions: Record<string, string>;
+  /** Per lib file read: the (key, hlc) of every entry it carried. */
+  fileKeys: Record<string, { key: SyncKey; hlc: string }[]>;
 }
 
 const isLibFile = (f: RemoteFile): boolean => libDevice(f.name) !== null;
@@ -351,7 +358,7 @@ const VERIFIED_MAX = 20_000;
 export async function pull(st: Internal, files: readonly RemoteFile[]): Promise<Pulled> {
   const { remote: store, clock, deps } = st.ctx;
   const todo = unseenLibs(st, files);
-  const out: Pulled = { remote: new Map(), versions: {} };
+  const out: Pulled = { remote: new Map(), versions: {}, fileKeys: {} };
   let next = 0;
   let done = 0;
   const one = async (f: RemoteFile): Promise<void> => {
@@ -399,17 +406,20 @@ export async function pull(st: Internal, files: readonly RemoteFile[]): Promise<
         message: `${bad} item${bad === 1 ? '' : 's'} from ${lib.device.name} could not be verified and ${bad === 1 ? 'was' : 'were'} skipped.`,
       });
     }
+    const carried: { key: SyncKey; hlc: string }[] = [];
     for (const e of kept) {
       try {
         clock.recv(e.hlc);
       } catch {
         continue;
       }
+      carried.push({ key: e.key, hlc: e.hlc });
       const list = out.remote.get(e.key);
       if (list) list.push(e);
       else out.remote.set(e.key, [e]);
     }
     out.versions[f.id] = f.version;
+    out.fileKeys[f.id] = carried;
   };
   const worker = async (): Promise<void> => {
     while (next < todo.length) {
@@ -532,7 +542,17 @@ async function applyKeyOnce(
     }
   }
   const published = base ? [...remote, base.entry] : [...remote];
-  const opaqueWinner = res.do === 'opaque' ? foldEntries(published, st.deletedRuns).winner : null;
+  // An opaque (newer-schema) maximal entry becomes the base, so the key stays deferred; nothing
+  // that is concurrent with it is folded into `seen` or published over it (see the 'opaque' case).
+  const opaqueMax =
+    res.do === 'opaque'
+      ? published
+          .filter(
+            (e) =>
+              isOpaque(e) && !published.some((o) => o !== e && descends(o, e) && !descends(e, o)),
+          )
+          .sort((a, b) => (a.hlc < b.hlc ? 1 : a.hlc > b.hlc ? -1 : 0))[0]
+      : undefined;
   const winnerOf = res.do === 'apply' || res.do === 'join' ? res.entry : (cand ?? base?.entry);
   const runGone =
     kind === 'run' &&
@@ -540,7 +560,6 @@ async function applyKeyOnce(
     res.entry.deleted === true &&
     (await raw.get('runs', id)) !== undefined;
   const runActive = runGone && st.ctx.deps.isRunActive(id);
-  if (runGone && !runActive) await evictRunResults(raw, id); // idempotent; before the index moves
 
   const copyStores = [...new Set(plans.map((p) => STORE_OF[p.entry.kind]))];
   const stores: StoreName[] = [
@@ -577,10 +596,15 @@ async function applyKeyOnce(
         (cand.deleted === true) === (e.deleted === true);
 
       switch (res.do) {
-        case 'skip-older':
-          if (base && !sameVv(base.seen, seen)) put(base.entry, base.local);
+        case 'skip-older': {
+          // a run re-saved unchanged that exists here: the index says so (local = 1)
+          const local = base && kind === 'run' && hasRun && !base.entry.deleted ? 1 : base?.local;
+          if (base && (!sameVv(base.seen, seen) || local !== base.local)) {
+            put(base.entry, local ?? base.local);
+          }
           if (snap.k === 'drop') dropMark();
           break;
+        }
         case 'apply': {
           const e = res.entry;
           const live = !e.deleted && e.value !== null;
@@ -629,7 +653,10 @@ async function applyKeyOnce(
           break; // the mark stays: the push mints from `seen`
         }
         case 'opaque':
-          put(opaqueWinner!, 0); // the local value is left alone and the mark stays
+          // the local value is left alone and the mark stays; `seen` is not advanced past the
+          // opaque entry (our own edit stays concurrent with it), and what is concurrent with it is
+          // folded again after the upgrade
+          put(opaqueMax!, 0, base?.seen ?? {});
           break;
       }
 
@@ -673,15 +700,21 @@ async function applyKeyOnce(
       st.conflicts = savedConflicts; // nothing was written
       throw e;
     });
+  // after the commit: a retry that kept the run must not find its results gone
+  if (runGone && !runActive) await evictRunResults(raw, id);
   st.vv.persisted = st.vv.n;
+  if (res.do === 'opaque') st.deferred.set(key, opaqueMax!.hlc);
+  else st.deferred.delete(key);
   st.copies = newCopies;
   st.counts.applied += stats.applied;
   st.counts.copies += stats.copies;
 }
 
 /**
- * Applies every pulled key, in kind order. Returns true when every key was applied, so the
- * caller may mark the files `seen`.
+ * Applies every pulled key, in kind order, then marks the pulled lib files `seen`: only when every
+ * key was applied, and never a file that carries an entry concurrent with an opaque one (those
+ * files are read again every cycle until the app can interpret the opaque entry). Returns whether
+ * every key was applied.
  */
 export async function applyRemote(
   st: Internal,
@@ -712,6 +745,19 @@ export async function applyRemote(
     }
     if (!applied) ok = false;
     deps.onProgress({ phase: 'apply', done: ++n, total: keys.length });
+  }
+  if (ok) {
+    for (const [id, version] of Object.entries(pulled.versions)) {
+      const blocked = (pulled.fileKeys[id] ?? []).some((e) => {
+        const kept = st.deferred.get(e.key);
+        return kept !== undefined && kept !== e.hlc;
+      });
+      if (blocked) st.deferredFiles.set(id, version);
+      else {
+        st.seen[id] = version;
+        st.deferredFiles.delete(id);
+      }
+    }
   }
   return ok;
 }
