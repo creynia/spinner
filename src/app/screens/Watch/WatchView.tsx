@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { RunData, SummaryRow } from '@core/contracts/run';
 import type { SessionTrace } from '@core/contracts/strategy-trace';
-import { formatMoney, representativeSessions, summaryRow } from '@core';
+import { formatMoney, representativeSessions, summaryRow, experimentName } from '@core';
 import { Button, Card, EmptyState, TraceReplay, isSpeedId } from '@core/ui';
 import { href } from '../../router';
 import type { ScreenProps } from '../types';
@@ -137,7 +137,7 @@ export function WatchView(props: ScreenProps & { deps?: WatchDeps }) {
       <h1>Watch session{index !== null ? ` #${index}` : ''}</h1>
       <p class="muted">
         <a href={back}>Back to results</a>
-        {data ? <> · {data.definition.name}</> : null}
+        {data ? <> · {experimentName(data)}</> : null}
       </p>
     </>
   );

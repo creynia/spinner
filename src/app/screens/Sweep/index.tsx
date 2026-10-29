@@ -1,10 +1,11 @@
 // Sweep (architecture.md §6.3): create a sweep from a definition (path + values, same seed), run the
 // variants one after another, and chart metric against parameter. `#/sweep/new` is the form;
 // `#/sweep/:groupId` shows a stored group.
+import { experimentName } from '@core';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { DefinitionRecord, ExperimentGroup } from '@core/contracts/experiment';
 import type { RunData, RunMeta } from '@core/contracts/run';
-import { Button, Card, Field, Select, SweepView, TextInput } from '@core/ui';
+import { Button, Card, Field, relativeTime, Select, SweepView, TextInput, useNow } from '@core/ui';
 import { navigate } from '../../router';
 import { getCoreRepo } from '../../services/runs';
 import { settingsStore } from '../../services/settings';
@@ -26,6 +27,7 @@ import {
 
 function NewSweep({ query }: { query: URLSearchParams }) {
   const [defs, setDefs] = useState<DefinitionRecord[] | null>(null);
+  const now = useNow();
   const [baseId, setBaseId] = useState(query.get('definition') ?? '');
   const [path, setPath] = useState('');
   const [text, setText] = useState('');
@@ -116,7 +118,10 @@ function NewSweep({ query }: { query: URLSearchParams }) {
             setBaseId(v);
             setPath('');
           }}
-          options={defs.map((d) => ({ value: d.id, label: d.definition.name }))}
+          options={defs.map((d) => ({
+            value: d.id,
+            label: `${experimentName(d)} · ${relativeTime(d.updatedAt, now)}`,
+          }))}
         />
       </Field>
       <Field

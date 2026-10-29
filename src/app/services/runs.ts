@@ -19,6 +19,7 @@ import {
   type Backend,
   type HarnessRunController,
   type Repo as CoreRepo,
+  experimentName,
 } from '@core';
 import { setRunActive } from '../../pwa/register';
 import { createStore } from '../state/store';
@@ -108,7 +109,7 @@ export async function listRecentRuns(limit = 5): Promise<RunListItem[]> {
   const runs = all
     .filter((m) => !dry.has(m.definitionId))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const names = new Map(defs.map((d) => [d.id, d.definition.name]));
+  const names = new Map(defs.map((d) => [d.id, experimentName(d)]));
   // Only the newest `limit` runs are touched; their verdicts are cached per run id.
   const top = runs.slice(0, limit);
   let sink: RunSink | null = null;

@@ -9,6 +9,7 @@ import {
   importDefinitionFile,
   SHARE_FALLBACK_NOTICE,
   validateDefinitionName,
+  experimentName,
 } from '@core';
 import {
   Button,
@@ -23,6 +24,8 @@ import {
   Segmented,
   Select,
   Sheet,
+  RelativeTime,
+  runTimestamp,
   Toggle,
   showToast,
   useId,
@@ -211,7 +214,9 @@ function LibrarySheet(p: { onPick: (s: StrategyDefinition) => void; onClose: () 
 }
 
 function CompareSheet(p: { onPick: (runId: string) => void; onClose: () => void }) {
-  const [items, setItems] = useState<{ runId: string; name: string; seed: number }[] | null>(null);
+  const [items, setItems] = useState<
+    { runId: string; name: string; seed: number; at: string }[] | null
+  >(null);
   useEffect(() => {
     void (async () => {
       const repo = await libraryRepo();
@@ -221,8 +226,9 @@ function CompareSheet(p: { onPick: (runId: string) => void; onClose: () => void 
         const d = await repo.getDefinition(r.definitionId);
         out.push({
           runId: r.runId,
-          name: d?.definition.name ?? 'Untitled experiment',
+          name: d ? experimentName(d) : 'Untitled experiment',
           seed: d?.definition.run.seed ?? 0,
+          at: runTimestamp(r),
         });
       }
       setItems(out);
@@ -245,7 +251,9 @@ function CompareSheet(p: { onPick: (runId: string) => void; onClose: () => void 
                 onClick={() => p.onPick(r.runId)}
               >
                 <span class="row-title">{r.name}</span>
-                <span class="row-sub">seed {r.seed}</span>
+                <span class="row-sub">
+                  <RelativeTime iso={r.at} /> · seed {r.seed}
+                </span>
               </button>
             </li>
           ))}
@@ -442,7 +450,10 @@ export function Define({ params, query }: ScreenProps) {
             return;
           }
           setDoc({
-            ...definitionToDoc(rec.definition, { kind: 'library', id: rec.id }),
+            ...definitionToDoc(
+              { ...rec.definition, name: experimentName(rec) },
+              { kind: 'library', id: rec.id },
+            ),
             derivedFrom: rec.id,
           });
           setNotice('Editing a saved definition. Changes are saved as a new definition.');

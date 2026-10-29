@@ -482,16 +482,19 @@ The memory backend implements this with `Map`s and `structuredClone` on put/get,
 
 ### 9.2a Renaming an experiment
 
-An experiment is a `DefinitionRecord`; its runs point at it by `definitionId`. A rename (`Repo.renameDefinition`)
-changes `definition.name` and `updatedAt` only. The record id (so `definitionId`, `runKey` and the run id prefix)
-never changes, and `simKey` ignores names. Run meta stores no name: every screen resolves the live name through the
-record, so a rename needs no other write (there is no snapshot to update). Names are trimmed, non-empty, at most 120
-characters; duplicates are allowed.
+An experiment is a `DefinitionRecord`; its runs point at it by `definitionId`. Definitions are content-addressed and
+immutable: `id === sha256(definition)`, name included. A rename (`Repo.renameDefinition`) is metadata: it sets the
+optional `record.displayName` and `updatedAt` and never touches `record.definition`. So the id, `runKey`, `simKey` and
+run ids do not change and the stored definition still hashes to its id. Renaming back to `definition.name` clears
+`displayName`. Names are trimmed, non-empty, at most 120 characters; duplicates are allowed.
 
-The id is a hash of the whole definition, name included, so a renamed record no longer hashes to its own id. The record
-keeps `idName`, the name the id was minted with (cleared when renamed back). Run files carry it as the optional
-`definitionIdName`, and the importer checks the hash with it. A file keeps the name it had when exported; importing a
-run whose definition already exists locally keeps the local (live) name.
+Run meta stores no name. Every screen shows `experimentName(rec)` (`displayName ?? definition.name`), resolved live
+through the record (`loadRun` returns the record's `displayName` beside the definition), so there is no snapshot to
+update. Run files carry `displayName` as an optional field beside the unchanged `definition`; the importer hashes
+`definition` as before and keeps `displayName`. A file keeps the name it had when exported. Importing a run whose
+definition already exists locally keeps the local `displayName`. Definition files and share links carry the shown name
+as `definition.name` (they are drafts: importing one makes a new definition). Define's "save as new" writes the typed
+name into `definition.name` with no `displayName`; renaming a saved record from Define sets `displayName` only.
 
 ### 9.3 Opening and fallback (prior-art policy)
 

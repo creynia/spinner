@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { definitionId, runKey, simKey } from '../experiment';
+import { definitionId, experimentName, runKey, simKey } from '../experiment';
 import { makeRun } from './__fixtures__/synth';
 import {
   createMemoryBackend,
@@ -33,30 +33,30 @@ describe('validateDefinitionName', () => {
 });
 
 describe('renameDefinition', () => {
-  it('changes only the name: definitionId, runKey, simKey and run ids stay', async () => {
+  it('is metadata: definition, id, runKey, simKey and run ids stay; the hash still matches', async () => {
     const { repo, id, runId } = await seeded();
     const before = await repo.getRun(runId);
     const rec = await repo.renameDefinition(id, '  Better name ');
-    expect(rec.definition.name).toBe('Better name');
+    expect(rec.displayName).toBe('Better name');
+    expect(experimentName(rec)).toBe('Better name');
     const after = await repo.getDefinition(id);
     expect(after?.id).toBe(id);
     expect(after?.runIds).toEqual([runId]);
-    expect(after?.definition).toEqual({ ...run.definition, name: 'Better name' });
+    expect(after?.definition).toEqual(run.definition);
+    expect(await definitionId(after!.definition)).toBe(id);
     expect(await repo.getRun(runId)).toEqual(before);
     expect((await repo.listRunsOfDefinition(id)).map((r) => r.runId)).toEqual([runId]);
-    // the keys are functions of ids and versions, not of the name
     const m = run.meta;
     expect(await runKey(id, m.gameVersion, m.coreVersion)).toBe(m.runKey);
-    expect(await simKey(rec.definition, m.gameVersion, m.coreVersion)).toBe(m.simKey);
-    expect(await simKey(run.definition, m.gameVersion, m.coreVersion)).toBe(m.simKey);
-    // ... while a content hash of the renamed definition would differ (why the id is pinned)
-    expect(await definitionId(rec.definition)).not.toBe(id);
+    expect(await simKey(after!.definition, m.gameVersion, m.coreVersion)).toBe(m.simKey);
   });
 
-  it('resolves the live name: loadRun has no stale copy, run meta has no name', async () => {
+  it('resolves the live name: loadRun carries displayName, run meta has no name', async () => {
     const { repo, id, runId } = await seeded();
     await repo.renameDefinition(id, 'Fresh');
-    expect((await repo.loadRun(runId))?.definition.name).toBe('Fresh');
+    const data = await repo.loadRun(runId);
+    expect(data && experimentName(data)).toBe('Fresh');
+    expect(data?.definition.name).toBe(run.definition.name);
     expect(JSON.stringify(await repo.getRun(runId))).not.toContain(run.definition.name);
   });
 
@@ -65,90 +65,102 @@ describe('renameDefinition', () => {
     await expect(repo.renameDefinition(id, '  ')).rejects.toThrow();
     await expect(repo.renameDefinition(id, 'x'.repeat(DEFINITION_NAME_MAX + 1))).rejects.toThrow();
     await expect(repo.renameDefinition('0'.repeat(64), 'A')).rejects.toThrow(/no longer exists/);
-    expect((await repo.getDefinition(id))?.definition.name).toBe(run.definition.name);
-    await repo.renameDefinition(id, run.definition.name); // same name: fine
+    expect((await repo.getDefinition(id))?.displayName).toBeUndefined();
     const other = { ...run.definition, name: 'Other', run: { ...run.definition.run, seed: 9 } };
+    const oid = await definitionId(other);
     await repo.putDefinition({
       v: 1,
-      id: await definitionId(other),
+      id: oid,
       definition: other,
       createdAt: 'a',
       updatedAt: 'a',
       origin: 'user',
       runIds: [],
     });
-    await repo.renameDefinition(await definitionId(other), 'Dup');
+    await repo.renameDefinition(oid, 'Dup');
     await repo.renameDefinition(id, 'Dup');
-    expect((await repo.listDefinitions()).filter((d) => d.definition.name === 'Dup')).toHaveLength(
-      2,
-    );
+    expect(
+      (await repo.listDefinitions()).map(experimentName).filter((n) => n === 'Dup'),
+    ).toHaveLength(2);
   });
 
-  it('bumps updatedAt and keeps createdAt', async () => {
+  it('renaming back to the definition name clears displayName; double rename works', async () => {
     const { repo, id } = await seeded();
     const a = await repo.getDefinition(id);
-    const b = await repo.renameDefinition(id, 'Later');
-    expect(b.createdAt).toBe(a?.createdAt);
-    expect(b.updatedAt >= (a?.updatedAt ?? '')).toBe(true);
+    await repo.renameDefinition(id, 'One');
+    const two = await repo.renameDefinition(id, 'Two');
+    expect(two.displayName).toBe('Two');
+    expect(two.createdAt).toBe(a?.createdAt);
+    expect(two.updatedAt >= (a?.updatedAt ?? '')).toBe(true);
+    const back = await repo.renameDefinition(id, run.definition.name);
+    expect('displayName' in back).toBe(false);
+    expect(experimentName(back)).toBe(run.definition.name);
   });
 });
 
 describe('exports after a rename', () => {
-  it('a renamed run file imports (the id is checked against the name it was minted with)', async () => {
+  it('carries displayName beside the unchanged definition; import on a fresh store keeps it', async () => {
     const { repo, id, runId } = await seeded();
     await repo.renameDefinition(id, 'Renamed once');
     await repo.renameDefinition(id, 'Renamed twice');
-    const data = await repo.loadRun(runId);
-    const bytes = await encodeRunBundle(data!, { gzip: false });
+    const bytes = await encodeRunBundle((await repo.loadRun(runId))!, { gzip: false });
     const b = plain(bytes);
     expect(b.definitionId).toBe(id);
-    expect(b.definition.name).toBe('Renamed twice');
-    expect(b.definitionIdName).toBe(run.definition.name);
+    expect(b.definition).toEqual(run.definition);
+    expect(b.displayName).toBe('Renamed twice');
     const dec = await decodeRunBundle(bytes, 'roulette');
     if ('error' in dec) throw new Error(dec.error);
-    expect(dec.data.meta.definitionId).toBe(id);
     expect(dec.data.meta.runKey).toBe(run.meta.runKey);
-    // importing on a fresh device keeps the exported name and still round-trips
     const fresh = createRepo(createMemoryBackend());
     await fresh.importRun(dec.data);
     const rec = await fresh.getDefinition(id);
-    expect(rec?.definition.name).toBe('Renamed twice');
+    expect(rec?.displayName).toBe('Renamed twice');
+    expect(rec?.definition).toEqual(run.definition);
+    // rename back on the fresh store clears it, and the next export has no field
+    await fresh.renameDefinition(id, run.definition.name);
     const again = await encodeRunBundle((await fresh.loadRun(dec.data.meta.runId))!, {
       gzip: false,
     });
-    expect(plain(again).definitionIdName).toBe(run.definition.name);
-    expect(await decodeRunBundle(again, 'roulette')).toHaveProperty('data');
+    expect(plain(again).displayName).toBeUndefined();
   });
 
   it('keeps the name it had at export time; an unrenamed export has no extra field', async () => {
     const { repo, id, runId } = await seeded();
     const early = await encodeRunBundle((await repo.loadRun(runId))!, { gzip: false });
     await repo.renameDefinition(id, 'After');
-    expect(plain(early).definition.name).toBe(run.definition.name);
-    expect(plain(early).definitionIdName).toBeUndefined();
+    expect(plain(early).displayName).toBeUndefined();
     expect(await decodeRunBundle(early, 'roulette')).toHaveProperty('data');
   });
 
-  it('renaming back removes the idName; a damaged definition still fails', async () => {
+  it('importing a run of a definition that exists locally keeps the local displayName', async () => {
     const { repo, id, runId } = await seeded();
-    await repo.renameDefinition(id, 'Temp');
-    await repo.renameDefinition(id, run.definition.name);
-    const bytes = await encodeRunBundle((await repo.loadRun(runId))!, { gzip: false });
-    expect(plain(bytes).definitionIdName).toBeUndefined();
+    await repo.renameDefinition(id, 'Local');
+    const other = createRepo(createMemoryBackend());
+    await other.importRun(run);
+    await other.renameDefinition(id, 'Remote');
+    const dec = await decodeRunBundle(
+      await encodeRunBundle((await other.loadRun(runId))!, { gzip: false }),
+      'roulette',
+    );
+    if ('error' in dec) throw new Error(dec.error);
+    await repo.importRun({
+      ...dec.data,
+      meta: { ...dec.data.meta, runId: `${id.slice(0, 16)}-zzzzzzzz` },
+    });
+    expect((await repo.getDefinition(id))?.displayName).toBe('Local');
+  });
+
+  it('a damaged definition still fails the id check; a trimmed export imports', async () => {
+    const { repo, id, runId } = await seeded();
     await repo.renameDefinition(id, 'Temp');
     const b = plain(await encodeRunBundle((await repo.loadRun(runId))!, { gzip: false }));
     b.definition = { ...b.definition, session: { ...b.definition.session, bankroll: 1 } };
     const r = await decodeRunBundle(new TextEncoder().encode(JSON.stringify(b)), 'roulette');
     expect('error' in r && r.error).toContain('definitionId');
-  });
-
-  it('a gallery-trimmed export of a renamed run still imports', async () => {
-    const { repo, id, runId } = await seeded();
-    await repo.renameDefinition(id, 'Trimmed');
-    const bytes = await encodeRunBundle((await repo.loadRun(runId))!, {
+    const t = await encodeRunBundle((await repo.loadRun(runId))!, {
       gzip: false,
       trimForGallery: true,
     });
-    expect(await decodeRunBundle(bytes, 'roulette')).toHaveProperty('data');
+    expect(await decodeRunBundle(t, 'roulette')).toHaveProperty('data');
   });
 });

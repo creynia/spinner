@@ -1,5 +1,6 @@
 // Analyze (architecture.md §6.3): tabs Overview, Paths, Risk, Where the money went, Convergence,
 // Sessions, Export over one stored run. Money framing comes from settings.
+import { experimentName } from '@core';
 import { useState } from 'preact/hooks';
 import { AnalysisView, Button, isAnalyzeTab, type AnalyzeTab } from '@core/ui';
 import { RenameExperiment } from '../RenameExperiment';
@@ -50,7 +51,7 @@ export function Analyze({ params, query }: ScreenProps) {
   const status = data.meta.status;
   return (
     <div class="results-screen">
-      <h1>Analyze: {data.definition.name}</h1>
+      <h1>Analyze: {experimentName(data)}</h1>
       {data.meta.imported ? (
         <p class="muted" data-imported>
           <span class="chip-note">imported</span> from spinner {data.meta.imported.appVersion}
@@ -61,7 +62,7 @@ export function Analyze({ params, query }: ScreenProps) {
       <div class="actions">
         <Button href={`#/define?from=${encodeURIComponent(data.meta.runId)}`}>Run again</Button>
         <Button href={`#/compare?runs=${encodeURIComponent(data.meta.runId)}`}>Compare</Button>
-        <Button onClick={() => setRenaming(true)} aria-label={`Rename ${data.definition.name}`}>
+        <Button onClick={() => setRenaming(true)} aria-label={`Rename ${experimentName(data)}`}>
           Rename
         </Button>
         {status !== 'done' ? (
@@ -71,7 +72,7 @@ export function Analyze({ params, query }: ScreenProps) {
       {renaming ? (
         <RenameExperiment
           id={data.meta.definitionId}
-          name={data.definition.name}
+          name={experimentName(data)}
           onClose={() => setRenaming(false)}
         />
       ) : null}

@@ -13,6 +13,7 @@ import {
   createRunSink,
   definitionId,
   encodeShareLink,
+  experimentName,
   exportDefinitionFile,
   runMetrics,
   type Repo,
@@ -112,7 +113,8 @@ export async function loadDefinitionOfRun(runId: string): Promise<NormalizedDefi
   const repo = await libraryRepo();
   const meta = await repo.getRun(runId);
   if (!meta) return null;
-  return (await repo.getDefinition(meta.definitionId))?.definition ?? null;
+  const rec = await repo.getDefinition(meta.definitionId);
+  return rec ? { ...rec.definition, name: experimentName(rec) } : null;
 }
 
 // ------------------------------------------------------------------ quick check

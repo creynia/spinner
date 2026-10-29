@@ -54,9 +54,9 @@ export interface RunBundleV1 {
   core: { version: string };
   game: { id: string; version: string };
   definitionId: string;
-  /** The name `definitionId` was hashed with, written only for a renamed definition. */
-  definitionIdName?: string;
   definition: NormalizedDefinition;
+  /** Set when the experiment was renamed: shown instead of `definition.name`; not hashed. */
+  displayName?: string;
   meta: {
     runId: string;
     createdAt: string;
@@ -230,7 +230,7 @@ export async function buildRunBundle(
   opts: { trimForGallery?: boolean } = {},
 ): Promise<RunBundleV1> {
   const { meta } = data;
-  const idName = (data as StoredRunData).idName;
+  const displayName = (data as StoredRunData).displayName;
   const digest = meta.resultsDigest ?? (await resultsDigest(data));
   let out = data;
   let trimmed = trimInfoOf(meta);
@@ -250,8 +250,8 @@ export async function buildRunBundle(
     core: { version: meta.coreVersion },
     game: { id: meta.gameId, version: meta.gameVersion },
     definitionId: meta.definitionId,
-    ...(idName && idName !== out.definition.name ? { definitionIdName: idName } : {}),
     definition: out.definition,
+    ...(displayName && displayName !== out.definition.name ? { displayName } : {}),
     meta: {
       runId: meta.runId,
       createdAt: meta.createdAt,
@@ -421,10 +421,8 @@ async function parseBundle(
   } catch (e) {
     return fail(e instanceof DefinitionFormatError ? e.message : 'file damaged: definition');
   }
-  const idName = b.definitionIdName;
-  if (idName !== undefined && typeof idName !== 'string') fail('file damaged: definitionIdName');
-  const hashed = idName === undefined ? definition : { ...definition, name: idName };
-  if ((await hashDefinition(hashed)) !== b.definitionId)
+  if (b.displayName !== undefined && !isStr(b.displayName)) fail('file damaged: displayName');
+  if ((await hashDefinition(definition)) !== b.definitionId)
     fail('file damaged: definitionId does not match');
 
   // labels, schedule, columns
@@ -548,7 +546,9 @@ async function parseBundle(
   const data: StoredRunData = {
     meta,
     definition,
-    ...(idName !== undefined && idName !== definition.name ? { idName } : {}),
+    ...(b.displayName !== undefined && b.displayName !== definition.name
+      ? { displayName: b.displayName }
+      : {}),
     sessions,
     summary,
     checkpoints: { schedule: Int32Array.from(b.schedule), equity },

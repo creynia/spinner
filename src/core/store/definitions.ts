@@ -1,18 +1,15 @@
 // Renaming a saved definition (the owner's "rename experiments").
 //
-// An experiment is a `DefinitionRecord`; its runs point at it by `definitionId`. The id is the hash
-// of the whole normalized definition, name included (experiment/ids.ts), but it is only an
-// identity: a rename changes `definition.name` in place and NEVER the record id, so `definitionId`,
-// `runKey` and every run id (they start with the id) stay put. `simKey` ignores the name anyway.
+// An experiment is a `DefinitionRecord`; its runs point at it by `definitionId`. Definitions are
+// content-addressed and immutable: `id === sha256(definition)`, name included. A rename is
+// metadata: it sets `record.displayName` (and `updatedAt`) and never touches `record.definition`,
+// so `definitionId`, `runKey`, run ids and `simKey` stay put and the stored definition still
+// hashes to its id. Renaming back to `definition.name` clears `displayName`.
 //
 // Names are not snapshotted into runs: `RunMeta` carries no name, and every screen resolves the
-// live name through the record (`loadRun` returns `record.definition`). One source of truth.
-//
-// A renamed record no longer hashes to its own id, which the run-file importer checks. The record
-// therefore remembers `idName`, the name the id was minted with; exports write it as
-// `definitionIdName` and the importer verifies the hash with it. Exported files keep the name
-// they had at export time. (Contract note: `idName` is a store-layer extension of
-// `DefinitionRecord`; it should be folded into `contracts/experiment.ts` as an optional field.)
+// live name through the record (`experimentName`). `loadRun` hands back the record's
+// `displayName` next to the definition so results screens and exports can do the same. Run files
+// carry `displayName` as an optional field; the importer still hashes `definition` as before.
 import type { DefinitionRecord } from '../contracts/experiment';
 import type { RunData } from '../contracts/run';
 import type { Backend } from './backend';
@@ -32,10 +29,8 @@ export function validateDefinitionName(input: string): NameCheck {
   return { ok: true, name };
 }
 
-/** A stored record: `idName` is set only after a rename (the name the id was hashed with). */
-export type StoredDefinitionRecord = DefinitionRecord & { idName?: string };
-/** `RunData` as loaded from the store; carries the record's `idName` for exports. */
-export type StoredRunData = RunData & { idName?: string };
+/** `RunData` as loaded from the store: carries the record's `displayName` for screens and exports. */
+export type StoredRunData = RunData & { displayName?: string };
 
 export async function renameDefinitionRecord(
   backend: Backend,
@@ -45,15 +40,13 @@ export async function renameDefinitionRecord(
 ): Promise<DefinitionRecord> {
   const check = validateDefinitionName(input);
   if (!check.ok) throw new Error(check.error);
-  const rec = await backend.get<StoredDefinitionRecord>('definitions', id);
+  const rec = await backend.get<DefinitionRecord>('definitions', id);
   if (!rec) throw new Error('That experiment no longer exists.');
-  const { idName: _old, ...rest } = rec;
-  const idName = rec.idName ?? rec.definition.name;
-  const next: StoredDefinitionRecord = {
+  const { displayName: _old, ...rest } = rec;
+  const next: DefinitionRecord = {
     ...rest,
-    definition: { ...rec.definition, name: check.name },
     updatedAt: now(),
-    ...(idName !== check.name ? { idName } : {}),
+    ...(check.name !== rec.definition.name ? { displayName: check.name } : {}),
   };
   await backend.tx(['definitions'], 'readwrite', (t) => t.put('definitions', next));
   return next;

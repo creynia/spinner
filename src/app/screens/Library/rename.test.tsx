@@ -37,7 +37,8 @@ describe('Library: rename a definition', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await waitFor(() => screen.getByRole('button', { name: 'Rename Calmer martingale' }));
     const rec = await repo.getDefinition(run.meta.definitionId);
-    expect(rec?.definition.name).toBe('Calmer martingale');
+    expect(rec?.displayName).toBe('Calmer martingale');
+    expect(rec?.definition.name).toBe(NAME);
     expect(rec?.runIds).toEqual([run.meta.runId]);
     expect((await repo.getRun(run.meta.runId))?.definitionId).toBe(run.meta.definitionId);
   });

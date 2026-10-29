@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { DefinitionRecord, StrategyRecord } from '@core/contracts/experiment';
 import type { RunMeta } from '@core/contracts/run';
 
-import { definitionId } from '@core';
+import { definitionId, experimentName } from '@core';
 import { Button, Card, Chip, EmptyState, Field, Sheet, Tabs, TextInput, showToast } from '@core/ui';
 import { STRATEGY_PRESETS } from '@game/roulette';
 import { href, navigate } from '../../router';
@@ -174,10 +174,10 @@ export function Library({ query }: ScreenProps) {
   );
   const shownDefs = (definitions ?? []).filter(
     (d) =>
-      matches(d.definition.name, d.id, ...(d.definition.tags ?? [])) &&
+      matches(experimentName(d), d.id, ...(d.definition.tags ?? [])) &&
       (tag === null || (d.definition.tags ?? []).includes(tag)),
   );
-  const defName = new Map((definitions ?? []).map((d) => [d.id, d.definition.name]));
+  const defName = new Map((definitions ?? []).map((d) => [d.id, experimentName(d)]));
   const shownRuns = (runs ?? []).filter((r) =>
     matches(defName.get(r.definitionId), r.runId, r.status),
   );
@@ -195,10 +195,11 @@ export function Library({ query }: ScreenProps) {
   const duplicateDefinition = async (d: DefinitionRecord) => {
     const taken = new Set((definitions ?? []).map((x) => x.id));
     let n = 1;
-    let copy = { ...d.definition, name: `Copy of ${d.definition.name}`.slice(0, 120) };
+    const shown = experimentName(d);
+    let copy = { ...d.definition, name: `Copy of ${shown}`.slice(0, 120) };
     while (taken.has(await definitionId(copy))) {
       n++;
-      copy = { ...d.definition, name: `Copy ${n} of ${d.definition.name}`.slice(0, 120) };
+      copy = { ...d.definition, name: `Copy ${n} of ${shown}`.slice(0, 120) };
     }
     await saveDefinition(copy, { derivedFrom: d.id });
     showToast(`Definition duplicated as ${copy.name}`);
@@ -342,7 +343,7 @@ export function Library({ query }: ScreenProps) {
                 {shownDefs.map((d) => (
                   <li key={d.id} class="lib-row">
                     <a class="row-link" href={href(`/define/${d.id}`)}>
-                      <span class="row-title">{d.definition.name}</span>
+                      <span class="row-title">{experimentName(d)}</span>
                       <span class="row-sub">
                         {d.definition.strategy.name} ·{' '}
                         {d.definition.run.sessions.toLocaleString('en-US')} sessions ·{' '}
@@ -352,22 +353,22 @@ export function Library({ query }: ScreenProps) {
                     </a>
                     <div class="lib-actions">
                       <Button
-                        onClick={() => setRenaming({ id: d.id, name: d.definition.name })}
-                        aria-label={`Rename ${d.definition.name}`}
+                        onClick={() => setRenaming({ id: d.id, name: experimentName(d) })}
+                        aria-label={`Rename ${experimentName(d)}`}
                       >
                         Rename
                       </Button>
                       <Button
                         onClick={() => void duplicateDefinition(d)}
-                        aria-label={`Duplicate ${d.definition.name}`}
+                        aria-label={`Duplicate ${experimentName(d)}`}
                       >
                         Duplicate
                       </Button>
                       <Button
                         variant="danger"
-                        aria-label={`Delete ${d.definition.name}`}
+                        aria-label={`Delete ${experimentName(d)}`}
                         onClick={() =>
-                          setPending({ kind: 'definition', id: d.id, name: d.definition.name })
+                          setPending({ kind: 'definition', id: d.id, name: experimentName(d) })
                         }
                       >
                         Delete

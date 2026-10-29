@@ -56,7 +56,6 @@ export {
   renameDefinitionRecord,
   validateDefinitionName,
   type NameCheck,
-  type StoredDefinitionRecord,
   type StoredRunData,
 } from './definitions';
 export { createRepo, type ImportResult, type Repo } from './repo';
