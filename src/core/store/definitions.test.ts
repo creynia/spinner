@@ -94,6 +94,9 @@ describe('renameDefinition', () => {
     expect(two.updatedAt >= (a?.updatedAt ?? '')).toBe(true);
     const back = await repo.renameDefinition(id, run.definition.name);
     expect('displayName' in back).toBe(false);
+    expect(back.displayNameAt).toBeTruthy();
+    expect(back.displayNameAt).toBe(back.updatedAt);
+    expect(two.displayNameAt).toBeTruthy();
     expect(experimentName(back)).toBe(run.definition.name);
   });
 });
@@ -132,22 +135,75 @@ describe('exports after a rename', () => {
     expect(await decodeRunBundle(early, 'roulette')).toHaveProperty('data');
   });
 
-  it('importing a run of a definition that exists locally keeps the local displayName', async () => {
-    const { repo, id, runId } = await seeded();
-    await repo.renameDefinition(id, 'Local');
+  async function bundleRenamedAt(name: string, at: string | null) {
     const other = createRepo(createMemoryBackend());
     await other.importRun(run);
-    await other.renameDefinition(id, 'Remote');
-    const dec = await decodeRunBundle(
-      await encodeRunBundle((await other.loadRun(runId))!, { gzip: false }),
-      'roulette',
-    );
+    const id = run.meta.definitionId;
+    if (name) {
+      await other.renameDefinition(id, name);
+      const rec = (await other.getDefinition(id))!;
+      await other.putDefinition(at ? { ...rec, displayNameAt: at } : rec);
+    }
+    const bytes = await encodeRunBundle((await other.loadRun(run.meta.runId))!, { gzip: false });
+    const dec = await decodeRunBundle(bytes, 'roulette');
     if ('error' in dec) throw new Error(dec.error);
-    await repo.importRun({
-      ...dec.data,
-      meta: { ...dec.data.meta, runId: `${id.slice(0, 16)}-zzzzzzzz` },
-    });
+    return { bytes, data: dec.data };
+  }
+  async function localRenamedAt(name: string, at: string) {
+    const { repo, id } = await seeded();
+    await repo.renameDefinition(id, name);
+    await repo.putDefinition({ ...(await repo.getDefinition(id))!, displayNameAt: at });
+    return { repo, id };
+  }
+  const fresh = (data: Awaited<ReturnType<typeof bundleRenamedAt>>['data']) => ({
+    ...data,
+    meta: { ...data.meta, runId: `${data.meta.definitionId.slice(0, 16)}-zzzzzzzz` },
+  });
+
+  it('import: a newer remote displayNameAt takes the remote name', async () => {
+    const { repo, id } = await localRenamedAt('Local', '2026-01-01T00:00:00.000Z');
+    const r = await bundleRenamedAt('Remote', '2026-02-01T00:00:00.000Z');
+    await repo.importRun(fresh(r.data));
+    const rec = await repo.getDefinition(id);
+    expect(rec?.displayName).toBe('Remote');
+    expect(rec?.displayNameAt).toBe('2026-02-01T00:00:00.000Z');
+    expect(rec?.definition).toEqual(run.definition);
+  });
+
+  it('import: an older remote displayNameAt keeps the local name', async () => {
+    const { repo, id } = await localRenamedAt('Local', '2026-03-01T00:00:00.000Z');
+    const r = await bundleRenamedAt('Remote', '2026-02-01T00:00:00.000Z');
+    await repo.importRun(fresh(r.data));
     expect((await repo.getDefinition(id))?.displayName).toBe('Local');
+  });
+
+  it('import: no times on either side keeps the local name; a timed remote beats an untimed local', async () => {
+    const { repo, id } = await seeded();
+    await repo.renameDefinition(id, 'Local');
+    const { displayNameAt: _a, ...untimed } = (await repo.getDefinition(id))!;
+    await repo.putDefinition(untimed);
+    const noTime = await bundleRenamedAt('Remote', null);
+    const { displayNameAt: _b, ...rest } = noTime.data as typeof noTime.data & {
+      displayNameAt?: string;
+    };
+    await repo.importRun(fresh(rest));
+    expect((await repo.getDefinition(id))?.displayName).toBe('Local');
+    const timed = await bundleRenamedAt('Remote', '2026-02-01T00:00:00.000Z');
+    await repo.importRun(fresh(timed.data));
+    expect((await repo.getDefinition(id))?.displayName).toBe('Remote');
+  });
+
+  it('import: a newer rename-back tombstone clears the local name, also for an existing run', async () => {
+    const { repo, id } = await localRenamedAt('Local', '2026-01-01T00:00:00.000Z');
+    const back = await bundleRenamedAt(run.definition.name, '2026-02-01T00:00:00.000Z');
+    expect(plain(back.bytes).displayName).toBeUndefined();
+    expect(plain(back.bytes).displayNameAt).toBe('2026-02-01T00:00:00.000Z');
+    // same runId and digest as a stored run: reported as existing, but the rename still merges
+    const same = await repo.importRun(back.data);
+    expect(same.status).toBe('exists');
+    const rec = await repo.getDefinition(id);
+    expect(rec?.displayName).toBeUndefined();
+    expect(rec?.displayNameAt).toBe('2026-02-01T00:00:00.000Z');
   });
 
   it('a damaged definition still fails the id check; a trimmed export imports', async () => {

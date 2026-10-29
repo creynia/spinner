@@ -488,11 +488,15 @@ optional `record.displayName` and `updatedAt` and never touches `record.definiti
 run ids do not change and the stored definition still hashes to its id. Renaming back to `definition.name` clears
 `displayName`. Names are trimmed, non-empty, at most 120 characters; duplicates are allowed.
 
+Every rename also sets `displayNameAt` (ISO time). Renaming back removes `displayName` but keeps `displayNameAt` as a
+tombstone ("reset at this time"), so merging copies of a record can tell a reset from "never renamed". Run files carry
+both fields; when the definition already exists locally, the newer `displayNameAt` wins on import (a timed side beats an
+untimed one; with no times, local wins), even when the run itself is already stored.
+
 Run meta stores no name. Every screen shows `experimentName(rec)` (`displayName ?? definition.name`), resolved live
 through the record (`loadRun` returns the record's `displayName` beside the definition), so there is no snapshot to
 update. Run files carry `displayName` as an optional field beside the unchanged `definition`; the importer hashes
-`definition` as before and keeps `displayName`. A file keeps the name it had when exported. Importing a run whose
-definition already exists locally keeps the local `displayName`. Definition files and share links carry the shown name
+`definition` as before and keeps `displayName`. A file keeps the name it had when exported.  Definition files and share links carry the shown name
 as `definition.name` (they are drafts: importing one makes a new definition). Define's "save as new" writes the typed
 name into `definition.name` with no `displayName`; renaming a saved record from Define sets `displayName` only.
 

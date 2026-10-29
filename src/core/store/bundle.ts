@@ -57,6 +57,8 @@ export interface RunBundleV1 {
   definition: NormalizedDefinition;
   /** Set when the experiment was renamed: shown instead of `definition.name`; not hashed. */
   displayName?: string;
+  /** ISO time of the last rename (a tombstone when `displayName` is absent). */
+  displayNameAt?: string;
   meta: {
     runId: string;
     createdAt: string;
@@ -230,7 +232,7 @@ export async function buildRunBundle(
   opts: { trimForGallery?: boolean } = {},
 ): Promise<RunBundleV1> {
   const { meta } = data;
-  const displayName = (data as StoredRunData).displayName;
+  const { displayName, displayNameAt } = data as StoredRunData;
   const digest = meta.resultsDigest ?? (await resultsDigest(data));
   let out = data;
   let trimmed = trimInfoOf(meta);
@@ -252,6 +254,7 @@ export async function buildRunBundle(
     definitionId: meta.definitionId,
     definition: out.definition,
     ...(displayName && displayName !== out.definition.name ? { displayName } : {}),
+    ...(displayNameAt ? { displayNameAt } : {}),
     meta: {
       runId: meta.runId,
       createdAt: meta.createdAt,
@@ -422,6 +425,7 @@ async function parseBundle(
     return fail(e instanceof DefinitionFormatError ? e.message : 'file damaged: definition');
   }
   if (b.displayName !== undefined && !isStr(b.displayName)) fail('file damaged: displayName');
+  if (b.displayNameAt !== undefined && !isStr(b.displayNameAt)) fail('file damaged: displayNameAt');
   if ((await hashDefinition(definition)) !== b.definitionId)
     fail('file damaged: definitionId does not match');
 
@@ -549,6 +553,7 @@ async function parseBundle(
     ...(b.displayName !== undefined && b.displayName !== definition.name
       ? { displayName: b.displayName }
       : {}),
+    ...(b.displayNameAt !== undefined ? { displayNameAt: b.displayNameAt } : {}),
     sessions,
     summary,
     checkpoints: { schedule: Int32Array.from(b.schedule), equity },

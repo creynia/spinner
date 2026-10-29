@@ -4,7 +4,8 @@
 // content-addressed and immutable: `id === sha256(definition)`, name included. A rename is
 // metadata: it sets `record.displayName` (and `updatedAt`) and never touches `record.definition`,
 // so `definitionId`, `runKey`, run ids and `simKey` stay put and the stored definition still
-// hashes to its id. Renaming back to `definition.name` clears `displayName`.
+// hashes to its id. Renaming back to `definition.name` clears `displayName` but keeps
+// `displayNameAt` (a tombstone), so merging two copies picks the newer rename.
 //
 // Names are not snapshotted into runs: `RunMeta` carries no name, and every screen resolves the
 // live name through the record (`experimentName`). `loadRun` hands back the record's
@@ -30,7 +31,29 @@ export function validateDefinitionName(input: string): NameCheck {
 }
 
 /** `RunData` as loaded from the store: carries the record's `displayName` for screens and exports. */
-export type StoredRunData = RunData & { displayName?: string };
+export type StoredRunData = RunData & { displayName?: string; displayNameAt?: string };
+
+/**
+ * Merges an incoming name (from a run file) into an existing record: the newer `displayNameAt`
+ * wins, a side with a time beats one without, and with no times local wins. Returns the record to
+ * store, or null when nothing changes.
+ */
+export function mergeDisplayName(
+  existing: DefinitionRecord,
+  incoming: { displayName?: string | undefined; displayNameAt?: string | undefined },
+): DefinitionRecord | null {
+  const at = incoming.displayNameAt;
+  if (at === undefined) return null;
+  if (existing.displayNameAt !== undefined && existing.displayNameAt >= at) return null;
+  const { displayName: _old, ...rest } = existing;
+  return {
+    ...rest,
+    displayNameAt: at,
+    ...(incoming.displayName !== undefined && incoming.displayName !== existing.definition.name
+      ? { displayName: incoming.displayName }
+      : {}),
+  };
+}
 
 export async function renameDefinitionRecord(
   backend: Backend,
@@ -43,9 +66,11 @@ export async function renameDefinitionRecord(
   const rec = await backend.get<DefinitionRecord>('definitions', id);
   if (!rec) throw new Error('That experiment no longer exists.');
   const { displayName: _old, ...rest } = rec;
+  const at = now();
   const next: DefinitionRecord = {
     ...rest,
-    updatedAt: now(),
+    updatedAt: at,
+    displayNameAt: at,
     ...(check.name !== rec.definition.name ? { displayName: check.name } : {}),
   };
   await backend.tx(['definitions'], 'readwrite', (t) => t.put('definitions', next));

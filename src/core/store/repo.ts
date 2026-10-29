@@ -4,7 +4,7 @@ import type { LayoutRecord } from '../contracts/layout';
 import type { RunData, RunMeta } from '../contracts/run';
 import { newRunId } from '../experiment';
 import type { Backend } from './backend';
-import { renameDefinitionRecord } from './definitions';
+import { mergeDisplayName, renameDefinitionRecord, type StoredRunData } from './definitions';
 import { loadRun, writeCompacted } from './sink';
 
 export interface ImportResult {
@@ -138,8 +138,13 @@ export function createRepo(backend: Backend): Repo {
       let meta = data.meta;
       const have = await backend.get<RunMeta>('runs', meta.runId);
       if (have) {
-        if (have.resultsDigest === meta.resultsDigest)
+        if (have.resultsDigest === meta.resultsDigest) {
+          // the run is already here, but the file may carry a newer rename
+          const rec = await backend.get<DefinitionRecord>('definitions', meta.definitionId);
+          const merged = rec ? mergeDisplayName(rec, data as StoredRunData) : null;
+          if (merged) await putOne('definitions', merged);
           return { status: 'exists', runId: meta.runId };
+        }
         let id = newRunId(meta.definitionId);
         while (await backend.get('runs', id)) id = newRunId(meta.definitionId);
         meta = { ...meta, runId: id };
