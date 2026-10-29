@@ -8,7 +8,9 @@ import {
   openStore,
   STORE_DEFS,
   STORE_NAMES,
+  SYNCED_STORES,
   V1_STORE_NAMES,
+  V2_STORE_NAMES,
 } from './index';
 import type { LayoutRecord } from '../contracts/layout';
 
@@ -31,23 +33,45 @@ function rec(id: string, updatedAt: string): LayoutRecord {
   };
 }
 
-describe('schema v2', () => {
-  it('has 10 frozen v1 stores and 11 in all', () => {
-    expect(DB_VERSION).toBe(2);
+describe('schema v3', () => {
+  it('has 10 frozen v1 stores, 11 at v2 and 14 in all', () => {
+    expect(DB_VERSION).toBe(3);
     expect(V1_STORE_NAMES).toHaveLength(10);
-    expect(STORE_NAMES).toHaveLength(11);
+    expect(V2_STORE_NAMES).toHaveLength(11);
+    expect(STORE_NAMES).toHaveLength(14);
     expect(STORE_NAMES.slice(0, 10)).toEqual([...V1_STORE_NAMES]);
+    expect(STORE_NAMES.slice(0, 11)).toEqual([...V2_STORE_NAMES]);
     expect(STORE_NAMES[10]).toBe('layouts');
+    expect(STORE_NAMES.slice(11)).toEqual(['syncIndex', 'syncDirty', 'syncMeta']);
     expect(STORE_DEFS.layouts).toEqual({ keyPath: 'id', indexes: { byUpdated: 'updatedAt' } });
+    expect(STORE_DEFS.syncIndex).toEqual({ keyPath: 'key', indexes: { byKind: 'kind' } });
+    expect(STORE_DEFS.syncDirty).toEqual({ keyPath: 'key', indexes: {} });
+    expect(STORE_DEFS.syncMeta).toEqual({ keyPath: 'k', indexes: {} });
   });
 
-  it('a FRESH database opens at v2 as idb with all 11 stores and indexes', async () => {
+  it('SYNCED_STORES maps the replicated stores to their kinds', () => {
+    expect(SYNCED_STORES).toEqual({
+      definitions: 'def',
+      strategies: 'strategy',
+      layouts: 'layout',
+      groups: 'group',
+      settings: 'setting',
+      runs: 'run',
+      runParts: 'run',
+      summaries: 'run',
+      checkpoints: 'run',
+      breakdowns: 'run',
+      samples: 'run',
+    });
+  });
+
+  it('a FRESH database opens at v3 as idb with all 14 stores and indexes', async () => {
     const r = await openStore('fresh', { factory: new IDBFactory() });
     expect(r.persistent).toBe(true);
     expect(r.backend.kind).toBe('idb');
     expect(r.reason).toBeUndefined();
     const db = r.db!;
-    expect(db.version).toBe(2);
+    expect(db.version).toBe(3);
     expect([...db.objectStoreNames].sort()).toEqual([...STORE_NAMES].sort());
     const tx = db.transaction([...STORE_NAMES], 'readonly');
     for (const name of STORE_NAMES) {
@@ -62,7 +86,7 @@ describe('schema v2', () => {
     db.close();
   });
 
-  it('a seeded v1 database upgrades to v2 with no data loss', async () => {
+  it('a seeded v1 database upgrades straight to v3 with no data loss', async () => {
     const factory = new IDBFactory();
     // build a v1 database exactly as the old build did
     const db1 = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -95,7 +119,7 @@ describe('schema v2', () => {
     const r = await openStore('legacy', { factory });
     expect(r.persistent).toBe(true);
     expect(r.backend.kind).toBe('idb');
-    expect(r.db?.version).toBe(2);
+    expect(r.db?.version).toBe(3);
     expect([...r.db!.objectStoreNames].sort()).toEqual([...STORE_NAMES].sort());
     expect(await r.backend.get('definitions', 'd1')).toEqual(seed.definitions);
     expect(await r.backend.get('strategies', 's1')).toEqual(seed.strategies);
@@ -104,10 +128,52 @@ describe('schema v2', () => {
     expect(await r.backend.get('settings', 'theme')).toEqual(seed.settings);
     expect(await r.backend.getAll('runs', 'byDefinition')).toHaveLength(1);
     expect(await r.backend.getAll('layouts')).toEqual([]);
+    for (const s of ['syncIndex', 'syncDirty', 'syncMeta'] as const) {
+      expect(await r.backend.getAll(s)).toEqual([]);
+    }
     r.db?.close();
   });
 
-  it('reopening an already-v2 database keeps its data and stays idb', async () => {
+  it('a seeded v2 database keeps all its data and gains the three sync stores', async () => {
+    const factory = new IDBFactory();
+    const db2 = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = factory.open('v2db', 2);
+      req.onupgradeneeded = () => {
+        for (const name of V2_STORE_NAMES) {
+          const def = STORE_DEFS[name];
+          const os = req.result.createObjectStore(name, { keyPath: def.keyPath });
+          for (const [ix, path] of Object.entries(def.indexes)) os.createIndex(ix, path);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error ?? new Error('open'));
+    });
+    await new Promise<void>((resolve, reject) => {
+      const t = db2.transaction(['layouts', 'settings', 'groups'], 'readwrite');
+      t.objectStore('layouts').put(rec('keep', '2026-02-02'));
+      t.objectStore('settings').put({ key: 'theme', value: 'dark' });
+      t.objectStore('groups').put({ id: 'g', updatedAt: 'x', runIds: ['a', 'b'] });
+      t.oncomplete = () => resolve();
+      t.onerror = () => reject(t.error ?? new Error('tx'));
+    });
+    db2.close();
+    const r = await openStore('v2db', { factory });
+    expect(r.persistent).toBe(true);
+    expect(r.db?.version).toBe(3);
+    expect([...r.db!.objectStoreNames].sort()).toEqual([...STORE_NAMES].sort());
+    expect((await r.backend.get<LayoutRecord>('layouts', 'keep'))?.id).toBe('keep');
+    expect(await r.backend.get('settings', 'theme')).toEqual({ key: 'theme', value: 'dark' });
+    expect(await r.backend.get('groups', 'g')).toEqual({
+      id: 'g',
+      updatedAt: 'x',
+      runIds: ['a', 'b'],
+    });
+    const tx = r.db!.transaction('syncIndex', 'readonly');
+    expect([...tx.objectStore('syncIndex').indexNames]).toEqual(['byKind']);
+    r.db?.close();
+  });
+
+  it('reopening an already-v3 database keeps its data and stays idb', async () => {
     const factory = new IDBFactory();
     const a = await openStore('again', { factory });
     await a.backend.tx(['layouts'], 'readwrite', (t) => t.put('layouts', rec('k', '2026-01-01')));
@@ -115,12 +181,12 @@ describe('schema v2', () => {
     const b = await openStore('again', { factory });
     expect(b.persistent).toBe(true);
     expect(b.backend.kind).toBe('idb');
-    expect(b.db?.version).toBe(2);
+    expect(b.db?.version).toBe(3);
     expect((await b.backend.get<LayoutRecord>('layouts', 'k'))?.id).toBe('k');
     b.db?.close();
   });
 
-  it('the memory backend has all 11 stores', async () => {
+  it('the memory backend has all 14 stores', async () => {
     const b = createMemoryBackend();
     for (const s of STORE_NAMES) expect(await b.getAll(s)).toEqual([]);
   });

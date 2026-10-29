@@ -1,5 +1,6 @@
 // Storage backends: IndexedDB, or Maps with structuredClone as the memory fallback
 // (harness-data-analysis.md §9.2-§9.3). Nothing here throws out of `openStore`.
+import type { SyncKind } from '../contracts/sync';
 
 /** The ten stores of schema v1. FROZEN: upgrade 1 creates exactly these (layouts.md §8). */
 export const V1_STORE_NAMES = [
@@ -15,11 +16,14 @@ export const V1_STORE_NAMES = [
   'settings',
 ] as const;
 
-/** Every store of the current schema: v1 plus `layouts` (v2). */
-export const STORE_NAMES = [...V1_STORE_NAMES, 'layouts'] as const;
+/** The eleven stores of schema v2: v1 plus `layouts`. FROZEN: upgrades 1 and 2 create these. */
+export const V2_STORE_NAMES = [...V1_STORE_NAMES, 'layouts'] as const;
+
+/** Every store of the current schema: v2 plus the three sync side stores (v3, sync.md §4.2). */
+export const STORE_NAMES = [...V2_STORE_NAMES, 'syncIndex', 'syncDirty', 'syncMeta'] as const;
 export type StoreName = (typeof STORE_NAMES)[number];
 
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 interface StoreDef {
   keyPath: string | string[];
@@ -42,6 +46,24 @@ export const STORE_DEFS: Record<StoreName, StoreDef> = {
   groups: { keyPath: 'id', indexes: { byUpdated: 'updatedAt' } },
   settings: { keyPath: 'key', indexes: {} },
   layouts: { keyPath: 'id', indexes: { byUpdated: 'updatedAt' } },
+  syncIndex: { keyPath: 'key', indexes: { byKind: 'kind' } },
+  syncDirty: { keyPath: 'key', indexes: {} },
+  syncMeta: { keyPath: 'k', indexes: {} },
+};
+
+/** Which sync kind each store's records belong to; stores not listed are never replicated. */
+export const SYNCED_STORES: Partial<Record<StoreName, SyncKind>> = {
+  definitions: 'def',
+  strategies: 'strategy',
+  layouts: 'layout',
+  groups: 'group',
+  settings: 'setting',
+  runs: 'run',
+  runParts: 'run',
+  summaries: 'run',
+  checkpoints: 'run',
+  breakdowns: 'run',
+  samples: 'run',
 };
 
 function createStores(db: IDBDatabase, names: readonly StoreName[]): void {
@@ -56,9 +78,10 @@ function createStores(db: IDBDatabase, names: readonly StoreName[]): void {
 /** Structural upgrades only, by target version (§9.1); record contents migrate lazily via `v`. */
 export const DB_UPGRADES: Record<number, (db: IDBDatabase) => void> = {
   // Each upgrade creates only its own stores, each guarded by `contains`, so a fresh install
-  // (oldVersion 0 runs 1 then 2) never creates a store twice.
+  // (oldVersion 0 runs 1, 2, then 3) never creates a store twice.
   1: (db) => createStores(db, V1_STORE_NAMES),
   2: (db) => createStores(db, ['layouts']),
+  3: (db) => createStores(db, ['syncIndex', 'syncDirty', 'syncMeta']),
 };
 
 /** Reads inside `Backend.update`, on the same transaction as the writes. */
