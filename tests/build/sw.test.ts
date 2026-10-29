@@ -90,6 +90,17 @@ describe('gallery fetch handling (sw.ts run against fakes)', () => {
     sw.failPut();
     expect((await sw.fetch('http://x/spinner/gallery/c-3.spinner.json'))?.status).toBe(200);
   });
+  it('does not intercept cross-origin requests (Drive, Google sign-in)', async () => {
+    const sw = await load();
+    for (const url of [
+      'https://www.googleapis.com/drive/v3/files',
+      'https://accounts.google.com/gsi/client',
+      'https://oauth2.googleapis.com/revoke',
+    ]) {
+      expect(await sw.fetch(url)).toBeUndefined();
+    }
+    expect(sw.stored).toEqual([]);
+  });
   it('treats gallery/index.json?x as the index, not a bundle', async () => {
     const sw = await load();
     await sw.fetch('http://x/spinner/gallery/index.json?x=1');

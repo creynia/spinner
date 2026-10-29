@@ -1,4 +1,8 @@
 /// <reference types="vite/client" />
+interface ImportMetaEnv {
+  /** Google OAuth client id (public by design); overrides the committed default (sync.md §12). */
+  readonly VITE_GOOGLE_CLIENT_ID?: string;
+}
 declare const __APP_VERSION__: string;
 declare const __BUILD_SHA__: string;
 

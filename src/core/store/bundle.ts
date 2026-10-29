@@ -294,10 +294,21 @@ export async function encodeRunBundle(
   data: RunData,
   opts: { gzip?: boolean; trimForGallery?: boolean } = {},
 ): Promise<Uint8Array> {
+  return (await encodeRunBundleWithDigest(data, opts)).bytes;
+}
+
+/** `encodeRunBundle` plus the `resultsDigest` it wrote into the bundle (sync.md §4.1). */
+export async function encodeRunBundleWithDigest(
+  data: RunData,
+  opts: { gzip?: boolean; trimForGallery?: boolean } = {},
+): Promise<{ bytes: Uint8Array; resultsDigest: string }> {
   const bundle = await buildRunBundle(data, opts.trimForGallery ? { trimForGallery: true } : {});
   const bytes = new TextEncoder().encode(canonicalJson(bundle as unknown as Json));
   const gz = opts.gzip ?? hasCompression();
-  return gz ? compressBytes(bytes, 'gzip') : bytes;
+  return {
+    bytes: gz ? await compressBytes(bytes, 'gzip') : bytes,
+    resultsDigest: bundle.meta.resultsDigest,
+  };
 }
 
 // ---------------------------------------------------------------- decode and validate

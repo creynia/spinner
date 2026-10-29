@@ -25,6 +25,15 @@ export const test = base.extend<GuardFixtures>({
   guard: [
     async ({ page, guardIgnore }, use) => {
       const errors: string[] = [];
+      // The production build carries a CSP meta tag (sync.md §5.5): any violation fails the test.
+      // A listener in the page logs it as a console error before anything else runs.
+      await page.addInitScript(() => {
+        document.addEventListener('securitypolicyviolation', (e) => {
+          console.error(
+            `CSP violation: ${e.violatedDirective} blocked ${e.blockedURI || 'inline'} (${e.sourceFile}:${e.lineNumber})`,
+          );
+        });
+      });
       const unignored = () => errors.filter((e) => !guardIgnore.some((re) => re.test(e)));
       page.on('console', (msg) => {
         if (msg.type() === 'error') errors.push(`console: ${msg.text()}`);

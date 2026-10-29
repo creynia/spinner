@@ -4,6 +4,7 @@ import preact from '@preact/preset-vite';
 import { aliases } from './build/aliases.ts';
 import { swPlugin } from './build/vite-plugin-sw.ts';
 import { galleryPlugin } from './build/vite-plugin-gallery.ts';
+import { cspPlugin } from './build/vite-plugin-csp.ts';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   version: string;
@@ -19,7 +20,7 @@ export default defineConfig({
   },
   resolve: { alias: aliases },
   worker: { format: 'es' },
-  plugins: [preact(), galleryPlugin(), swPlugin()],
+  plugins: [preact(), galleryPlugin(), swPlugin(), cspPlugin()],
   build: { target: 'es2022', outDir: 'dist' },
   preview: { port: Number(process.env.PORT ?? 4173), strictPort: true },
 });

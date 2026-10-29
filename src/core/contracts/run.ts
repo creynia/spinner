@@ -215,6 +215,8 @@ export interface RunMeta {
     trimmed: boolean;
     partial: boolean;
   };
+  /** Set on a run downloaded from the sync remote (sync.md §4.1); additive. */
+  synced?: { from: string; fromName: string; at: string };
 }
 
 /** One batch's worth of results as committed by the sink. */
