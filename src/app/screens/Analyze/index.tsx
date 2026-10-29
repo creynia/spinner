@@ -3,6 +3,7 @@
 import { experimentName } from '@core';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { AnalysisView, Button, isAnalyzeTab, type AnalyzeTab } from '@core/ui';
+import { RemoteRunCard } from '../../components/RemoteRunCard';
 import { RenameExperiment } from '../RenameExperiment';
 import { navigate } from '../../router';
 import { settingsStore } from '../../services/settings';
@@ -47,6 +48,14 @@ export function Analyze({ params, query }: ScreenProps) {
             Loading the run...
           </p>
         </section>
+      </>
+    );
+  }
+  if (run.state === 'remote') {
+    return (
+      <>
+        <h1>Analyze</h1>
+        <RemoteRunCard runId={runId ?? ''} name={run.name} onDownloaded={run.reload} />
       </>
     );
   }

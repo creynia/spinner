@@ -169,6 +169,38 @@ export async function uploadPendingRuns(ctx: SyncCtx, deadline: number): Promise
   }
 }
 
+/**
+ * Library → Runs "Re-upload" (§7.9 step 5, corrupt files): writes this device's copy of a done run
+ * over the bundle in Drive (same name), takes its sha256 and marks the stub for the next push.
+ */
+export async function reuploadRun(ctx: SyncCtx, runId: string): Promise<void> {
+  const raw = internalOf(ctx).raw;
+  const { deps, remote } = ctx;
+  const meta = await raw.get<RunMeta>('runs', runId);
+  if (!meta || meta.status !== 'done' || !meta.resultsDigest)
+    throw new Error('This run is not on this device, so it cannot be uploaded from here.');
+  if (deps.isRunActive(runId)) throw new Error('The run is still going.');
+  const data = await loadRun(raw, runId);
+  if (!data) throw new Error('This run is not on this device, so it cannot be uploaded from here.');
+  const enc = await encodeRunBundleWithDigest(data, { gzip: true });
+  if (enc.resultsDigest !== meta.resultsDigest)
+    throw new Error("This run's results do not match its digest, so they were not uploaded.");
+  const name = runBundleName(runId, enc.resultsDigest);
+  const files = await remote.list(sigOf(ctx));
+  const existing = files.find((f) => f.name === name);
+  const bytes = existing
+    ? (await remote.update(existing.id, enc.bytes, sigOf(ctx))).bytes
+    : (
+        await remote.create(name, enc.bytes, {
+          appProperties: { kind: 'run', runId, digest16: digest16(enc.resultsDigest) },
+          contentType: 'application/gzip',
+          resumeKey: `run:${runId}`,
+          ...(deps.signal ? { signal: deps.signal } : {}),
+        })
+      ).bytes;
+  await recordBundle(ctx, runId, { name, bytes, sha256: await sha256Hex(enc.bytes) });
+}
+
 // ------------------------------------------------------------------ download
 
 function quotaError(): Error {

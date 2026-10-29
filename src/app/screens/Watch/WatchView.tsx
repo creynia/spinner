@@ -3,6 +3,7 @@ import type { RunData, SummaryRow } from '@core/contracts/run';
 import type { SessionTrace } from '@core/contracts/strategy-trace';
 import { formatMoney, representativeSessions, summaryRow, experimentName } from '@core';
 import { Button, Card, EmptyState, TraceReplay, isSpeedId } from '@core/ui';
+import { RemoteRunCard } from '../../components/RemoteRunCard';
 import { href } from '../../router';
 import type { ScreenProps } from '../types';
 import { defaultDeps, type WatchDeps } from './deps';
@@ -11,6 +12,7 @@ type Source = 'sample' | 'resim' | 'truncated';
 type State =
   | { s: 'loading' }
   | { s: 'norun' }
+  | { s: 'remote'; name: string }
   | { s: 'badindex'; sessions: number }
   | { s: 'error'; message: string }
   | { s: 'nosim'; reason: string }
@@ -53,6 +55,7 @@ export function WatchView(props: ScreenProps & { deps?: WatchDeps }) {
   const [data, setData] = useState<RunData | null | undefined>(undefined);
   const [state, setState] = useState<State>({ s: 'loading' });
   const [goto, setGoto] = useState('');
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -60,7 +63,19 @@ export function WatchView(props: ScreenProps & { deps?: WatchDeps }) {
     setState({ s: 'loading' });
     deps
       .loadRun(runId)
-      .then((d) => live && setData(d))
+      .then(async (d) => {
+        if (!live) return;
+        if (d === null) {
+          // a done run that only lives in Drive shows the RemoteRunCard (sync.md §8.4)
+          const name = (await deps.remoteName?.(runId)) ?? null;
+          if (!live) return;
+          if (name !== null) {
+            setData(undefined);
+            return setState({ s: 'remote', name });
+          }
+        }
+        setData(d);
+      })
       .catch(
         (e: unknown) =>
           live && setState({ s: 'error', message: String(e instanceof Error ? e.message : e) }),
@@ -68,7 +83,7 @@ export function WatchView(props: ScreenProps & { deps?: WatchDeps }) {
     return () => {
       live = false;
     };
-  }, [runId]);
+  }, [runId, nonce]);
 
   useEffect(() => {
     if (data === undefined) return;
@@ -151,6 +166,17 @@ export function WatchView(props: ScreenProps & { deps?: WatchDeps }) {
             Loading run
           </p>
         </Card>
+      </>
+    );
+  if (state.s === 'remote')
+    return (
+      <>
+        {header}
+        <RemoteRunCard
+          runId={runId}
+          name={state.name}
+          onDownloaded={() => setNonce((n) => n + 1)}
+        />
       </>
     );
   if (state.s === 'norun')

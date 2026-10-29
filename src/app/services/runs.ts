@@ -3,6 +3,7 @@
 // the harness controller; progress is published to `activeRun`.
 import type { DefinitionRecord, NormalizedDefinition } from '@core/contracts/experiment';
 import type { RunMeta, RunProgress, RunSink } from '@core/contracts/run';
+import type { DeviceId, RunStub } from '@core';
 import {
   CORE_VERSION,
   createMemoryBackend,
@@ -28,6 +29,12 @@ import { game } from './game';
 import { getPool } from './pool';
 import { verdictFromMetrics, type VerdictInput } from './verdict';
 
+/**
+ * The sync service, loaded on first use: it imports the screens' data modules, which import this
+ * one, so a static import would be a cycle.
+ */
+const syncApi = (): Promise<typeof import('./sync')> => import('./sync');
+
 export type RunVerdict = VerdictInput & { roundsPerSession: number; roundsPerHour: number };
 
 export interface RunListItem {
@@ -40,6 +47,80 @@ export interface RunListItem {
   completedSessions: number;
   /** Verdict numbers, or null until the run is done (or its results cannot be read). */
   verdict: RunVerdict | null;
+  /** Set for a run that is in Drive and not on this device (sync.md §8.4). */
+  remote?: RunRow['remote'];
+}
+
+/** One run in a list or picker: a local run, or a stub of a run that is only in Drive (B4). */
+export type RunRow = Pick<
+  RunMeta,
+  | 'runId'
+  | 'definitionId'
+  | 'simKey'
+  | 'runKey'
+  | 'status'
+  | 'createdAt'
+  | 'sessions'
+  | 'completedSessions'
+  | 'prefixSessions'
+  | 'gameVersion'
+  | 'coreVersion'
+  | 'resultsDigest'
+> & { remote?: { bytes: number; owner?: DeviceId; ownerName?: string } };
+
+/** A remote row that can be downloaded (a done run with a bundle); the rest are greyed stubs. */
+export const isDownloadable = (r: Pick<RunRow, 'status' | 'remote'>): boolean =>
+  r.remote !== undefined && r.status === 'done' && r.remote.bytes > 0;
+
+function stubRow(s: RunStub, names: ReadonlyMap<string, string>): RunRow {
+  const owner = s.owner;
+  const ownerName = owner ? names.get(owner) : undefined;
+  return {
+    runId: s.runId,
+    definitionId: s.definitionId,
+    simKey: s.simKey,
+    runKey: s.runKey,
+    status: s.status,
+    createdAt: s.createdAt,
+    sessions: s.sessions,
+    completedSessions: s.completedSessions,
+    prefixSessions: s.prefixSessions,
+    gameVersion: s.gameVersion,
+    coreVersion: s.coreVersion,
+    ...(s.resultsDigest ? { resultsDigest: s.resultsDigest } : {}),
+    remote: {
+      bytes: s.bundle?.bytes ?? 0,
+      ...(owner ? { owner } : {}),
+      ...(ownerName ? { ownerName } : {}),
+    },
+  } as RunRow;
+}
+
+/**
+ * Every run a list or picker shows: local runs, then stubs of runs that are only in Drive (done,
+ * or paused, errored and cancelled on another device), newest first, dry runs excluded. Never
+ * throws: without sync it is the local runs.
+ */
+export async function listRunRows(): Promise<RunRow[]> {
+  const repo = await getRepo();
+  const [all, defs] = await Promise.all([repo.listRuns(), repo.listDefinitions()]);
+  const dry = new Set(defs.filter(isDryRunDefinition).map((d) => d.id));
+  const rows: RunRow[] = all.filter((m) => !dry.has(m.definitionId));
+  try {
+    const sync = await syncApi();
+    const stubs = await sync.listRemoteRuns();
+    if (stubs.length > 0) {
+      const have = new Set(all.map((m) => m.runId));
+      const names = new Map(sync.syncDevices.get().map((d) => [d.id, d.name]));
+      for (const s of stubs) {
+        if (have.has(s.runId) || dry.has(s.definitionId)) continue;
+        rows.push(stubRow(s, names));
+      }
+    }
+  } catch {
+    // remote stubs are an extra; the local list stands
+  }
+  return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export const activeRun = createStore<RunProgress | null>(null);
@@ -106,37 +187,64 @@ export async function dryRunDefinitionIds(): Promise<Set<string>> {
 /** Most recent first, dry runs excluded. */
 export async function listRecentRuns(limit = 5): Promise<RunListItem[]> {
   const repo = await getRepo();
-  const [all, defs] = await Promise.all([repo.listRuns(), repo.listDefinitions()]);
-  const dry = new Set(
-    defs.filter((d) => d.definition.tags?.includes(DRY_RUN_TAG)).map((d) => d.id),
-  );
-  const runs = all
-    .filter((m) => !dry.has(m.definitionId))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const [rows, defs] = await Promise.all([listRunRows(), repo.listDefinitions()]);
   const names = new Map(defs.map((d) => [d.id, experimentName(d)]));
   // Only the newest `limit` runs are touched; their verdicts are cached per run id.
-  const top = runs.slice(0, limit);
+  const top = rows.slice(0, limit);
+  const local = top.filter((m) => !m.remote);
   let sink: RunSink | null = null;
-  if (top.some((m) => m.status === 'done' && !verdictCache.has(m.runId))) {
+  if (local.some((m) => m.status === 'done' && !verdictCache.has(m.runId))) {
     try {
       sink = await getSink();
     } catch {
       sink = null;
     }
   }
-  const items = await Promise.all(
-    top.map(async (m): Promise<RunListItem> => ({
-      runId: m.runId,
-      name: names.get(m.definitionId) ?? 'Untitled experiment',
-      status: m.status,
-      interrupted: m.interrupted === true || (await looksInterrupted(m)),
-      createdAt: m.createdAt,
-      sessions: m.sessions,
-      completedSessions: m.completedSessions,
-      verdict: await loadVerdict(m, sink),
-    })),
+  const stubs = new Map(
+    (await (await syncApi()).listRemoteRuns().catch(() => [] as RunStub[])).map((s) => [s.runId, s]),
   );
-  return items;
+  return Promise.all(
+    top.map(async (m): Promise<RunListItem> => {
+      const base = {
+        runId: m.runId,
+        name: names.get(m.definitionId) ?? 'Untitled experiment',
+        status: m.status,
+        createdAt: m.createdAt,
+        sessions: m.sessions,
+        completedSessions: m.completedSessions,
+      };
+      if (m.remote) {
+        const v = stubs.get(m.runId)?.verdict;
+        return {
+          ...base,
+          interrupted: false,
+          verdict: m.status === 'done' && v ? { ...v } : null,
+          remote: m.remote,
+        };
+      }
+      const meta = m as RunMeta;
+      return {
+        ...base,
+        interrupted: meta.interrupted === true || (await looksInterrupted(meta)),
+        verdict: await loadVerdict(meta, sink),
+      };
+    }),
+  );
+}
+
+/**
+ * For a run id that is not on this device: the experiment's name when the run is a done run that
+ * only lives in Drive (Analyze and Watch then show the `RemoteRunCard`), else null.
+ */
+export async function remoteRunName(runId: string): Promise<string | null> {
+  try {
+    const stub = await (await syncApi()).remoteRun(runId);
+    if (!stub || stub.status !== 'done' || !stub.bundle) return null;
+    const def = await (await getCoreRepo()).getDefinition(stub.definitionId);
+    return def ? experimentName(def) : 'Untitled experiment';
+  } catch {
+    return null;
+  }
 }
 
 export async function refreshRuns(): Promise<void> {

@@ -129,3 +129,30 @@
 .remote-run-card {
   max-width: 100%;
 }
+
+/* Runs that are not on this device (sync.md §8.4). Greyed with the muted token, never opacity,
+   so the text keeps its contrast. */
+.run-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.row-stub .row-title {
+  color: var(--muted);
+  font-weight: 400;
+}
+button.row-stub {
+  background: none;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  text-align: left;
+  font: inherit;
+  cursor: default;
+}

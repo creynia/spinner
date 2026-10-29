@@ -4,6 +4,7 @@ import { experimentName } from '@core';
 import { useEffect } from 'preact/hooks';
 import { Button, Card, Chip, EmptyState } from '@core/ui';
 import { STRATEGY_PRESETS } from '@game/roulette';
+import { RunBadge, stubLine } from '../../components/RunBadge';
 import { href } from '../../router';
 import { isResumable, recentRuns, type RunListItem } from '../../services/runs';
 import { settingsStore } from '../../services/settings';
@@ -24,11 +25,25 @@ function runLine(r: RunListItem, framing: 'session' | 'hour' | 'per100'): string
 }
 
 function RunItem({ r, framing }: { r: RunListItem; framing: 'session' | 'hour' | 'per100' }) {
+  // a stub of a run that is not done never opens: its results are not in Drive (Q20)
+  if (r.remote && r.status !== 'done') {
+    return (
+      <li>
+        <span class="row-link row-stub">
+          <span class="row-title">{r.name}</span>
+          <span class="row-sub">{stubLine(r)}</span>
+        </span>
+      </li>
+    );
+  }
   const target = r.status === 'done' ? `/analyze/${r.runId}` : `/run/${r.runId}`;
   return (
     <li>
       <a class="row-link" href={href(target)}>
-        <span class="row-title">{r.name}</span>
+        <span class="row-title">
+          {r.name}
+          {r.remote ? <RunBadge /> : null}
+        </span>
         <span class="row-sub">{runLine(r, framing)}</span>
       </a>
     </li>
@@ -43,7 +58,7 @@ export function Home() {
   useEffect(() => {
     void refreshLibrary();
   }, []);
-  const resumable = runs.filter(isResumable);
+  const resumable = runs.filter((r) => isResumable(r) && !r.remote);
 
   return (
     <>

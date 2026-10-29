@@ -44,7 +44,7 @@ import { createClock } from './hlc';
 import { decodeLib, LIB_NAME, ROOT_NAME } from './libfile';
 import { foldEntries } from './merge';
 import { buildLib, changedLibs, commit, reserve, snapshotAll, uploadLib } from './push';
-import { downloadRun, evictRun, uploadPendingRuns } from './runs';
+import { downloadRun, evictRun, reuploadRun, uploadPendingRuns } from './runs';
 
 /**
  * A backend with change tracking: `createTrackedBackend()` from WP-S1's `core/store/tracking.ts`
@@ -90,6 +90,8 @@ export interface SyncEngine {
   /** Download every remote-only run (the "Download all" button); `skipped` = already local. */
   downloadAllRemote(o?: DownloadRunOptions): Promise<{ done: number; skipped: number }>;
   evict(runId: string): Promise<void>;
+  /** Uploads this device's copy of a done run over its bundle in Drive (Library → Re-upload). */
+  reupload(runId: string): Promise<void>;
   eraseRemote(): Promise<void>;
   resetLocalSyncState(): Promise<void>;
 }
@@ -624,6 +626,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       return { done, skipped };
     },
     evict: async (runId) => evictRun(await ctx(), runId),
+    reupload: (runId) => serial(async () => reuploadRun(await ctx(), runId)),
     eraseRemote: () => serial(async () => eraseRemote(await ctx())),
     resetLocalSyncState: () => serial(async () => resetLocalSyncState(await ctx())),
   };

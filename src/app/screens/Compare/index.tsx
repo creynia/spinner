@@ -2,7 +2,7 @@
 import { experimentName } from '@core';
 import { useEffect, useState } from 'preact/hooks';
 import type { DefinitionRecord } from '@core/contracts/experiment';
-import type { RunData, RunMeta } from '@core/contracts/run';
+import type { RunData } from '@core/contracts/run';
 import {
   Button,
   Card,
@@ -15,7 +15,8 @@ import {
   type CompareRun,
 } from '@core/ui';
 import { navigate } from '../../router';
-import { dryRunDefinitionIds, getCoreRepo } from '../../services/runs';
+import { getCoreRepo, listRunRows, type RunRow } from '../../services/runs';
+import * as sync from '../../services/sync';
 import { settingsStore } from '../../services/settings';
 import { useStore } from '../../state/store';
 import { pickerLabels } from '../pickerLabels';
@@ -41,7 +42,8 @@ export function Compare({ query }: ScreenProps) {
   const key = ids.join(',');
   const framing = useStore(settingsStore, (s) => s.framing);
   const [datas, setDatas] = useState<(RunData | null)[] | null>(null);
-  const [library, setLibrary] = useState<RunMeta[]>([]);
+  const [library, setLibrary] = useState<RunRow[]>([]);
+  const [downloading, setDownloading] = useState(0);
   const [defs, setDefs] = useState<Map<string, DefinitionRecord>>(new Map());
   const now = useNow();
   const [add, setAdd] = useState('');
@@ -49,21 +51,42 @@ export function Compare({ query }: ScreenProps) {
   useEffect(() => {
     let on = true;
     setDatas(null);
-    void Promise.all(ids.map((id) => loadRunData(id).catch(() => null))).then(
-      (d) => on && setDatas(d),
-    );
+    // A run that is only in Drive downloads first, inline; then the runs compare (sync.md §8.4).
+    void (async () => {
+      const first = await Promise.all(ids.map((id) => loadRunData(id).catch(() => null)));
+      const need: number[] = [];
+      for (let i = 0; i < ids.length; i++) {
+        if (first[i] !== null) continue;
+        const stub = await sync.remoteRun(ids[i]!).catch(() => null);
+        if (stub?.status === 'done' && stub.bundle) need.push(i);
+      }
+      if (need.length > 0) {
+        if (on) setDownloading(need.length);
+        const got = await Promise.all(
+          need.map((i) => sync.downloadRun(ids[i]!).catch(() => 'missing' as const)),
+        );
+        need.forEach((i, k) => {
+          if (got[k] !== 'ok') first[i] = null;
+        });
+        const again = await Promise.all(
+          need.map((i, k) => (got[k] === 'ok' ? loadRunData(ids[i]!).catch(() => null) : null)),
+        );
+        need.forEach((i, k) => (first[i] = again[k] ?? null));
+      }
+      if (on) {
+        setDownloading(0);
+        setDatas(first);
+      }
+    })();
     return () => {
       on = false;
     };
   }, [key]);
   useEffect(() => {
-    void Promise.all([
-      getCoreRepo().then((r) => Promise.all([r.listRuns(), r.listDefinitions()])),
-      dryRunDefinitionIds(),
-    ])
-      .then(([[l, d], dry]) => {
+    void Promise.all([listRunRows(), getCoreRepo().then((r) => r.listDefinitions())])
+      .then(([l, d]) => {
         setDefs(new Map(d.map((x) => [x.id, x])));
-        setLibrary(l.filter((m) => m.status === 'done' && !dry.has(m.definitionId)));
+        setLibrary(l.filter((m) => m.status === 'done'));
       })
       .catch(() => undefined);
   }, []);
@@ -90,7 +113,7 @@ export function Compare({ query }: ScreenProps) {
     candidates.map((m) => {
       const rec = defs.get(m.definitionId);
       return {
-        name: rec ? experimentName(rec) : 'Untitled experiment',
+        name: `${rec ? experimentName(rec) : 'Untitled experiment'}${m.remote ? ' ☁' : ''}`,
         when: relativeTime(runTimestamp(m), now),
         sessions: m.sessions,
         seed: rec?.definition.run.seed,
@@ -152,7 +175,9 @@ export function Compare({ query }: ScreenProps) {
         </p>
       ) : datas === null ? (
         <p class="muted" role="status">
-          Loading the runs...
+          {downloading > 0
+            ? `Downloading ${downloading} ${downloading === 1 ? 'run' : 'runs'}…`
+            : 'Loading the runs...'}
         </p>
       ) : runs.length >= MIN_RUNS && sameGame ? (
         <CompareView

@@ -1,7 +1,7 @@
 // Loading a stored run for the results screens: one cache, the table maximum, run names.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { RunData } from '@core/contracts/run';
-import { getCoreRepo, tableMaxFor } from '../../services/runs';
+import { getCoreRepo, remoteRunName, tableMaxFor } from '../../services/runs';
 import { useStore } from '../../state/store';
 import { libraryVersion } from '../Define/data';
 
@@ -33,6 +33,8 @@ export async function loadRunData(runId: string): Promise<RunData | null> {
 export type RunDataState =
   | { state: 'loading' }
   | { state: 'missing' }
+  /** A done run that only lives in Drive: the screen shows the `RemoteRunCard`, which downloads it. */
+  | { state: 'remote'; name: string; reload: () => void }
   | { state: 'error'; message: string }
   | { state: 'ready'; data: RunData };
 
@@ -41,6 +43,7 @@ export function useRunData(runId: string | undefined): RunDataState {
   // A library write (a rename) reloads in place: no loading flash, so the open tab survives.
   const version = useStore(libraryVersion, (v) => v);
   const shown = useRef<string | undefined>(undefined);
+  const [nonce, setNonce] = useState(0);
   useEffect(() => {
     let live = true;
     if (shown.current !== runId) setS({ state: 'loading' });
@@ -50,14 +53,23 @@ export function useRunData(runId: string | undefined): RunDataState {
       return;
     }
     loadRunData(runId).then(
-      (data) => live && setS(data ? { state: 'ready', data } : { state: 'missing' }),
+      async (data) => {
+        if (data) return live && setS({ state: 'ready', data });
+        const name = await remoteRunName(runId);
+        if (!live) return;
+        setS(
+          name === null
+            ? { state: 'missing' }
+            : { state: 'remote', name, reload: () => setNonce((n) => n + 1) },
+        );
+      },
       (e: unknown) =>
         live && setS({ state: 'error', message: e instanceof Error ? e.message : String(e) }),
     );
     return () => {
       live = false;
     };
-  }, [runId, version]);
+  }, [runId, version, nonce]);
   return s;
 }
 

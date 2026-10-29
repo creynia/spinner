@@ -2,12 +2,14 @@
 // open, duplicate and delete (with confirm). Built-in presets are listed with the strategies.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { DefinitionRecord, StrategyRecord } from '@core/contracts/experiment';
-import type { RunMeta } from '@core/contracts/run';
 
 import { definitionId, experimentName } from '@core';
 import { Button, Card, Chip, EmptyState, Field, Sheet, Tabs, TextInput, showToast } from '@core/ui';
 import { STRATEGY_PRESETS } from '@game/roulette';
+import { RunBadge, stubLine } from '../../components/RunBadge';
 import { href, navigate } from '../../router';
+import { isDownloadable, listRunRows, type RunRow } from '../../services/runs';
+import * as sync from '../../services/sync';
 import { useStore } from '../../state/store';
 import type { ScreenProps } from '../types';
 import {
@@ -117,7 +119,10 @@ export function Library({ query }: ScreenProps) {
   const [tag, setTag] = useState<string | null>(null);
   const [strategies, setStrategies] = useState<StrategyRecord[] | null>(null);
   const [definitions, setDefinitions] = useState<DefinitionRecord[] | null>(null);
-  const [runs, setRuns] = useState<RunMeta[] | null>(null);
+  const [runs, setRuns] = useState<RunRow[] | null>(null);
+  /** Local runs whose results are also in Drive (Remove download, Re-upload). */
+  const [inDrive, setInDrive] = useState<ReadonlySet<string>>(new Set());
+  const [busyRun, setBusyRun] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   // A rename bumps `updatedAt`, so the row can move when the list reloads; moving it drops focus.
@@ -131,10 +136,11 @@ export function Library({ query }: ScreenProps) {
     void (async () => {
       try {
         const repo = await libraryRepo();
-        const [s, d, r] = await Promise.all([
+        const [s, d, r, stubs] = await Promise.all([
           repo.listStrategies(),
           repo.listDefinitions(),
-          repo.listRuns(),
+          listRunRows(),
+          sync.listRemoteRuns().catch(() => []),
         ]);
         if (!live) return;
         setStrategies(s);
@@ -142,12 +148,22 @@ export function Library({ query }: ScreenProps) {
           d.filter((x) => x.definition.tags?.includes('dry-run') === true).map((x) => x.id),
         );
         setDefinitions(d.filter((x) => !dryDefs.has(x.id)));
-        setRuns(r.filter((x) => !isDryRunId(x.runId) && !dryDefs.has(x.definitionId)));
+        const rows = r.filter((x) => !isDryRunId(x.runId) && !dryDefs.has(x.definitionId));
+        setRuns(rows);
+        setInDrive(
+          new Set(
+            stubs
+              .filter((x) => x.status === 'done' && x.bundle)
+              .map((x) => x.runId)
+              .filter((id) => rows.some((x) => x.runId === id && !x.remote)),
+          ),
+        );
       } catch {
         if (live) {
           setStrategies([]);
           setDefinitions([]);
           setRuns([]);
+          setInDrive(new Set());
         }
       }
     })();
@@ -195,6 +211,34 @@ export function Library({ query }: ScreenProps) {
   const shownRuns = (runs ?? []).filter((r) =>
     matches(defName.get(r.definitionId), r.runId, r.status),
   );
+
+  // A definition's run count: its `runIds` that exist here, as a local run or as a stub in Drive.
+  const known = new Set((runs ?? []).map((r) => r.runId));
+  const runCount = (d: DefinitionRecord): number => d.runIds.filter((id) => known.has(id)).length;
+
+  const removeDownload = async (r: RunRow, name: string) => {
+    setBusyRun(r.runId);
+    try {
+      await sync.evictRun(r.runId);
+      libraryVersion.update((v) => v + 1);
+      showToast(`Removed the download of ${name}. It stays in your Google Drive.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not remove the download.', {
+        tone: 'error',
+      });
+    }
+    setBusyRun(null);
+  };
+  const reupload = async (r: RunRow, name: string) => {
+    setBusyRun(r.runId);
+    try {
+      await sync.reuploadRun(r.runId);
+      showToast(`Uploaded ${name} to your Google Drive again.`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not upload.', { tone: 'error' });
+    }
+    setBusyRun(null);
+  };
 
   const duplicateStrategy = async (s: StrategyRecord) => {
     const taken = new Set((strategies ?? []).map((x) => x.id));
@@ -360,9 +404,8 @@ export function Library({ query }: ScreenProps) {
                       <span class="row-title">{experimentName(d)}</span>
                       <span class="row-sub">
                         {d.definition.strategy.name} ·{' '}
-                        {d.definition.run.sessions.toLocaleString('en-US')} sessions ·{' '}
-                        {d.runIds.length} {d.runIds.length === 1 ? 'run' : 'runs'} ·{' '}
-                        {when(d.updatedAt)}
+                        {d.definition.run.sessions.toLocaleString('en-US')} sessions · {runCount(d)}{' '}
+                        {runCount(d) === 1 ? 'run' : 'runs'} · {when(d.updatedAt)}
                       </span>
                     </a>
                     <div class="lib-actions">
@@ -400,37 +443,74 @@ export function Library({ query }: ScreenProps) {
               <EmptyState title={runs!.length === 0 ? 'No runs yet' : 'No match'} />
             ) : (
               <ul class="rows lib-rows" aria-label="Runs">
-                {shownRuns.map((r) => (
-                  <li key={r.runId} class="lib-row">
-                    <a
-                      class="row-link"
-                      href={href(r.status === 'done' ? `/analyze/${r.runId}` : `/run/${r.runId}`)}
-                    >
-                      <span class="row-title">
-                        {defName.get(r.definitionId) ?? 'Untitled experiment'}
-                      </span>
-                      <span class="row-sub">
-                        {r.status} · {r.completedSessions.toLocaleString('en-US')} of{' '}
-                        {r.sessions.toLocaleString('en-US')} sessions · {when(r.createdAt)}
-                      </span>
-                    </a>
-                    <div class="lib-actions">
-                      <Button
-                        variant="danger"
-                        aria-label={`Delete run ${defName.get(r.definitionId) ?? r.runId}`}
-                        onClick={() =>
-                          setPending({
-                            kind: 'run',
-                            id: r.runId,
-                            name: defName.get(r.definitionId) ?? r.runId,
-                          })
-                        }
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </li>
-                ))}
+                {shownRuns.map((r) => {
+                  const name = defName.get(r.definitionId) ?? 'Untitled experiment';
+                  // a stub of a run that did not finish is greyed and does not open (Q20)
+                  const stub = r.remote !== undefined && !isDownloadable(r);
+                  return (
+                    <li key={r.runId} class="lib-row">
+                      {stub ? (
+                        <span class="row-link row-stub">
+                          <span class="row-title">{name}</span>
+                          <span class="row-sub">
+                            {stubLine(r)} · {when(r.createdAt)}
+                          </span>
+                        </span>
+                      ) : (
+                        <a
+                          class="row-link"
+                          href={href(
+                            r.status === 'done' ? `/analyze/${r.runId}` : `/run/${r.runId}`,
+                          )}
+                        >
+                          <span class="row-title">
+                            {name}
+                            {r.remote ? <RunBadge /> : null}
+                          </span>
+                          <span class="row-sub">
+                            {r.status} · {r.completedSessions.toLocaleString('en-US')} of{' '}
+                            {r.sessions.toLocaleString('en-US')} sessions · {when(r.createdAt)}
+                          </span>
+                        </a>
+                      )}
+                      <div class="lib-actions">
+                        {inDrive.has(r.runId) ? (
+                          <>
+                            <Button
+                              disabled={busyRun === r.runId}
+                              aria-label={`Remove download of ${name}`}
+                              onClick={() => void removeDownload(r, name)}
+                            >
+                              Remove download
+                            </Button>
+                            <Button
+                              disabled={busyRun === r.runId}
+                              aria-label={`Re-upload ${name}`}
+                              onClick={() => void reupload(r, name)}
+                            >
+                              Re-upload
+                            </Button>
+                          </>
+                        ) : null}
+                        {r.remote ? null : (
+                          <Button
+                            variant="danger"
+                            aria-label={`Delete run ${defName.get(r.definitionId) ?? r.runId}`}
+                            onClick={() =>
+                              setPending({
+                                kind: 'run',
+                                id: r.runId,
+                                name: defName.get(r.definitionId) ?? r.runId,
+                              })
+                            }
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Card>
