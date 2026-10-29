@@ -51,17 +51,45 @@ export function Account({ query }: { query?: URLSearchParams }) {
     setShowNotices(true);
     sync.markConflictsRead();
   };
+  const showGate = (r: { email: string; files: number }) =>
+    setTestMsg(`Signed in as ${r.email}. ${plural(r.files, 'file')} in the app folder.`);
+  const showGateError = (e: unknown) => setTestMsg(`Sign-in test failed: ${(e as Error).message}`);
   const runTest = () => {
     setTesting(true);
     setTestMsg('');
     sync
       .testSignIn()
-      .then((r) =>
-        setTestMsg(`Signed in as ${r.email}. ${plural(r.files, 'file')} in the app folder.`),
-      )
-      .catch((e: unknown) => setTestMsg(`Sign-in test failed: ${(e as Error).message}`))
+      .then(showGate)
+      .catch(showGateError)
       .finally(() => setTesting(false));
   };
+  const preloadEager = () => sync.preloadSignIn({ eager: true });
+  const endTest = () => {
+    void sync
+      .endTestSignIn()
+      .then(() =>
+        setTestMsg(
+          'Test ended. Signed out here; if you were offline, remove spinner at myaccount.google.com/permissions.',
+        ),
+      )
+      .catch(showGateError);
+  };
+  // Back from the redirect round trip (the installed app): the page reloaded, so finish the gate
+  // check here and show the result exactly as the popup path does.
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    sync.preloadSignIn();
+    let live = true;
+    sync
+      .resumeTestSignIn()
+      .then((r) => {
+        if (live && r) showGate(r);
+      })
+      .catch((e: unknown) => live && showGateError(e));
+    return () => {
+      live = false;
+    };
+  }, []);
   const downloadAll = () => {
     const ctl = new AbortController();
     dlAbort.current = ctl;
@@ -324,13 +352,23 @@ export function Account({ query }: { query?: URLSearchParams }) {
         )}
 
         {GOOGLE_CLIENT_ID && !disabled ? (
-          <div class="sync-test" data-sync-test>
-            <p class="muted">Test Google sign-in (checks the Google connection only).</p>
+          <div
+            class="sync-test"
+            data-sync-test
+            onPointerEnter={preloadEager}
+            onFocusIn={preloadEager}
+            onTouchStart={preloadEager}
+          >
+            <p class="muted">
+              Test Google sign-in (checks the Google connection only). After Expire token now, tap
+              Test Google sign-in again to try Reconnect. End test removes spinner's access.
+            </p>
             <div class="actions">
               <Button disabled={testing} onClick={runTest}>
                 Test Google sign-in
               </Button>
               <Button onClick={() => sync.expireTokenForTest()}>Expire token now</Button>
+              <Button onClick={endTest}>End test</Button>
             </div>
             <p role="status" data-sync-test-result>
               {testMsg}

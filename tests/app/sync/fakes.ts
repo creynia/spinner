@@ -29,6 +29,7 @@ export interface GisFakeControls {
   expiresIn: number;
 }
 
+// import.meta.url is not a file URL under happy-dom, so the repo root comes from the cwd (vitest runs there).
 const dir = join(process.cwd(), 'tests/e2e/fakes');
 const drive = (await import(/* @vite-ignore */ join(dir, 'drive-server.ts'))) as {
   createFakeDrive(o?: FakeDriveOptions): FakeDrive;

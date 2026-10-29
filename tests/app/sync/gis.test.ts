@@ -7,6 +7,8 @@ import {
   DRIVE_APPDATA_SCOPE,
   loadGis,
   resetGisLoaderForTest,
+  REVOKE_TIMEOUT_MS,
+  ttlSeconds,
   SKEW_MS,
   type GisConfig,
 } from '../../../src/app/services/sync/gis';
@@ -230,6 +232,81 @@ describe('GIS token source', () => {
     expect(src.current()).toBe('fake-token-1');
     now += 2;
     expect(src.current()).toBeNull();
+  });
+});
+
+describe('hardening (F4, F5)', () => {
+  it('revoke clears, emits and broadcasts before the network call', async () => {
+    const { gis, src } = make();
+    await src.acquire({ silent: false });
+    const order: string[] = [];
+    src.subscribe((s) => order.push(`emit:${s.state}`));
+    const ch = new BroadcastChannel('spinner-sync');
+    ch.onmessage = () => order.push('broadcast');
+    const orig = gis.api.revoke;
+    gis.api.revoke = (t, done) => (order.push('google'), orig(t, done));
+    await src.revoke();
+    await new Promise((r) => setTimeout(r, 20));
+    ch.close();
+    expect(order[0]).toBe('emit:signed-out');
+    expect(order.indexOf('google')).toBeGreaterThan(0);
+    expect(order).toContain('broadcast');
+  });
+
+  it('revoke gives up on a Google that never answers after 5 s', async () => {
+    const { vi } = await import('vitest');
+    vi.useFakeTimers();
+    try {
+      const { gis, src } = make();
+      await src.acquire({ silent: false });
+      gis.api.revoke = () => undefined; // never calls done
+      let done = false;
+      const p = src.revoke().then(() => (done = true));
+      expect(src.state.state).toBe('signed-out'); // already local
+      await vi.advanceTimersByTimeAsync(4_900);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(200);
+      await p;
+      expect(done).toBe(true);
+      expect(REVOKE_TIMEOUT_MS).toBe(5_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('expires_in: finite and positive, else 3599, the same rule as the return page', async () => {
+    for (const [v, secs] of [
+      [undefined, 3599],
+      ['abc', 3599],
+      [0, 3599],
+      [-5, 3599],
+      [Infinity, 3599],
+      ['120', 120],
+      [3000, 3000],
+    ] as const) {
+      expect(ttlSeconds(v), String(v)).toBe(secs);
+    }
+    const m = make();
+    m.gis.ctl.expiresIn = NaN;
+    await m.src.acquire({ silent: false });
+    expect(m.src.state).toMatchObject({ expiresAt: now + 3599_000 });
+  });
+
+  it('drops an expired token from localStorage when state is read, keeping the hint', async () => {
+    const { src } = make();
+    await src.acquire({ silent: false });
+    expect(localStorage.getItem(TOKEN_KEY)).not.toBeNull();
+    now += 3600_000;
+    expect(src.state).toEqual({ state: 'expired', email: 'owner@example.com' });
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(JSON.parse(localStorage.getItem(HINT_KEY)!)).toEqual({ email: 'owner@example.com' });
+  });
+
+  it('accepts a grant whose scope list includes drive.appdata among others', async () => {
+    const m = make();
+    const orig = m.gis.api.hasGrantedAllScopes;
+    expect(orig({ scope: `email ${DRIVE_APPDATA_SCOPE}` }, DRIVE_APPDATA_SCOPE)).toBe(true);
+    expect(orig({ scope: 'email' }, DRIVE_APPDATA_SCOPE)).toBe(false);
   });
 });
 

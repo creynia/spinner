@@ -146,6 +146,30 @@ describe('oauth-return entry', () => {
   });
 });
 
+describe('expires_in (F5)', () => {
+  it.each([
+    ['', 3599],
+    ['&expires_in=abc', 3599],
+    ['&expires_in=0', 3599],
+    ['&expires_in=-1', 3599],
+    ['&expires_in=Infinity', 3599],
+    ['&expires_in=600', 600],
+  ])('%s -> %i s', async (frag, secs) => {
+    const { e } = env({
+      hash: `#access_token=tok&scope=${encodeURIComponent(SCOPE)}&state=S${frag}`,
+    });
+    expect((await processReturn(e)).ok).toBe(true);
+    const stored = JSON.parse(localStorage.getItem(TOKEN_KEY)!) as { expiresAt: number };
+    expect(stored.expiresAt).toBe(NOW + secs * 1000);
+  });
+  it('accepts a scope list that includes drive.appdata among others', async () => {
+    const { e } = env({
+      hash: `#access_token=tok&expires_in=60&state=S&scope=${encodeURIComponent('email ' + SCOPE)}`,
+    });
+    expect((await processReturn(e)).ok).toBe(true);
+  });
+});
+
 describe('oauth-return page boot', () => {
   it('does nothing on import unless the page marks itself', async () => {
     const spy = vi.spyOn(history, 'replaceState');
