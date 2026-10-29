@@ -9,6 +9,7 @@ import { roulette } from '@game/roulette';
 import { rouletteUi } from '@game/roulette/ui';
 import { getBackend, getRepo } from '../../services/db';
 import { getPool } from '../../services/pool';
+import { remoteRunName } from '../../services/runs';
 
 export interface SimResult {
   row: SummaryRow;
@@ -17,6 +18,8 @@ export interface SimResult {
 
 export interface WatchDeps {
   loadRun: (runId: string) => Promise<RunData | null>;
+  /** The experiment's name when the run is a done run that only lives in Drive, else null. */
+  remoteName?: (runId: string) => Promise<string | null>;
   /** Re-simulate one session with its full trace (determinism makes it exact). */
   simulate: (def: NormalizedDefinition, index: number, schedule: Int32Array) => Promise<SimResult>;
   ui: Pick<GameUi<never>, 'TableView' | 'OutcomeGlyph'> & { TableView: ComponentType<never> };
@@ -31,6 +34,7 @@ export const defaultDeps: WatchDeps = {
     const backend = getBackend();
     return backend ? loadRun(backend, runId) : null;
   },
+  remoteName: remoteRunName,
   async simulate(def, index, schedule) {
     const r = await simulate(getPool(), def, index, schedule);
     return { row: r.row, trace: r.trace };

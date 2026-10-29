@@ -2,7 +2,7 @@
 import { experimentName } from '@core';
 import { useEffect, useState } from 'preact/hooks';
 import type { DefinitionRecord } from '@core/contracts/experiment';
-import type { RunData, RunMeta } from '@core/contracts/run';
+import type { RunData } from '@core/contracts/run';
 import {
   Button,
   Card,
@@ -15,7 +15,15 @@ import {
   type CompareRun,
 } from '@core/ui';
 import { navigate } from '../../router';
-import { dryRunDefinitionIds, getCoreRepo } from '../../services/runs';
+import { DownloadFailure } from '../../components/DownloadFailure';
+import {
+  downloadForView,
+  getCoreRepo,
+  listRunRows,
+  type DownloadFailure as Reason,
+  type RunRow,
+} from '../../services/runs';
+import * as sync from '../../services/sync';
 import { settingsStore } from '../../services/settings';
 import { useStore } from '../../state/store';
 import { pickerLabels } from '../pickerLabels';
@@ -41,7 +49,10 @@ export function Compare({ query }: ScreenProps) {
   const key = ids.join(',');
   const framing = useStore(settingsStore, (s) => s.framing);
   const [datas, setDatas] = useState<(RunData | null)[] | null>(null);
-  const [library, setLibrary] = useState<RunMeta[]>([]);
+  const [library, setLibrary] = useState<RunRow[]>([]);
+  const [downloading, setDownloading] = useState(0);
+  const [failed, setFailed] = useState<{ id: string; name: string; reason: Reason }[]>([]);
+  const [attempt, setAttempt] = useState(0);
   const [defs, setDefs] = useState<Map<string, DefinitionRecord>>(new Map());
   const now = useNow();
   const [add, setAdd] = useState('');
@@ -49,27 +60,62 @@ export function Compare({ query }: ScreenProps) {
   useEffect(() => {
     let on = true;
     setDatas(null);
-    void Promise.all(ids.map((id) => loadRunData(id).catch(() => null))).then(
-      (d) => on && setDatas(d),
-    );
+    setFailed([]);
+    // A run that is only in Drive downloads first, inline; then the runs compare (sync.md §8.4).
+    void (async () => {
+      const first = await Promise.all(ids.map((id) => loadRunData(id).catch(() => null)));
+      const need: number[] = [];
+      for (let i = 0; i < ids.length; i++) {
+        if (first[i] !== null) continue;
+        const stub = await sync.remoteRun(ids[i]!).catch(() => null);
+        if (stub?.status === 'done' && stub.bundle) need.push(i);
+      }
+      const fails: { id: string; name: string; reason: Reason }[] = [];
+      if (need.length > 0) {
+        if (on) setDownloading(need.length);
+        const got = await Promise.all(need.map((i) => downloadForView(ids[i]!)));
+        const again = await Promise.all(
+          need.map(async (i, k) =>
+            got[k] === 'ok' ? await loadRunData(ids[i]!).catch(() => null) : null,
+          ),
+        );
+        for (const [k, i] of need.entries()) {
+          first[i] = again[k] ?? null;
+          if (first[i] === null) {
+            const stub = await sync.remoteRun(ids[i]!).catch(() => null);
+            const rec = stub
+              ? await (await getCoreRepo()).getDefinition(stub.definitionId)
+              : undefined;
+            fails.push({
+              id: ids[i]!,
+              name: rec ? experimentName(rec) : 'a run',
+              reason: got[k] === 'ok' ? 'missing' : (got[k] as Reason),
+            });
+          }
+        }
+      }
+      if (on) {
+        setDownloading(0);
+        setFailed(fails);
+        setDatas(first);
+      }
+    })();
     return () => {
       on = false;
     };
-  }, [key]);
+  }, [key, attempt]);
   useEffect(() => {
-    void Promise.all([
-      getCoreRepo().then((r) => Promise.all([r.listRuns(), r.listDefinitions()])),
-      dryRunDefinitionIds(),
-    ])
-      .then(([[l, d], dry]) => {
+    void Promise.all([listRunRows(), getCoreRepo().then((r) => r.listDefinitions())])
+      .then(([l, d]) => {
         setDefs(new Map(d.map((x) => [x.id, x])));
-        setLibrary(l.filter((m) => m.status === 'done' && !dry.has(m.definitionId)));
+        setLibrary(l.filter((m) => m.status === 'done'));
       })
       .catch(() => undefined);
   }, []);
 
   const loaded = (datas ?? []).filter((d): d is RunData => d !== null);
-  const missing = datas ? ids.filter((_, i) => datas[i] === null) : [];
+  const failedIds = new Set(failed.map((f) => f.id));
+  const missing = datas ? ids.filter((id, i) => datas[i] === null && !failedIds.has(id)) : [];
   const labels = loaded.map((d) => experimentName(d));
   const runs: CompareRun[] = loaded.map((d, i) => {
     const same = loaded.filter((_, k) => labels[k] === labels[i]);
@@ -90,7 +136,7 @@ export function Compare({ query }: ScreenProps) {
     candidates.map((m) => {
       const rec = defs.get(m.definitionId);
       return {
-        name: rec ? experimentName(rec) : 'Untitled experiment',
+        name: `${rec ? experimentName(rec) : 'Untitled experiment'}${m.remote ? ' ☁' : ''}`,
         when: relativeTime(runTimestamp(m), now),
         sessions: m.sessions,
         seed: rec?.definition.run.seed,
@@ -146,15 +192,25 @@ export function Compare({ query }: ScreenProps) {
       {missing.length ? (
         <NotFoundCard what="Run" message={`${missing.join(', ')} is not in this browser.`} />
       ) : null}
+      {failed.map((f) => (
+        <DownloadFailure
+          key={f.id}
+          name={f.name}
+          reason={f.reason}
+          onRetry={() => setAttempt((n) => n + 1)}
+        />
+      ))}
       {ids.length < MIN_RUNS ? (
         <p class="muted">
           Pick at least {MIN_RUNS} runs (up to {MAX_RUNS}). The first is the baseline.
         </p>
       ) : datas === null ? (
         <p class="muted" role="status">
-          Loading the runs...
+          {downloading > 0
+            ? `Downloading ${downloading} ${downloading === 1 ? 'run' : 'runs'}…`
+            : 'Loading the runs...'}
         </p>
-      ) : runs.length >= MIN_RUNS && sameGame ? (
+      ) : failed.length > 0 ? null : runs.length >= MIN_RUNS && sameGame ? (
         <CompareView
           runs={runs}
           framing={framing}

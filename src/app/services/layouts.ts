@@ -59,7 +59,8 @@ export function layoutErrors(l: unknown): Diagnostic[] {
   return validateChipLayout(l, ctx).filter((d) => d.severity === 'error');
 }
 
-const touch = () => libraryVersion.update((v) => v + 1);
+/** Reloads every list that reads layouts (also called after a sync cycle changed them). */
+export const touch = (): void => libraryVersion.update((v) => v + 1);
 
 function stageChipSources(stages: unknown): { id: string; builtin: boolean }[] {
   const out: { id: string; builtin: boolean }[] = [];

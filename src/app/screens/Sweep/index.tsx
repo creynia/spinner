@@ -18,7 +18,13 @@ import {
 } from '@core/ui';
 import { pickerLabels } from '../pickerLabels';
 import { navigate } from '../../router';
-import { getCoreRepo } from '../../services/runs';
+import { DownloadFailure } from '../../components/DownloadFailure';
+import {
+  downloadForView,
+  getCoreRepo,
+  listRunRows,
+  type DownloadFailure as Reason,
+} from '../../services/runs';
 import { settingsStore } from '../../services/settings';
 import { useStore } from '../../state/store';
 import { NotFoundCard, loadRunData, tableMaxFor } from '../Analyze/data';
@@ -198,6 +204,10 @@ function ShowSweep({ groupId }: { groupId: string }) {
   const [metas, setMetas] = useState<Record<string, RunMeta>>({});
   const [datas, setDatas] = useState<{ values: unknown[]; runs: RunData[] } | null>(null);
   const [tick, setTick] = useState(0);
+  const [downloading, setDownloading] = useState(0);
+  const [failed, setFailed] = useState<{ k: number; name: string; reason: Reason }[]>([]);
+  const [attempt, setAttempt] = useState(0);
+  const [remoteIds, setRemoteIds] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     let on = true;
@@ -208,25 +218,64 @@ function ShowSweep({ groupId }: { groupId: string }) {
       setGroup(g);
       if (!g) return;
       const m: Record<string, RunMeta> = {};
+      const remote = new Set<string>();
+      const rows = new Map((await listRunRows()).map((r) => [r.runId, r]));
       for (const id of g.runIds) {
         const meta = await repo.getRun(id);
         if (meta) m[id] = meta;
+        else {
+          // a variant that is only in Drive (B4): it counts as done and downloads for the chart
+          const row = rows.get(id);
+          if (row) {
+            m[id] = row as unknown as RunMeta;
+            if (row.remote) remote.add(id);
+          }
+        }
       }
+      if (!on) return;
+      setRemoteIds(remote);
       if (!on) return;
       setMetas(m);
       // Finished variants chart as they arrive (two or more).
       const idx = g.runIds.map((_, k) => k).filter((k) => m[g.runIds[k]!]?.status === 'done');
       if (idx.length >= 2) {
-        const loaded = await Promise.all(idx.map((k) => loadRunData(g.runIds[k]!)));
-        if (on && loaded.every((d): d is RunData => d !== null)) {
-          setDatas({ values: idx.map((k) => g.sweep!.values[k]), runs: loaded });
+        // remote variants download first, because the chart needs their numbers
+        const need = idx.filter((k) => rows.get(g.runIds[k]!)?.remote);
+        if (need.length > 0) setDownloading(need.length);
+        const got = await Promise.all(need.map((k) => downloadForView(g.runIds[k]!)));
+        if (on) setDownloading(0);
+        const ok = idx.filter((k) => !need.includes(k) || got[need.indexOf(k)] === 'ok');
+        const loaded = await Promise.all(
+          ok.map((k) => loadRunData(g.runIds[k]!).catch(() => null)),
+        );
+        // a variant whose download failed is listed with its reason; the chart keeps the rest
+        const fails: { k: number; name: string; reason: Reason }[] = [];
+        for (const k of idx) {
+          const at = ok.indexOf(k);
+          if (at >= 0 && loaded[at] !== null) continue;
+          const rec = await repo.getDefinition(g.variantDefinitionIds?.[k] ?? '');
+          fails.push({
+            k,
+            name: rec ? experimentName(rec) : `Variant ${k + 1}`,
+            reason: at >= 0 ? 'missing' : (got[need.indexOf(k)] as Reason),
+          });
         }
-      } else setDatas(null);
+        if (!on) return;
+        setFailed(fails);
+        const good = ok.filter((_, i) => loaded[i] !== null);
+        const goodData = loaded.filter((d): d is RunData => d !== null);
+        if (good.length >= 2) {
+          setDatas({ values: good.map((k) => g.sweep!.values[k]), runs: goodData });
+        } else setDatas(null);
+      } else {
+        setFailed([]);
+        setDatas(null);
+      }
     })().catch(() => on && setGroup(null));
     return () => {
       on = false;
     };
-  }, [groupId, tick, queue?.current, queue?.running]);
+  }, [groupId, tick, attempt, queue?.current, queue?.running]);
 
   // Follow a running sweep.
   useEffect(() => {
@@ -275,7 +324,13 @@ function ShowSweep({ groupId }: { groupId: string }) {
                       {group.sweep!.path.split('/').pop()} = {showValue(v)}
                     </span>
                     <span class="row-sub">
-                      {m ? (m.status === 'done' ? 'Done' : `${m.status}, ${pct}%`) : 'Waiting'}
+                      {m
+                        ? m.status === 'done'
+                          ? remoteIds.has(id)
+                            ? 'Done · ☁ In Drive'
+                            : 'Done'
+                          : `${m.status}, ${pct}%`
+                        : 'Waiting'}
                     </span>
                   </a>
                 ) : (
@@ -292,6 +347,19 @@ function ShowSweep({ groupId }: { groupId: string }) {
             );
           })}
         </ul>
+        {failed.map((f) => (
+          <DownloadFailure
+            key={f.k}
+            name={f.name}
+            reason={f.reason}
+            onRetry={() => setAttempt((n) => n + 1)}
+          />
+        ))}
+        {downloading > 0 ? (
+          <p role="status" data-sweep-downloading>
+            Downloading {downloading} {downloading === 1 ? 'run' : 'runs'}…
+          </p>
+        ) : null}
         {doneCount < total && !running ? (
           <div class="actions">
             <Button variant="primary" onClick={() => void runSweep(groupId)}>

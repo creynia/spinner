@@ -36,7 +36,8 @@ import { navigate } from '../../router';
 import { game } from '../../services/game';
 import { listLayoutEntries, saveLayout } from '../../services/layouts';
 import { quickCheck } from '../../services/quickCheck';
-import { startRun } from '../../services/runs';
+import { RunBadge, stubLine } from '../../components/RunBadge';
+import { listRunRows, startRun } from '../../services/runs';
 import { formatVerdict, type VerdictInput } from '../../services/verdict';
 import type { ScreenProps } from '../types';
 import {
@@ -215,20 +216,24 @@ function LibrarySheet(p: { onPick: (s: StrategyDefinition) => void; onClose: () 
 
 function CompareSheet(p: { onPick: (runId: string) => void; onClose: () => void }) {
   const [items, setItems] = useState<
-    { runId: string; name: string; seed: number; at: string }[] | null
+    | { runId: string; name: string; seed: number; at: string; remote: boolean; stub: string }[]
+    | null
   >(null);
   useEffect(() => {
     void (async () => {
       const repo = await libraryRepo();
-      const runs = (await repo.listRuns()).slice(0, 20);
+      const runs = (await listRunRows()).slice(0, 20);
       const out = [];
       for (const r of runs) {
         const d = await repo.getDefinition(r.definitionId);
+        // a run that is only in Drive still has its definition: picking it needs no download
         out.push({
           runId: r.runId,
           name: d ? experimentName(d) : 'Untitled experiment',
           seed: d?.definition.run.seed ?? 0,
           at: runTimestamp(r),
+          remote: r.remote !== undefined,
+          stub: r.remote && r.status !== 'done' ? stubLine(r) : '',
         });
       }
       setItems(out);
@@ -247,11 +252,16 @@ function CompareSheet(p: { onPick: (runId: string) => void; onClose: () => void 
             <li key={r.runId}>
               <button
                 type="button"
-                class="row-link define-row-btn"
+                class={`row-link define-row-btn${r.stub ? ' row-stub' : ''}`}
+                disabled={r.stub !== ''}
                 onClick={() => p.onPick(r.runId)}
               >
-                <span class="row-title">{r.name}</span>
+                <span class="row-title">
+                  {r.name}
+                  {r.remote && !r.stub ? <RunBadge /> : null}
+                </span>
                 <span class="row-sub">
+                  {r.stub ? `${r.stub} · ` : ''}
                   <RelativeTime iso={r.at} /> · seed {r.seed}
                 </span>
               </button>

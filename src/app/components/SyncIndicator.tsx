@@ -155,7 +155,7 @@ export function statusView(
           return {
             tone: 'attention',
             text: 'Your Drive data was removed from another device. Sync is off here.',
-            action: null,
+            action: 'signin',
             attention: true,
           };
         case 'auth':

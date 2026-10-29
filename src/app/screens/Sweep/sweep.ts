@@ -16,7 +16,14 @@ import {
 } from '@core';
 import { createStore } from '../../state/store';
 import { game } from '../../services/game';
-import { getController, getCoreRepo, resumeStored, runKeys, startRun } from '../../services/runs';
+import {
+  getController,
+  getCoreRepo,
+  listRunRows,
+  resumeStored,
+  runKeys,
+  startRun,
+} from '../../services/runs';
 
 export const MIN_VALUES = 2;
 export const MAX_VALUES = 24;
@@ -190,15 +197,16 @@ export async function runSweep(groupId: string): Promise<void> {
       const rec = await repo.getDefinition(variantIds[i]!);
       if (!rec) throw new Error('A variant definition is missing from the library.');
       const keys = await runKeys(rec.definition);
-      const runs = await repo.listRuns();
+      // local runs plus the done runs that are only in Drive (B4): a remote done run counts as done
+      const runs = await listRunRows();
       const mine = group.runIds[i];
       let runId: string | undefined;
       const done = runs.find((r) => r.simKey === keys.simKey && r.status === 'done');
+      const local = runs.find((r) => r.runId === mine && !r.remote);
       if (done) runId = done.runId;
-      else if (mine && runs.some((r) => r.runId === mine)) {
+      else if (mine && local) {
         runId = mine;
-        const meta = runs.find((r) => r.runId === mine)!;
-        if (meta.status !== 'done') await resumeStored(mine);
+        if (local.status !== 'done') await resumeStored(mine);
       } else runId = await startRun(rec.definition);
       const c = getController(runId);
       while (c && !TERMINAL.includes(c.status)) await c.settled();

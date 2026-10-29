@@ -32,7 +32,8 @@ export const libraryRepo = (): Promise<Repo> => getCoreRepo();
 
 /** Bumped after every library write so lists reload. */
 export const libraryVersion = createStore(0);
-const touch = () => libraryVersion.update((v) => v + 1);
+/** Reloads every list that reads the library (also called after a sync cycle changed it). */
+export const touch = (): void => libraryVersion.update((v) => v + 1);
 
 export async function saveDefinition(
   d: NormalizedDefinition,
@@ -111,9 +112,12 @@ export async function deleteStrategy(id: string): Promise<void> {
 
 export async function loadDefinitionOfRun(runId: string): Promise<NormalizedDefinition | null> {
   const repo = await libraryRepo();
-  const meta = await repo.getRun(runId);
-  if (!meta) return null;
-  const rec = await repo.getDefinition(meta.definitionId);
+  // a run that is only in Drive still names its definition (the run's results are not needed)
+  const defId =
+    (await repo.getRun(runId))?.definitionId ??
+    (await (await import('../../services/sync')).remoteRun(runId))?.definitionId;
+  if (!defId) return null;
+  const rec = await repo.getDefinition(defId);
   return rec ? { ...rec.definition, name: experimentName(rec) } : null;
 }
 

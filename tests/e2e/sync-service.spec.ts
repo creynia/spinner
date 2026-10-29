@@ -185,6 +185,34 @@ test('sign in, first sync, an edit reaches the other device, Sign out, Remove my
   await screenCheck(page, guard, 'A: starts over after the erase');
   await fresh.getByRole('button', { name: 'Start syncing' }).click();
   await expect(status(page)).toHaveAttribute('data-sync-status', 'idle', { timeout: 30_000 });
+
+  // ---- erased while A is still signed in (token valid): not a dead end, A can start over
+  await openAccount(b.page);
+  await b.page.getByRole('button', { name: 'Sign in with Google' }).click();
+  await b.page
+    .getByRole('dialog', { name: 'Your Drive already has data' })
+    .getByRole('button', { name: 'Merge both (recommended)' })
+    .click();
+  await expect(status(b.page)).toHaveAttribute('data-sync-status', 'idle', { timeout: 30_000 });
+  await b.page.getByRole('button', { name: 'Remove my data from Drive…' }).click();
+  await b.page
+    .getByRole('dialog', { name: 'Remove from Drive?' })
+    .getByRole('button', { name: 'Remove from Drive' })
+    .click();
+  await expect(b.page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible({
+    timeout: 30_000,
+  });
+  await openAccount(page);
+  await page.getByRole('button', { name: 'Sync now' }).click();
+  await expect(status(page)).toContainText('removed from another device', { timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await screenCheck(page, guard, 'A: erased while signed in');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  const again = page.getByRole('dialog', { name: "Upload this device's library?" });
+  await expect(again).toBeVisible({ timeout: 30_000 });
+  await screenCheck(page, guard, 'A: start over from the erased status');
+  await again.getByRole('button', { name: 'Start syncing' }).click();
+  await expect(status(page)).toHaveAttribute('data-sync-status', 'idle', { timeout: 30_000 });
   await b.ctx.close();
 });
 
