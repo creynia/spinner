@@ -3,11 +3,11 @@ import { cleanup, render, waitFor } from '@testing-library/preact';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../services/sync', async (orig) =>
-  (await import('../remote-kit')).syncMock(await orig<object>()),
+  (await import('../__fixtures__/remote-kit')).syncMock(await orig<object>()),
 );
 
 import { getCoreRepo, remoteRunName } from '../../services/runs';
-import { seedRemote, world } from '../remote-kit';
+import { seedRemote, world } from '../__fixtures__/remote-kit';
 import { defaultDeps, type WatchDeps } from './deps';
 import { WatchView } from './WatchView';
 

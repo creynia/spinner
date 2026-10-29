@@ -4,11 +4,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../services/sync', async (orig) =>
-  (await import('../remote-kit')).syncMock(await orig<object>()),
+  (await import('../__fixtures__/remote-kit')).syncMock(await orig<object>()),
 );
 
 import { getCoreRepo } from '../../services/runs';
-import { seedRemote, world } from '../remote-kit';
+import { seedRemote, world } from '../__fixtures__/remote-kit';
 import { Library } from './index';
 
 afterEach(cleanup);

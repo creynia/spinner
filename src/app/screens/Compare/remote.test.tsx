@@ -5,12 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeRun } from '../../../core/store/__fixtures__/synth';
 
 vi.mock('../../services/sync', async (orig) =>
-  (await import('../remote-kit')).syncMock(await orig<object>()),
+  (await import('../__fixtures__/remote-kit')).syncMock(await orig<object>()),
 );
 
 import { getCoreRepo } from '../../services/runs';
 import { clearRunCache } from '../Analyze/data';
-import { seedRemote, world } from '../remote-kit';
+import { seedRemote, world } from '../__fixtures__/remote-kit';
 import { Compare } from './index';
 
 afterEach(cleanup);

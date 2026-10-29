@@ -69,7 +69,9 @@ export function Compare({ query }: ScreenProps) {
           if (got[k] !== 'ok') first[i] = null;
         });
         const again = await Promise.all(
-          need.map((i, k) => (got[k] === 'ok' ? loadRunData(ids[i]!).catch(() => null) : null)),
+          need.map(async (i, k) =>
+            got[k] === 'ok' ? await loadRunData(ids[i]!).catch(() => null) : null,
+          ),
         );
         need.forEach((i, k) => (first[i] = again[k] ?? null));
       }

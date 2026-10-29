@@ -2,26 +2,27 @@
 // never starts a run for that variant. A paused stub is not resumable here, so its variant starts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NormalizedDefinition } from '@core/contracts/experiment';
+import type * as Runs from '../../services/runs';
 
 vi.mock('../../services/sync', async (orig) =>
-  (await import('../remote-kit')).syncMock(await orig<object>()),
+  (await import('../__fixtures__/remote-kit')).syncMock(await orig<object>()),
 );
 const started: string[] = [];
 vi.mock('../../services/runs', async (orig) => {
-  const real = await orig<typeof import('../../services/runs')>();
+  const real = await orig<typeof Runs>();
   return {
     ...real,
-    startRun: vi.fn(async (def: NormalizedDefinition) => {
+    startRun: vi.fn((def: NormalizedDefinition) => {
       started.push(def.name);
-      return 'new-run';
+      return Promise.resolve('new-run');
     }),
-    resumeStored: vi.fn(async () => undefined),
+    resumeStored: vi.fn(() => Promise.resolve()),
     getController: () => undefined,
   };
 });
 
 import { getCoreRepo, runKeys } from '../../services/runs';
-import { seedRemote } from '../remote-kit';
+import { seedRemote } from '../__fixtures__/remote-kit';
 import { runSweep, sweepQueue } from './sweep';
 
 beforeEach(() => (started.length = 0));

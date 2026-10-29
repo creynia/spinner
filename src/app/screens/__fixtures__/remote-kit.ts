@@ -1,13 +1,13 @@
 // Test kit for the WP-S5b consumer tests: a run that is only in Drive (a stub plus a library
 // without its results) and a stub-only paused run, behind a mocked sync service. Used as
-//   vi.mock('../../services/sync', async (orig) => (await import('../remote-kit')).syncMock(await orig()))
+//   vi.mock('../../services/sync', async (orig) => (await import('../__fixtures__/remote-kit')).syncMock(await orig()))
 // Not part of the app bundle.
 import type { RunData } from '@core/contracts/run';
 import type { RunStub } from '@core';
 import { evictRunResults } from '@core';
-import { makeRun } from '../../core/store/__fixtures__/synth';
-import { getCoreRepo } from '../services/runs';
-import { createStore } from '../state/store';
+import { makeRun } from '../../../core/store/__fixtures__/synth';
+import { getCoreRepo } from '../../services/runs';
+import { createStore } from '../../state/store';
 
 export interface RemoteWorld {
   stubs: RunStub[];
@@ -28,7 +28,7 @@ export const world: RemoteWorld = {
   evicted: [],
   evictCalls: 0,
   reuploaded: [],
-  onDownload: async () => undefined,
+  onDownload: () => Promise.resolve(),
   evictError: null,
 };
 
@@ -38,7 +38,7 @@ export function resetWorld(): void {
   world.evicted = [];
   world.evictCalls = 0;
   world.reuploaded = [];
-  world.onDownload = async () => undefined;
+  world.onDownload = () => Promise.resolve();
   world.evictError = null;
 }
 
@@ -52,8 +52,8 @@ export function syncMock<T extends object>(orig: T): T {
   return {
     ...orig,
     syncDevices: devices,
-    listRemoteRuns: async () => world.stubs.slice(),
-    remoteRun: async (id: string) => world.stubs.find((s) => s.runId === id) ?? null,
+    listRemoteRuns: () => Promise.resolve(world.stubs.slice()),
+    remoteRun: (id: string) => Promise.resolve(world.stubs.find((s) => s.runId === id) ?? null),
     downloadRun: async (id: string) => {
       world.downloads.push(id);
       await world.onDownload(id);
@@ -65,8 +65,11 @@ export function syncMock<T extends object>(orig: T): T {
       world.evicted.push(id);
       await evictRunResults((await getCoreRepo()).backend, id);
     },
-    reuploadRun: async (id: string) => void world.reuploaded.push(id),
-  } as T;
+    reuploadRun: (id: string) => {
+      world.reuploaded.push(id);
+      return Promise.resolve();
+    },
+  };
 }
 
 export function stubOf(data: RunData, over: Partial<RunStub> = {}): RunStub {

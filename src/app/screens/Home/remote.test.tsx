@@ -4,11 +4,11 @@ import { cleanup, render, screen, waitFor } from '@testing-library/preact';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../services/sync', async (orig) =>
-  (await import('../remote-kit')).syncMock(await orig<object>()),
+  (await import('../__fixtures__/remote-kit')).syncMock(await orig<object>()),
 );
 
 import { listRecentRuns, refreshRuns } from '../../services/runs';
-import { seedRemote } from '../remote-kit';
+import { seedRemote } from '../__fixtures__/remote-kit';
 import { Home } from './index';
 
 afterEach(cleanup);

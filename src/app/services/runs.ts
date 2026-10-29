@@ -33,7 +33,7 @@ import { verdictFromMetrics, type VerdictInput } from './verdict';
  * The sync service, loaded on first use: it imports the screens' data modules, which import this
  * one, so a static import would be a cycle.
  */
-const syncApi = (): Promise<typeof import('./sync')> => import('./sync');
+const syncApi = () => import('./sync');
 
 export type RunVerdict = VerdictInput & { roundsPerSession: number; roundsPerHour: number };
 
@@ -93,7 +93,7 @@ function stubRow(s: RunStub, names: ReadonlyMap<string, string>): RunRow {
       ...(owner ? { owner } : {}),
       ...(ownerName ? { ownerName } : {}),
     },
-  } as RunRow;
+  };
 }
 
 /**
@@ -201,7 +201,10 @@ export async function listRecentRuns(limit = 5): Promise<RunListItem[]> {
     }
   }
   const stubs = new Map(
-    (await (await syncApi()).listRemoteRuns().catch(() => [] as RunStub[])).map((s) => [s.runId, s]),
+    (await (await syncApi()).listRemoteRuns().catch(() => [] as RunStub[])).map((s) => [
+      s.runId,
+      s,
+    ]),
   );
   return Promise.all(
     top.map(async (m): Promise<RunListItem> => {

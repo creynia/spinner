@@ -300,7 +300,7 @@ function ShowSweep({ groupId }: { groupId: string }) {
                     <span class="row-sub">
                       {m
                         ? m.status === 'done'
-                          ? remoteIds.has(id!)
+                          ? remoteIds.has(id)
                             ? 'Done · ☁ In Drive'
                             : 'Done'
                           : `${m.status}, ${pct}%`

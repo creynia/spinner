@@ -79,7 +79,6 @@ test('a run made on device A is remote on B: Analyze downloads it, Remove downlo
   context,
   browser,
   baseURL,
-  guard,
 }, info) => {
   test.setTimeout(240_000);
   const shot = (p: Page, label: string) =>
@@ -106,7 +105,10 @@ test('a run made on device A is remote on B: Analyze downloads it, Remove downlo
     await expect(status(bp)).toHaveAttribute('data-sync-status', 'idle', { timeout: 30_000 });
   });
   const libRow = () =>
-    bp.locator('ul[aria-label="Runs"] li').filter({ hasText: NAME }).filter({ hasText: 'In Drive' });
+    bp
+      .locator('ul[aria-label="Runs"] li')
+      .filter({ hasText: NAME })
+      .filter({ hasText: 'In Drive' });
   await expect(async () => {
     await bp.goto('./?e2e#/settings?account=1');
     await bp.getByRole('button', { name: 'Sync now' }).click();
@@ -119,7 +121,10 @@ test('a run made on device A is remote on B: Analyze downloads it, Remove downlo
   await shot(bp, '1-library-remote');
   await bp.goto('./?e2e#/');
   await expect(
-    bp.locator('ul[aria-label="Recent runs"] li').filter({ hasText: NAME }).filter({ hasText: 'In Drive' }),
+    bp
+      .locator('ul[aria-label="Recent runs"] li')
+      .filter({ hasText: NAME })
+      .filter({ hasText: 'In Drive' }),
   ).toHaveCount(1);
   await screenCheck(bp, b.guard, 'B: Home lists the remote run');
   await shot(bp, '2-home-remote');
