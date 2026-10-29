@@ -120,6 +120,8 @@ export interface SyncRootV1 {
   version: typeof SYNC_LAYOUT_VERSION;
   createdAt: string;
   createdBy: DeviceId;
+  /** Set by "Remove my data from Drive"; other devices stop syncing (sync.md §7.10). */
+  erased?: { at: string; by: DeviceId };
 }
 
 /** `lib.<deviceId>.json.gz`: the device's whole merged view. Only that device writes it. */
