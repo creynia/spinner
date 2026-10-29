@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 import { aliases } from './build/aliases.ts';
@@ -21,6 +22,17 @@ export default defineConfig({
   resolve: { alias: aliases },
   worker: { format: 'es' },
   plugins: [preact(), galleryPlugin(), swPlugin(), cspPlugin()],
-  build: { target: 'es2022', outDir: 'dist' },
+  build: {
+    target: 'es2022',
+    outDir: 'dist',
+    // Two HTML entries: the app and the OAuth redirect return page (sync.md §5.4). The CSP plugin
+    // covers both.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        'oauth-return': fileURLToPath(new URL('./oauth-return.html', import.meta.url)),
+      },
+    },
+  },
   preview: { port: Number(process.env.PORT ?? 4173), strictPort: true },
 });

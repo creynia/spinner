@@ -1,6 +1,6 @@
 // The sync app service (sync.md §4.5). An INERT stub from WP-S0: the stores hold their idle
 // defaults and every action resolves without doing anything, so WP-S4 builds the UI against it.
-// WP-S5a replaces the bodies; WP-S3 makes `testSignIn` real. Signatures are frozen.
+// WP-S5a replaces the bodies; WP-S3 made `testSignIn` and `expireTokenForTest` real. Signatures are frozen.
 import type {
   AuthState,
   ConflictNotice,
@@ -83,10 +83,6 @@ export function evictRun(_runId: string): Promise<void> {
 export function markConflictsRead(): void {
   // inert until WP-S5a
 }
-/** The D23 gate: sign in with Google and list the appDataFolder (WP-S3 implements). */
-export function testSignIn(): Promise<{ email: string; files: number }> {
-  return Promise.reject(new Error('not implemented (WP-S3): testSignIn'));
-}
 export function chooseAccountSwitch(_choice: 'sync' | 'cancel'): Promise<void> {
   return Promise.resolve();
 }
@@ -97,7 +93,6 @@ export function downloadAllRemote(
 ): Promise<{ done: number; skipped: number }> {
   return Promise.resolve({ done: 0, skipped: 0 });
 }
-/** Test hook (WP-S3 makes it real): make the stored token look expired. */
-export function expireTokenForTest(): void {
-  // inert until WP-S3
-}
+
+// WP-S3: the D23 gate (sign in, about, list) and its test hooks are real.
+export { testSignIn, resumeTestSignIn, endTestSignIn, expireTokenForTest } from './test-signin';

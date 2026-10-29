@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#0d3b2e" />
+    <title>spinner: signing in</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f6f4ee;
+        --fg: #1b2a24;
+        --link: #0d5c45;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0d1f19;
+          --fg: #e8efe9;
+          --link: #8fd3b4;
+        }
+      }
+      body {
+        margin: 0;
+        padding: 24px 16px;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 28rem;
+        margin: 0 auto;
+      }
+      a {
+        color: var(--link);
+      }
+    </style>
+  </head>
+  <body data-oauth-return>
+    <main>
+      <h1>Signing in</h1>
+      <p id="msg" role="status">One moment.</p>
+      <p><a id="back" href="./" hidden>Back to spinner</a></p>
+    </main>
+    <script type="module" src="/src/oauth/return.ts"></script>
+  </body>
+</html>
