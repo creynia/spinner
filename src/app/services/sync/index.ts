@@ -66,6 +66,10 @@ export function setPrefs(_p: Partial<SyncDevicePrefs>): Promise<void> {
 export function remoteRun(_runId: string): Promise<RunStub | null> {
   return Promise.resolve(null);
 }
+/** Every remote-only run stub (S5b's Library list). */
+export function listRemoteRuns(): Promise<RunStub[]> {
+  return Promise.resolve([]);
+}
 export function downloadRun(
   _runId: string,
   _onProgress?: (doneBytes: number, totalBytes: number) => void,

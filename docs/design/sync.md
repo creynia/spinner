@@ -329,7 +329,7 @@ export function signIn(): Promise<void>;  export function reconnect(): Promise<v
 export function syncNow(): Promise<void>; export function chooseFirstSync(c: 'merge'|'replace'|'cancel'): Promise<void>;
 export function signOut(): Promise<void>; export function removeDriveData(): Promise<void>;
 export function setPrefs(p: Partial<SyncDevicePrefs>): Promise<void>;
-export function remoteRun(runId: string): Promise<RunStub | null>;
+export function remoteRun(runId: string): Promise<RunStub | null>; export function listRemoteRuns(): Promise<RunStub[]>;
 export function downloadRun(runId, onProgress?, signal?): Promise<'ok'|'missing'|'corrupt'|'offline'|'needs-auth'>;
 export function evictRun(runId: string): Promise<void>; export function markConflictsRead(): void;
 export function testSignIn(): Promise<{ email: string; files: number }>;               // D23 gate (S3 implements)
