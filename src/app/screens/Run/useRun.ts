@@ -56,13 +56,22 @@ export function useRun(runId: string) {
   const [controller, setController] = useState(() => getController(runId));
   const [live, setLive] = useState<LiveCharts>(EMPTY);
   const refreshing = useRef(false);
+  const again = useRef(false);
 
+  // Coalescing: a call made while a read is in flight asks for one more read after it, so the
+  // last request always sees the newest store state (it is never dropped).
   const refresh = useCallback(async () => {
-    if (refreshing.current) return;
+    if (refreshing.current) {
+      again.current = true;
+      return;
+    }
     refreshing.current = true;
     try {
-      setMeta(await readRunMeta(runId));
-      setController(getController(runId));
+      do {
+        again.current = false;
+        setMeta(await readRunMeta(runId));
+        setController(getController(runId));
+      } while (again.current);
     } catch {
       setMeta(null);
     } finally {
@@ -79,10 +88,17 @@ export function useRun(runId: string) {
   // Progress events from the controller this page owns.
   useEffect(() => {
     if (!controller) return;
-    return controller.subscribe((p) => {
+    const off = controller.subscribe((p) => {
       setProgress(p);
       if (p.status !== 'running' && p.status !== 'queued') void refresh();
     });
+    // A quick run can settle between the first render and this effect, so its final notification
+    // went out before we listened: drop the seeded (stale, "running") progress and re-read the store.
+    if (controller.status !== 'running' && controller.status !== 'queued') {
+      setProgress(null);
+      void refresh();
+    }
+    return off;
   }, [controller, refresh]);
 
   // A run owned by another tab (or finished elsewhere): poll the store.
