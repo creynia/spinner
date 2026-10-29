@@ -177,12 +177,14 @@ test('sign in, first sync, an edit reaches the other device, Sign out, Remove my
   await expect(row(b.page, 'Renamed on A')).toBeVisible();
   await expect(row(b.page, nameB)).toBeVisible();
 
-  // ---- A signs in again and is told the Drive data was removed from another device
+  // ---- A signs in again: its cycle finds the Drive erased, resets, and offers a fresh start
   await openAccount(page);
   await page.getByRole('button', { name: 'Sign in with Google' }).click();
-  await expect(status(page)).toHaveAttribute('data-sync-status', 'error', { timeout: 30_000 });
-  await expect(status(page)).toContainText('removed from another device');
-  await screenCheck(page, guard, 'A: told the Drive was erased');
+  const fresh = page.getByRole('dialog', { name: "Upload this device's library?" });
+  await expect(fresh).toBeVisible({ timeout: 30_000 });
+  await screenCheck(page, guard, 'A: starts over after the erase');
+  await fresh.getByRole('button', { name: 'Start syncing' }).click();
+  await expect(status(page)).toHaveAttribute('data-sync-status', 'idle', { timeout: 30_000 });
   await b.ctx.close();
 });
 
