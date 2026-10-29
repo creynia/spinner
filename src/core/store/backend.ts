@@ -61,6 +61,11 @@ export const DB_UPGRADES: Record<number, (db: IDBDatabase) => void> = {
   2: (db) => createStores(db, ['layouts']),
 };
 
+/** Reads inside `Backend.update`, on the same transaction as the writes. */
+export interface TxReader {
+  get<T>(store: StoreName, key: IDBValidKey): Promise<T | undefined>;
+}
+
 /** Operations inside one atomic transaction. */
 export interface TxOps {
   put(store: StoreName, value: unknown): void;
@@ -80,6 +85,12 @@ export interface Backend {
   getAllKeys(store: StoreName, range?: IDBKeyRange): Promise<IDBValidKey[]>;
   /** One atomic transaction: `fn` queues puts and deletes synchronously; all or nothing. */
   tx(stores: StoreName[], mode: 'readonly' | 'readwrite', fn: (t: TxOps) => void): Promise<void>;
+  /**
+   * One readwrite transaction with an atomic read-modify-write (sync.md §4.2, review B2): `fn` may
+   * await only `r.get` on this transaction, then queue writes on `w`. Reads see the writes queued
+   * so far. All or nothing: if `fn` rejects, nothing is written and `update` rejects with it.
+   */
+  update(stores: StoreName[], fn: (r: TxReader, w: TxOps) => Promise<void>): Promise<void>;
 }
 
 export function isQuotaError(e: unknown): boolean {
@@ -174,35 +185,83 @@ export function createMemoryBackend(): Backend {
     return entries.map((e) => structuredClone(e.value) as T);
   }
 
-  function runTx(
+  type Staged = { store: StoreName; id: string; key: IDBValidKey; value?: unknown; del?: true };
+  /** Write ops that stage into `staged` (applied by the caller, all or nothing). */
+  function stagingOps(
     stores: StoreName[],
     mode: 'readonly' | 'readwrite',
-    fn: (t: TxOps) => void,
-  ): void {
-    for (const s of stores) table(s);
-    const staged: (() => void)[] = [];
+    staged: Staged[],
+  ): TxOps {
     const check = (store: StoreName): void => {
       if (mode === 'readonly') throw new DOMException('read-only transaction', 'ReadOnlyError');
       if (!stores.includes(store)) {
         throw new DOMException(`${store} not in transaction`, 'NotFoundError');
       }
     };
-    fn({
+    return {
       put: (store, value) => {
         check(store);
         const key = extract(value, STORE_DEFS[store].keyPath) as IDBValidKey | undefined;
         if (key === undefined || (Array.isArray(key) && key.some((k) => k === undefined))) {
           throw new DOMException('record has no key', 'DataError');
         }
-        const copy = structuredClone(value);
-        staged.push(() => table(store).set(idOf(key), { key, value: copy }));
+        staged.push({ store, id: idOf(key), key, value: structuredClone(value) });
       },
       delete: (store, key) => {
         check(store);
-        staged.push(() => table(store).delete(idOf(key)));
+        staged.push({ store, id: idOf(key), key, del: true });
       },
-    });
-    for (const apply of staged) apply();
+    };
+  }
+  const commit = (staged: Staged[]): void => {
+    for (const s of staged) {
+      if (s.del) table(s.store).delete(s.id);
+      else table(s.store).set(s.id, { key: s.key, value: s.value });
+    }
+  };
+
+  function runTx(
+    stores: StoreName[],
+    mode: 'readonly' | 'readwrite',
+    fn: (t: TxOps) => void,
+  ): void {
+    for (const s of stores) table(s);
+    const staged: Staged[] = [];
+    fn(stagingOps(stores, mode, staged));
+    commit(staged);
+  }
+
+  // `update` awaits inside its transaction, so it holds a lock that other readwrite work waits on
+  // (IndexedDB serialises overlapping readwrite transactions the same way).
+  let lock: Promise<void> = Promise.resolve();
+  let updating = 0;
+  async function runUpdate(
+    stores: StoreName[],
+    fn: (r: TxReader, w: TxOps) => Promise<void>,
+  ): Promise<void> {
+    for (const s of stores) table(s);
+    const staged: Staged[] = [];
+    const ops = stagingOps(stores, 'readwrite', staged);
+    const reader: TxReader = {
+      get<T>(store: StoreName, key: IDBValidKey): Promise<T | undefined> {
+        return later(() => {
+          if (!stores.includes(store)) {
+            throw new DOMException(`${store} not in transaction`, 'NotFoundError');
+          }
+          const id = idOf(key);
+          for (let i = staged.length - 1; i >= 0; i--) {
+            const w = staged[i]!;
+            if (w.store === store && w.id === id) {
+              return w.del ? undefined : (structuredClone(w.value) as T);
+            }
+          }
+          const e = table(store).get(id);
+          return e ? (structuredClone(e.value) as T) : undefined;
+        });
+      },
+    };
+    await fn(reader, ops);
+    commit(staged);
   }
 
   return {
@@ -225,7 +284,20 @@ export function createMemoryBackend(): Backend {
       );
     },
     tx(stores, mode, fn): Promise<void> {
+      if (mode === 'readwrite' && updating > 0) return lock.then(() => runTx(stores, mode, fn));
       return later(() => runTx(stores, mode, fn));
+    },
+    update(stores, fn): Promise<void> {
+      updating++;
+      const run = lock.then(() => runUpdate(stores, fn));
+      const done = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      lock = done;
+      return run.finally(() => {
+        updating--;
+      });
     },
   };
 }
@@ -305,6 +377,46 @@ export function createIdbBackend(db: IDBDatabase): Backend {
             // already finished
           }
           reject(asError(e));
+        }
+      });
+    },
+    update(stores, fn): Promise<void> {
+      return new Promise<void>((resolve, reject) => {
+        let t: IDBTransaction;
+        try {
+          t = db.transaction(stores, 'readwrite');
+        } catch (e) {
+          reject(asError(e));
+          return;
+        }
+        t.oncomplete = () => resolve();
+        t.onabort = () =>
+          reject(asError(t.error ?? new DOMException('transaction aborted', 'AbortError')));
+        t.onerror = () => {
+          // the abort handler reports it
+        };
+        const fail = (e: unknown): void => {
+          try {
+            t.abort();
+          } catch {
+            // already finished
+          }
+          reject(asError(e));
+        };
+        try {
+          fn(
+            { get: (store, key) => wrap(t.objectStore(store).get(key)) as Promise<never> },
+            {
+              put: (store, value) => {
+                t.objectStore(store).put(value);
+              },
+              delete: (store, key) => {
+                t.objectStore(store).delete(key);
+              },
+            },
+          ).catch(fail);
+        } catch (e) {
+          fail(e);
         }
       });
     },

@@ -17,6 +17,7 @@ export {
   type OpenResult,
   type StoreName,
   type TxOps,
+  type TxReader,
 } from './backend';
 export {
   assembleChunkStats,
@@ -31,6 +32,7 @@ export {
   buildRunBundle,
   decodeRunBundle,
   encodeRunBundle,
+  encodeRunBundleWithDigest,
   GALLERY_TRIM,
   RUN_MIGRATIONS,
   runFileName,

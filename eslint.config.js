@@ -20,6 +20,7 @@ const CORE_MODULES = [
   'harness',
   'store',
   'analysis',
+  'sync',
   'ui',
 ];
 /** Which core modules each core module may import (itself is always allowed). */
@@ -32,8 +33,19 @@ const CORE_ALLOWED = {
   harness: ['contracts', 'money', 'rng', 'strategy', 'experiment'],
   store: ['contracts', 'money', 'experiment'],
   analysis: ['contracts', 'money'],
+  sync: ['contracts', 'experiment', 'store'],
   ui: ['contracts', 'money', 'rng', 'strategy', 'experiment', 'harness', 'store', 'analysis'],
-  testing: ['contracts', 'money', 'rng', 'strategy', 'experiment', 'harness', 'store', 'analysis'],
+  testing: [
+    'contracts',
+    'money',
+    'rng',
+    'strategy',
+    'experiment',
+    'harness',
+    'store',
+    'analysis',
+    'sync',
+  ],
 };
 /** Bare packages each zone may import (tests additionally get TEST_PACKAGES). */
 const PREACT = ['preact', 'preact/hooks', 'preact/jsx-runtime'];
@@ -53,6 +65,7 @@ function zoneOf(p) {
   if ((m = /^src\/game\/([^/]+)(\/|$)/.exec(p))) return { zone: 'game', game: m[1] };
   if (p.startsWith('src/workers/')) return { zone: 'workers' };
   if (p.startsWith('src/pwa/')) return { zone: 'pwa' };
+  if (p.startsWith('src/oauth/')) return { zone: 'oauth' };
   if (p.startsWith('src/app/')) return { zone: 'app' };
   return { zone: 'other' }; // tests/, build/, configs, anything outside src
 }
@@ -108,7 +121,7 @@ function check(file, spec) {
   const sameModule =
     (src.zone === 'core' && dst.zone === 'core' && src.mod === dst.mod) ||
     (['game', 'game-ui'].includes(src.zone) && dst.zone === src.zone && src.game === dst.game) ||
-    (src.zone === dst.zone && ['workers', 'pwa', 'app'].includes(src.zone));
+    (src.zone === dst.zone && ['workers', 'pwa', 'app', 'oauth'].includes(src.zone));
 
   switch (src.zone) {
     case 'core': {
@@ -147,6 +160,14 @@ function check(file, spec) {
     }
     case 'pwa':
       return sameModule ? null : msg('src/pwa imports nothing app specific');
+    case 'oauth': {
+      // The OAuth redirect entry runs before and apart from the app (sync.md §13 WP-S3): core
+      // contracts and src/pwa only, never src/app.
+      if (sameModule) return null;
+      if (dst.zone === 'core' && dst.mod === 'contracts') return null;
+      if (dst.zone === 'pwa') return null;
+      return msg('src/oauth may import only core contracts, src/pwa and itself');
+    }
     case 'app': {
       if (sameModule) return null;
       if (dst.zone === 'core' && dst.mod === 'testing') return msg('core/testing is for tests');

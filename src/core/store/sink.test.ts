@@ -211,6 +211,7 @@ function quotaBackend(inner: Backend, failFrom: number): Backend & { calls: () =
       }
       return inner.tx(stores, mode, fn);
     },
+    update: inner.update.bind(inner),
     calls: () => n,
   };
 }

@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { RESERVED_STOP_REASONS, STRATEGY_SCHEMA } from './strategy';
 import { DEFINITION_SCHEMA, SHARE_LINK_MAX_CHARS } from './experiment';
-import { ENDED_BY, ENDED_BY_STRATEGY_BASE, MAX_ROUNDS, MAX_SESSIONS } from './run';
+import { ENDED_BY, ENDED_BY_STRATEGY_BASE, MAX_ROUNDS, MAX_SESSIONS, type RunMeta } from './run';
+import {
+  HLC_PATTERN,
+  RemoteError,
+  RESUMABLE_CHUNK,
+  RESUMABLE_THRESHOLD,
+  SYNC_FORMAT,
+  SYNC_KINDS,
+  SYNC_LAYOUT_VERSION,
+  SYNCED_SETTING_KEYS,
+  type AuthState,
+  type LibFileV1,
+  type RunStub,
+  type SyncEntry,
+  type SyncState,
+} from './sync';
 import { SIM_PROTOCOL } from './protocol';
 import { CORE_VERSION } from './version';
 import {
@@ -71,6 +86,106 @@ describe('chip layout contract (layouts.md §2, §10)', () => {
     expect(file.layouts[0]?.spots).toHaveLength(2);
   });
   it('does not bump CORE_VERSION for additive layout types (D12)', () => {
+    expect(CORE_VERSION).toBe('0.1.0');
+  });
+});
+
+describe('sync contract (sync.md §4.1)', () => {
+  it('pins the constants', () => {
+    expect([SYNC_FORMAT, SYNC_LAYOUT_VERSION]).toEqual(['spinner-sync', 1]);
+    expect([RESUMABLE_THRESHOLD, RESUMABLE_CHUNK]).toEqual([5 * 1024 * 1024, 8 * 1024 * 1024]);
+    expect(RESUMABLE_CHUNK % (256 * 1024)).toBe(0);
+    expect([...SYNC_KINDS]).toEqual(['def', 'strategy', 'layout', 'group', 'setting', 'run']);
+    expect([...SYNCED_SETTING_KEYS]).toEqual(['framing', 'pace']);
+  });
+  it('matches the HLC shape and rejects others', () => {
+    expect(HLC_PATTERN.test('0mh3k2z1c.0000.7k2m9qxd4a')).toBe(true);
+    expect(HLC_PATTERN.test('0mh3k2z1c.0000.7k2m9qxd4')).toBe(false);
+    expect(HLC_PATTERN.test('0MH3K2Z1C.0000.7k2m9qxd4a')).toBe(false);
+    expect(HLC_PATTERN.test('0mh3k2z1c.0000.7k2m9qxd4u')).toBe(false); // u is not Crockford
+  });
+  it('RemoteError carries code, status and retryAfterMs', () => {
+    const e = new RemoteError('rate', 429, 'slow down', 2000);
+    expect(e).toBeInstanceOf(Error);
+    expect([e.name, e.code, e.status, e.retryAfterMs, e.message]).toEqual([
+      'RemoteError',
+      'rate',
+      429,
+      2000,
+      'slow down',
+    ]);
+    expect(new RemoteError('network', 0, 'offline').retryAfterMs).toBeUndefined();
+  });
+  it('type-checks a run stub, an entry, a lib file and the status shapes', () => {
+    const stub: RunStub = {
+      runId: 'r1',
+      definitionId: 'd1',
+      simKey: 's',
+      runKey: 'k',
+      status: 'done',
+      sessions: 10,
+      completedSessions: 10,
+      prefixSessions: 10,
+      createdAt: '2026-01-01T00:00:00Z',
+      appVersion: '0.1.0',
+      gameId: 'roulette',
+      gameVersion: '1',
+      coreVersion: '1.0.0',
+      extra: {
+        device: { cores: 4, workers: 3, ua: 'x' },
+        timing: { elapsedMs: 1 },
+        resumes: [],
+      },
+    };
+    const entry: SyncEntry<'run'> = {
+      key: 'run:r1',
+      kind: 'run',
+      id: 'r1',
+      hlc: '0mh3k2z1c.0000.7k2m9qxd4a',
+      basis: null,
+      vv: { '7k2m9qxd4a': 1 },
+      hash: '',
+      v: 1,
+      value: stub,
+    };
+    const lib: LibFileV1 = {
+      format: 'spinner-sync-lib',
+      version: 1,
+      device: { id: '7k2m9qxd4a', name: 'Laptop', appVersion: '0.1.0', coreVersion: '1.0.0' },
+      hlc: entry.hlc,
+      writtenAt: '2026-01-01T00:00:00Z',
+      entries: [entry],
+    };
+    const auth: AuthState[] = [
+      { state: 'unconfigured' },
+      { state: 'signed-out' },
+      { state: 'signed-in', email: 'a@b.c', expiresAt: 1 },
+      { state: 'expired', email: 'a@b.c' },
+      { state: 'redirecting' },
+    ];
+    const states: SyncState[] = [
+      'off',
+      'idle',
+      'syncing',
+      'needs-auth',
+      'offline',
+      'backoff',
+      'drive-full',
+      'error',
+      'local-full',
+      'waiting-run',
+    ];
+    expect([lib.entries.length, auth.length, states.length]).toEqual([1, 5, 10]);
+  });
+  it('adds RunMeta.synced additively', () => {
+    const synced: NonNullable<RunMeta['synced']> = {
+      from: '7k2m9qxd4a',
+      fromName: 'Laptop',
+      at: '2026-01-01T00:00:00Z',
+    };
+    expect(Object.keys(synced)).toEqual(['from', 'fromName', 'at']);
+  });
+  it('does not touch CORE_VERSION', () => {
     expect(CORE_VERSION).toBe('0.1.0');
   });
 });

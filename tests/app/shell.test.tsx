@@ -286,6 +286,7 @@ function strictBackend(): Backend & { dump(): Record<string, unknown[]> } {
       void stores;
       return Promise.resolve();
     },
+    update: () => Promise.reject(new Error('strictBackend: update is not used here')),
     dump: () => Object.fromEntries([...data].map(([k, v]) => [k, [...v.values()]])),
   };
 }
