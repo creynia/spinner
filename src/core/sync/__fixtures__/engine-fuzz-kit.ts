@@ -13,6 +13,8 @@
 //   - zero copies of copies;
 //   - the devices converge to identical stores, with no dirty marks left.
 import { expect, vi } from 'vitest';
+import type { RunData } from '../../contracts/run';
+import type { RemoteStore, RunStub } from '../../contracts/sync';
 import { RemoteError, type SyncEntry, type SyncKind } from '../../contracts/sync';
 import { libDevice, LIMITS, TEST_HOOKS } from '../apply';
 import {
@@ -41,6 +43,8 @@ import { hlcDevice } from '../hlc';
 import { createMemoryRemote } from '../memory-remote';
 import { rng } from '../testkit';
 import { descends } from '../vv';
+import { sha256Hex } from '../../experiment';
+import { finishRun, importRunFile, putStubRun, tinyRun } from './runs-kit';
 
 export const SEEDS = Number(process.env.FUZZ_SEEDS ?? 50);
 export const FROM = Number(process.env.FUZZ_FROM ?? 1);
@@ -72,10 +76,22 @@ export interface Opts {
   /** Devices 0 | 1,2 cannot see each other's lib files until `healAt`. */
   healAt?: number;
   faults?: boolean;
+  /** S2c: runs (private, paused-then-done, shared imports, deletes) join the operations. */
+  runs?: boolean;
 }
 
 const sig = (e: SyncEntry): string => `${e.key}|${e.hlc}|${e.hash}|${JSON.stringify(e.vv)}`;
 const BODY = { group: groupBody, strategy: strategyBody, layout: layoutBody } as const;
+/** Runs of the S2c fuzz: PRIVATE ones are finished by one device each, SHARED ones are imported. */
+const PRIVATE_RUNS = 5;
+const SHARED_RUNS = 2;
+let runPool: Promise<RunData[]> | undefined;
+const pooled = (): Promise<RunData[]> =>
+  (runPool ??= Promise.all(
+    Array.from({ length: PRIVATE_RUNS + SHARED_RUNS }, (_, i) => tinyRun(i + 1)),
+  ));
+const RUN_STORES = ['runs', 'summaries', 'checkpoints', 'breakdowns', 'samples'] as const;
+
 const COPY_ID = /^[a-z0-9]+-[0-9a-f]{6}([0-9a-f]{6})*$/;
 
 async function run(o: Opts) {
@@ -111,6 +127,11 @@ async function run(o: Opts) {
   let depth = 0;
   const busy = new Set<number>();
   const defs = [await def('one'), await def('two')];
+  const pool = o.runs ? await pooled() : [];
+  const finished = new Set<number>();
+  const paused = new Map<number, number>();
+  /** Run ids deleted by anyone: not imported again (see the `it.fails` in runs.test.ts). */
+  const deletedIds = new Set<string>();
   const devs: Dev[] = [];
 
   const group0 = (id: string): boolean => id === IDS[0];
@@ -170,7 +191,45 @@ async function run(o: Opts) {
     supersede(d, kind, id);
     await userDel(d, kind, id);
   }
+  async function runOp(j: number): Promise<void> {
+    const d = devs[j]!;
+    step++;
+    const k = rnd(10);
+    if (k < 3) {
+      // pause a run that was never finished (a stub only), on this device
+      const i = rnd(PRIVATE_RUNS);
+      if (!finished.has(i) && !paused.has(i)) {
+        paused.set(i, j);
+        await putStubRun(d, pool[i]!.meta, 'paused');
+      }
+    } else if (k < 5) {
+      // finish a private run, once, on the device that paused it (else this one)
+      const i = rnd(PRIVATE_RUNS);
+      if (!finished.has(i)) {
+        finished.add(i);
+        await finishRun(devs[paused.get(i) ?? j]!, pool[i]!);
+      }
+    } else if (k < 7) {
+      // the same file imported on whichever devices happen to pick it: a shared run
+      const data = pool[PRIVATE_RUNS + rnd(SHARED_RUNS)]!;
+      if (!deletedIds.has(data.meta.runId)) await importRunFile(d, data);
+    } else {
+      const have = await d.raw.getAllKeys('runs');
+      if (have.length > 0) {
+        const id = have[rnd(have.length)] as string;
+        deletedIds.add(id);
+        // Repo.deleteRun: the results go and the definition forgets the run, in one transaction
+        const m = await d.raw.get<{ definitionId: string }>('runs', id);
+        const rec = m && (await d.raw.get<{ runIds: string[] }>('definitions', m.definitionId));
+        await d.tracked.tx([...RUN_STORES, 'definitions'], 'readwrite', (t) => {
+          for (const s of RUN_STORES) t.delete(s, id);
+          if (rec) t.put('definitions', { ...rec, runIds: rec.runIds.filter((r) => r !== id) });
+        });
+      }
+    }
+  }
   async function edit(j: number): Promise<void> {
+    if (o.runs && rnd(4) === 0) return runOp(j);
     const d = devs[j]!;
     step++;
     const k = rnd(10);
@@ -231,6 +290,12 @@ async function run(o: Opts) {
         now: clock,
         minted,
         violations,
+        // S2c: two devices download every run, one fetches on open
+        ...(o.runs
+          ? {
+              prefs: { enabled: true, runDownload: i < 2 ? ('all' as const) : ('onOpen' as const) },
+            }
+          : {}),
         remote: wrapRemote(inner, {
           spy,
           before: hookFor(i),
@@ -293,13 +358,27 @@ async function run(o: Opts) {
     }
     if (moved === 0 && round >= 1) break;
   }
-  return { devs, spy, violations, results, minted, mintedEntries, phantoms, unsynced, superseded };
+  return {
+    devs,
+    inner,
+    spy,
+    violations,
+    results,
+    minted,
+    mintedEntries,
+    phantoms,
+    unsynced,
+    superseded,
+  };
 }
 
 const keyOf = (e: SyncEntry): string => e.key;
+/** The definitions of the S2c runs ("Run def n"): their runIds follow run deletes, not edits. */
+const runDef = (rec: Record<string, unknown> | undefined): boolean =>
+  /^Run def/.test(String((rec?.definition as { name?: string } | undefined)?.name ?? ''));
 
 export async function check(o: Opts, label: string): Promise<number> {
-  const { devs, spy, violations, results, mintedEntries, phantoms, unsynced, superseded } =
+  const { devs, inner, spy, violations, results, mintedEntries, phantoms, unsynced, superseded } =
     await run(o);
   const where = `${label} seed ${o.seed}`;
   // the engine itself never fails, apart from the faults the test injects
@@ -372,7 +451,7 @@ export async function check(o: Opts, label: string): Promise<number> {
         expect.fail(`${where} lost ${key} ${lostBody}\n  ${hist}\nfinal: ${finals.join(' ')}`);
       }
     }
-    if (kind === 'def' && live.length > 0) {
+    if (kind === 'def' && live.length > 0 && !runDef(finalStores.get('def')!.get(id))) {
       const rec = finalStores.get('def')!.get(id);
       if (!rec) {
         const f = (e: SyncEntry): string =>
@@ -410,5 +489,65 @@ export async function check(o: Opts, label: string): Promise<number> {
       expect(e.vv[d.id] ?? 0, `${where} counter of ${d.id}`).toBeLessThanOrEqual(stored);
     }
   }
+  if (o.runs) await checkRuns(devs, inner, where);
   return copies;
+}
+
+/**
+ * S2c: runs converge like every other kind, and what the index says about a run is true on the
+ * device and on the remote: a live done stub's bundle is in Drive with the stub's sha256; a
+ * device that downloads everything holds every live done run; a deleted run is held nowhere.
+ */
+async function checkRuns(devs: Dev[], inner: RemoteStore, where: string): Promise<void> {
+  const files = await inner.list();
+  const bundles = new Map<string, string[]>(); // name -> sha256 of every file of that name
+  for (const f of files.filter((x) => x.name.startsWith('run.'))) {
+    bundles.set(f.name, [
+      ...(bundles.get(f.name) ?? []),
+      await sha256Hex(await inner.download(f.id)),
+    ]);
+  }
+  let first: string | undefined;
+  for (const [j, d] of devs.entries()) {
+    const rows = [...(await indexOf(d))].filter(([k]) => k.startsWith('run:'));
+    const sig = rows
+      .map(([k, r]) => `${k}|${r.entry.deleted ? 'DEL' : r.entry.hash}`)
+      .sort()
+      .join('\n');
+    first ??= sig;
+    expect(sig, `${where} run entries of device ${j}`).toBe(first);
+    const local = new Set((await d.raw.getAllKeys('runs')).map(String));
+    for (const [k, row] of rows) {
+      const id = k.slice(4);
+      if (row.entry.deleted) {
+        expect(local.has(id), `${where} deleted run ${id} still on device ${j}`).toBe(false);
+        continue;
+      }
+      expect(row.local, `${where} local flag of ${id} on device ${j}`).toBe(local.has(id) ? 1 : 0);
+      const stub = row.entry.value as RunStub;
+      if (stub.status !== 'done') {
+        expect(stub.bundle, `${where} ${id} stub-only has a bundle`).toBeUndefined();
+        continue;
+      }
+      expect(stub.bundle, `${where} done run ${id} without a bundle`).toBeDefined();
+      expect(bundles.get(stub.bundle!.name), `${where} bundle of ${id} is in Drive`).toContain(
+        stub.bundle!.sha256,
+      );
+      if (j < 2) {
+        const m = await d.raw.get<{ status: string; resultsDigest?: string }>('runs', id);
+        expect(m?.status, `${where} device ${j} (download all) lacks ${id}`).toBe('done');
+        expect(m?.resultsDigest).toBe(stub.resultsDigest);
+      }
+    }
+    // a run held here that the index does not know would never sync: every local run is indexed
+    for (const id of local) {
+      const row = rows.find(([k]) => k === `run:${id}`)?.[1];
+      const m = await d.raw.get<{ status: string }>('runs', id);
+      if (m?.status === 'done')
+        expect(row, `${where} unindexed run ${id} on device ${j}`).toBeDefined();
+    }
+  }
+  for (const [name, shas] of bundles) {
+    expect(shas.length, `${where} ${name} copies`).toBeLessThanOrEqual(devs.length);
+  }
 }
