@@ -51,6 +51,16 @@ export {
   type GalleryIndexV1,
 } from './gallery';
 export { createRunSink, loadRun, writeCompacted, type StoreRunSink } from './sink';
+export {
+  DEFINITION_NAME_MAX,
+  mergeDisplayName,
+  parseNameTime,
+  sanitizeImportedName,
+  renameDefinitionRecord,
+  validateDefinitionName,
+  type NameCheck,
+  type StoredRunData,
+} from './definitions';
 export { createRepo, type ImportResult, type Repo } from './repo';
 // Chip layouts (layouts.md §5.2); stubs until WP-L2.
 export {

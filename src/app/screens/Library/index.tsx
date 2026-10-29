@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { DefinitionRecord, StrategyRecord } from '@core/contracts/experiment';
 import type { RunMeta } from '@core/contracts/run';
 
-import { definitionId } from '@core';
+import { definitionId, experimentName } from '@core';
 import { Button, Card, Chip, EmptyState, Field, Sheet, Tabs, TextInput, showToast } from '@core/ui';
 import { STRATEGY_PRESETS } from '@game/roulette';
 import { href, navigate } from '../../router';
@@ -19,6 +19,7 @@ import {
   saveDefinition,
   saveStrategy,
 } from '../Define/data';
+import { RenameExperiment } from '../RenameExperiment';
 import { Layouts, editHref } from './Layouts';
 import { LayoutPage } from './LayoutPage';
 import './library.css';
@@ -118,6 +119,10 @@ export function Library({ query }: ScreenProps) {
   const [definitions, setDefinitions] = useState<DefinitionRecord[] | null>(null);
   const [runs, setRuns] = useState<RunMeta[] | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  // A rename bumps `updatedAt`, so the row can move when the list reloads; moving it drops focus.
+  // Put focus back on that row's Rename button once the reloaded list renders.
+  const refocus = useRef<{ id: string; name: string } | null>(null);
   const version = useStore(libraryVersion, (v) => v);
   const edit = useEditPage(tab, query);
 
@@ -151,6 +156,17 @@ export function Library({ query }: ScreenProps) {
     };
   }, [version]);
 
+  useEffect(() => {
+    const want = refocus.current;
+    const rec = want && definitions?.find((d) => d.id === want.id);
+    // Wait for the reload that carries the new name; the list before it is stale.
+    if (renaming || !want || !rec || experimentName(rec) !== want.name) return;
+    refocus.current = null;
+    const btn = document.getElementById(`rename-${want.id}`);
+    if (btn && (document.activeElement === document.body || document.activeElement === null))
+      btn.focus();
+  }, [definitions, renaming]);
+
   const q = text.trim().toLowerCase();
   const matches = (...parts: (string | undefined)[]) =>
     q === '' || parts.some((p) => p?.toLowerCase().includes(q));
@@ -172,10 +188,10 @@ export function Library({ query }: ScreenProps) {
   );
   const shownDefs = (definitions ?? []).filter(
     (d) =>
-      matches(d.definition.name, d.id, ...(d.definition.tags ?? [])) &&
+      matches(experimentName(d), d.id, ...(d.definition.tags ?? [])) &&
       (tag === null || (d.definition.tags ?? []).includes(tag)),
   );
-  const defName = new Map((definitions ?? []).map((d) => [d.id, d.definition.name]));
+  const defName = new Map((definitions ?? []).map((d) => [d.id, experimentName(d)]));
   const shownRuns = (runs ?? []).filter((r) =>
     matches(defName.get(r.definitionId), r.runId, r.status),
   );
@@ -193,10 +209,11 @@ export function Library({ query }: ScreenProps) {
   const duplicateDefinition = async (d: DefinitionRecord) => {
     const taken = new Set((definitions ?? []).map((x) => x.id));
     let n = 1;
-    let copy = { ...d.definition, name: `Copy of ${d.definition.name}`.slice(0, 120) };
+    const shown = experimentName(d);
+    let copy = { ...d.definition, name: `Copy of ${shown}`.slice(0, 120) };
     while (taken.has(await definitionId(copy))) {
       n++;
-      copy = { ...d.definition, name: `Copy ${n} of ${d.definition.name}`.slice(0, 120) };
+      copy = { ...d.definition, name: `Copy ${n} of ${shown}`.slice(0, 120) };
     }
     await saveDefinition(copy, { derivedFrom: d.id });
     showToast(`Definition duplicated as ${copy.name}`);
@@ -340,7 +357,7 @@ export function Library({ query }: ScreenProps) {
                 {shownDefs.map((d) => (
                   <li key={d.id} class="lib-row">
                     <a class="row-link" href={href(`/define/${d.id}`)}>
-                      <span class="row-title">{d.definition.name}</span>
+                      <span class="row-title">{experimentName(d)}</span>
                       <span class="row-sub">
                         {d.definition.strategy.name} ·{' '}
                         {d.definition.run.sessions.toLocaleString('en-US')} sessions ·{' '}
@@ -350,16 +367,23 @@ export function Library({ query }: ScreenProps) {
                     </a>
                     <div class="lib-actions">
                       <Button
+                        onClick={() => setRenaming({ id: d.id, name: experimentName(d) })}
+                        aria-label={`Rename ${experimentName(d)}`}
+                        id={`rename-${d.id}`}
+                      >
+                        Rename
+                      </Button>
+                      <Button
                         onClick={() => void duplicateDefinition(d)}
-                        aria-label={`Duplicate ${d.definition.name}`}
+                        aria-label={`Duplicate ${experimentName(d)}`}
                       >
                         Duplicate
                       </Button>
                       <Button
                         variant="danger"
-                        aria-label={`Delete ${d.definition.name}`}
+                        aria-label={`Delete ${experimentName(d)}`}
                         onClick={() =>
-                          setPending({ kind: 'definition', id: d.id, name: d.definition.name })
+                          setPending({ kind: 'definition', id: d.id, name: experimentName(d) })
                         }
                       >
                         Delete
@@ -413,6 +437,14 @@ export function Library({ query }: ScreenProps) {
         )}
       </Tabs>
 
+      {renaming ? (
+        <RenameExperiment
+          id={renaming.id}
+          name={renaming.name}
+          onClose={() => setRenaming(null)}
+          onRenamed={(name) => (refocus.current = { id: renaming.id, name })}
+        />
+      ) : null}
       {pending ? (
         <Sheet open title={`Delete ${pending.kind}?`} onClose={() => setPending(null)}>
           <p>

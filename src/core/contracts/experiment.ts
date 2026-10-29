@@ -87,6 +87,18 @@ export interface DefinitionRecord {
   createdAt: string;
   updatedAt: string;
   derivedFrom?: DefinitionId;
+  /**
+   * What the UI shows instead of `definition.name` once the experiment is renamed. Metadata only:
+   * `definition` is never edited, so `id` stays the hash of `definition`. Absent = use
+   * `definition.name`; renaming back to `definition.name` clears it.
+   */
+  displayName?: string;
+  /**
+   * ISO time of the last rename, set on every rename including rename-back (which clears
+   * `displayName` but keeps this as a tombstone: "the name was reset at this time"). The newer
+   * value wins when two copies of a record are merged.
+   */
+  displayNameAt?: string;
   origin: 'user' | 'preset' | 'link' | 'import' | 'gallery';
   runIds: string[];
 }

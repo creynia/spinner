@@ -480,6 +480,26 @@ interface Backend {
 
 The memory backend implements this with `Map`s and `structuredClone` on put/get, so tests catch aliasing bugs. The same suite runs against both backends (fake-indexeddb is not needed if the architecture spike prefers the memory one in node; otherwise `fake-indexeddb` is a dev dependency).
 
+### 9.2a Renaming an experiment
+
+An experiment is a `DefinitionRecord`; its runs point at it by `definitionId`. Definitions are content-addressed and
+immutable: `id === sha256(definition)`, name included. A rename (`Repo.renameDefinition`) is metadata: it sets the
+optional `record.displayName` and `updatedAt` and never touches `record.definition`. So the id, `runKey`, `simKey` and
+run ids do not change and the stored definition still hashes to its id. Renaming back to `definition.name` clears
+`displayName`. Names are trimmed, non-empty, at most 120 characters; duplicates are allowed.
+
+Every rename also sets `displayNameAt` (ISO time). Renaming back removes `displayName` but keeps `displayNameAt` as a
+tombstone ("reset at this time"), so merging copies of a record can tell a reset from "never renamed". Run files carry
+both fields; when the definition already exists locally, the newer `displayNameAt` wins on import (a timed side beats an
+untimed one; with no times, local wins), even when the run itself is already stored.
+
+Run meta stores no name. Every screen shows `experimentName(rec)` (`displayName ?? definition.name`), resolved live
+through the record (`loadRun` returns the record's `displayName` beside the definition), so there is no snapshot to
+update. Run files carry `displayName` as an optional field beside the unchanged `definition`; the importer hashes
+`definition` as before and keeps `displayName`. A file keeps the name it had when exported.  Definition files and share links carry the shown name
+as `definition.name` (they are drafts: importing one makes a new definition). Define's "save as new" writes the typed
+name into `definition.name` with no `displayName`; renaming a saved record from Define sets `displayName` only.
+
 ### 9.3 Opening and fallback (prior-art policy)
 
 `openStore()` **never throws**. It tries `indexedDB.open(name, 1)` with a 4 s timeout. On a `SecurityError`, an `InvalidStateError`, a missing `indexedDB`, the timeout, or a `VersionError` (the stored DB is newer: "data from a newer version of the app, update to see it"), it returns the memory backend with `persistent: false`. It does not delete or overwrite anything it cannot read.

@@ -3,7 +3,12 @@
 import { useState } from 'preact/hooks';
 import type { RunData } from '../../contracts/run';
 import { fanChart } from '../../analysis';
-import { encodeShareLink, exportDefinitionFile, hasCompression } from '../../experiment';
+import {
+  encodeShareLink,
+  experimentName,
+  exportDefinitionFile,
+  hasCompression,
+} from '../../experiment';
 import { formatDollarsExact } from '../../money';
 import { encodeRunBundle, runFileName, summariesCsv } from '../../store';
 import { Button, Card, Toggle } from '../kit';
@@ -58,7 +63,9 @@ export function ExportPanel({ data, baseUrl }: ExportPanelProps) {
   const [trim, setTrim] = useState(false);
   const [status, setStatus] = useState('');
   const [link, setLink] = useState('');
-  const name = data.definition.name;
+  const name = experimentName(data);
+  // Definition files and share links are drafts: they carry the shown name as `definition.name`.
+  const shown = { ...data.definition, name };
   const runId = data.meta.runId;
   const gz = hasCompression();
   const partial = data.sessions < data.meta.sessions;
@@ -93,11 +100,11 @@ export function ExportPanel({ data, baseUrl }: ExportPanelProps) {
     );
   const def = () =>
     run('definition.json', () =>
-      save('definition.json', exportDefinitionFile(data.definition), 'application/json'),
+      save('definition.json', exportDefinitionFile(shown), 'application/json'),
     );
   const share = () =>
     run('share link', async () => {
-      const r = await encodeShareLink(data.definition);
+      const r = await encodeShareLink(shown);
       if ('tooLong' in r) {
         setLink('');
         setStatus('This definition is too long for a link. Download definition.json instead.');

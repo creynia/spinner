@@ -251,7 +251,11 @@ test('sweep the chip value: $5 / $25 / $100', async ({ page, guard }) => {
   await runAndWait(page);
 
   await page.goto('./?e2e#/sweep/new');
-  await page.locator('#sw-base').selectOption({ label: 'Chip sweep base' });
+  const baseValue = await page
+    .locator('#sw-base option', { hasText: /^Chip sweep base/ })
+    .first()
+    .getAttribute('value');
+  await page.locator('#sw-base').selectOption(baseValue);
   await page.locator('#sw-path').selectOption({ label: 'Stage flat: chip value (now 500)' });
   await page.locator('#sw-values').fill('500, 2500, 10000');
   await screenCheck(page, guard, 'sweep form');

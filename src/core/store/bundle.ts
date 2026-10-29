@@ -38,6 +38,7 @@ import {
   type TypedArray,
 } from './columns';
 import { decodeArray, defaultEncoding, encodeArray, type EncodedArray } from './codec';
+import { sanitizeImportedName, type StoredRunData } from './definitions';
 import { resultsDigest } from './digest';
 
 export const APP_ID = 'spinner';
@@ -54,6 +55,10 @@ export interface RunBundleV1 {
   game: { id: string; version: string };
   definitionId: string;
   definition: NormalizedDefinition;
+  /** Set when the experiment was renamed: shown instead of `definition.name`; not hashed. */
+  displayName?: string;
+  /** ISO time of the last rename (a tombstone when `displayName` is absent). */
+  displayNameAt?: string;
   meta: {
     runId: string;
     createdAt: string;
@@ -227,6 +232,7 @@ export async function buildRunBundle(
   opts: { trimForGallery?: boolean } = {},
 ): Promise<RunBundleV1> {
   const { meta } = data;
+  const { displayName, displayNameAt } = data as StoredRunData;
   const digest = meta.resultsDigest ?? (await resultsDigest(data));
   let out = data;
   let trimmed = trimInfoOf(meta);
@@ -247,6 +253,8 @@ export async function buildRunBundle(
     game: { id: meta.gameId, version: meta.gameVersion },
     definitionId: meta.definitionId,
     definition: out.definition,
+    ...(displayName && displayName !== out.definition.name ? { displayName } : {}),
+    ...(displayNameAt ? { displayNameAt } : {}),
     meta: {
       runId: meta.runId,
       createdAt: meta.createdAt,
@@ -416,6 +424,8 @@ async function parseBundle(
   } catch (e) {
     return fail(e instanceof DefinitionFormatError ? e.message : 'file damaged: definition');
   }
+  // a bad name or time is dropped, never fatal: the definition and the results are still good
+  const nameMeta = sanitizeImportedName(b.displayName, b.displayNameAt);
   if ((await hashDefinition(definition)) !== b.definitionId)
     fail('file damaged: definitionId does not match');
 
@@ -537,9 +547,13 @@ async function parseBundle(
       ...(m.trimmed ? { trimInfo: m.trimmed } : {}),
     },
   };
-  const data: RunData = {
+  const data: StoredRunData = {
     meta,
     definition,
+    ...(nameMeta.displayName !== undefined && nameMeta.displayName !== definition.name
+      ? { displayName: nameMeta.displayName }
+      : {}),
+    ...(nameMeta.displayNameAt !== undefined ? { displayNameAt: nameMeta.displayNameAt } : {}),
     sessions,
     summary,
     checkpoints: { schedule: Int32Array.from(b.schedule), equity },

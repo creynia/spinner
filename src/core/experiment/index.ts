@@ -35,6 +35,7 @@ export {
   normalizeDefinition,
   type StrategyHooks,
 } from './normalize';
+export { experimentName } from './names';
 export {
   decodeShareLink,
   encodeShareLink,

@@ -1,12 +1,17 @@
 // Loading a stored run for the results screens: one cache, the table maximum, run names.
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { RunData } from '@core/contracts/run';
 import { getCoreRepo, tableMaxFor } from '../../services/runs';
+import { useStore } from '../../state/store';
+import { libraryVersion } from '../Define/data';
 
 export { tableMaxFor };
 
 const cache = new Map<string, RunData>();
 const CACHE_MAX = 6;
+
+// A library write (a rename) can change what a cached run shows, so drop the cache.
+libraryVersion.subscribe(() => cache.clear());
 
 export function clearRunCache(runId?: string): void {
   if (runId) cache.delete(runId);
@@ -33,9 +38,13 @@ export type RunDataState =
 
 export function useRunData(runId: string | undefined): RunDataState {
   const [s, setS] = useState<RunDataState>({ state: 'loading' });
+  // A library write (a rename) reloads in place: no loading flash, so the open tab survives.
+  const version = useStore(libraryVersion, (v) => v);
+  const shown = useRef<string | undefined>(undefined);
   useEffect(() => {
     let live = true;
-    setS({ state: 'loading' });
+    if (shown.current !== runId) setS({ state: 'loading' });
+    shown.current = runId;
     if (!runId) {
       setS({ state: 'missing' });
       return;
@@ -48,7 +57,7 @@ export function useRunData(runId: string | undefined): RunDataState {
     return () => {
       live = false;
     };
-  }, [runId]);
+  }, [runId, version]);
   return s;
 }
 

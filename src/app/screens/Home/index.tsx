@@ -1,5 +1,6 @@
 // Home (architecture.md §6.3): New experiment, resumable runs, recent runs with one-line verdicts,
 // recent definitions, presets, Import. No disclaimer here (decisions #11).
+import { experimentName } from '@core';
 import { useEffect } from 'preact/hooks';
 import { Button, Card, Chip, EmptyState } from '@core/ui';
 import { STRATEGY_PRESETS } from '@game/roulette';
@@ -103,7 +104,7 @@ export function Home() {
                 {defs.map((d) => (
                   <li>
                     <a class="row-link" href={href(`/define/${d.id}`)}>
-                      <span class="row-title">{d.definition.name}</span>
+                      <span class="row-title">{experimentName(d)}</span>
                       <span class="row-sub">
                         {d.definition.session.maxRounds.toLocaleString('en-US')} rounds ·{' '}
                         {d.definition.run.sessions.toLocaleString('en-US')} sessions
