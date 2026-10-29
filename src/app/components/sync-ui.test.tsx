@@ -160,6 +160,21 @@ describe('status text', () => {
     expect(b.getByText('Library › Runs').getAttribute('href')).toBe('#/library');
   });
 
+  it('erased from another device (token still valid): the card offers Sign in, which calls signIn()', () => {
+    spies.signIn.mockClear();
+    expect(
+      statusView({ ...base, state: 'error', error: { code: 'erased', message: '' } }).action,
+    ).toBe('signin');
+    setStatus({ state: 'error', error: { code: 'erased', message: '' } });
+    const a = render(<Account />);
+    expect(a.container.textContent).toContain('removed from another device');
+    // not a dead end any more: a way to start over, next to Sign out and Remove…
+    expect(a.queryByText('Start syncing')).toBeNull();
+    fireEvent.click(a.getByText('Sign in'));
+    expect(spies.signIn).toHaveBeenCalledTimes(1);
+    expect(a.getByText('Sign out')).toBeTruthy();
+  });
+
   it('syncing and waiting-run offer no action', () => {
     setStatus({ state: 'syncing', progress: { phase: 'push', done: 1, total: 2 } });
     const { container, queryByText } = render(<Account />);

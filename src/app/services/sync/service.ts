@@ -196,7 +196,7 @@ export interface SyncService {
     signal?: AbortSignal,
   ): Promise<{ done: number; skipped: number }>;
   evictRun(runId: string): Promise<void>;
-  /** Library → Runs "Re-upload": writes this device's copy over the run's file in Drive. */
+  /** Library → Runs "Re-upload": repairs a damaged or missing bundle from this device's copy. */
   reuploadRun(runId: string): Promise<'uploaded' | 'unchanged'>;
   markConflictsRead(): void;
   /** Reads Drive's account/storage and the device list into their stores (throttled). */
