@@ -118,6 +118,17 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
   - Every run list shows remote-only runs, and Sweep reuses remote runs.
 - **Sign-in gate:** after the sign-in package, the owner tests "Test Google sign-in" on the Pixel before the sync service is built. Android standalone defaults to the redirect flow. The token is kept in localStorage until it expires.
   - **The test sign-in does not revoke at the end** (it differs from sync.md D23's wording). A revoked grant would bring the account chooser back, so "Expire token now" then Reconnect could not be tested. The session stays, and "End test" (`endTestSignIn`) revokes instead.
+  - **The gate passed (2026-10-29).** The owner tested on a Pixel 11 Pro:
+    - in a Chrome tab: the popup, and Reconnect after expiry;
+    - in the installed app: the redirect round trip, and Reconnect after expiry.
+    - So the GIS popup stays the default in a browser tab, the redirect stays the default for an installed Android app (R1 closed), and WP-S5a (the sync service) went ahead.
+- **Sync service (WP-S5a):**
+  - **First sync.** Sign-in never starts syncing by itself. It binds the account and shows the first-sync sheet (after any active run ends); the choice runs `begin('merge' | 'replace')`. "Not now" closes the sheet and stays signed in with sync off; the Account card's "Start syncing" returns to it. A failed `begin` (offline, or Replace with nothing readable in Drive: "Nothing was deleted") keeps the sheet open with the reason and leaves sync off.
+  - **One sync-lock cycle at a time.** Each cycle, first sync and erase takes the Web Lock `spinner:sync` with `ifAvailable`. A tab that does not get it reports `busy` and the Account card says "Syncing in another tab". Dirty marks made in any tab are broadcast; every visible tab debounces on them and skips its cycle if the marks are already pushed. A hidden tab never syncs.
+  - **Backoff from outcome plus code.** `offline` waits for the `online` event; `error` with code `network` (a `rate` or `server` error) backs off 30 s, 1 m, 2 m, 5 m, 10 m, then 15 m (`Retry-After` wins, at most 1 h); `quota` (`drive-full`) and `local-full` retry hourly; `access-removed`, `newer-layout`, `account-mismatch` and `erased` stop automatic syncing until the user acts; Sync now resets the backoff.
+  - **Sign out keeps** local data, `syncIndex` and the account binding, so the same account comes back without a sheet; a different account asks first (§7.10).
+  - **Download policy default** is `onOpen` when the browser says mobile, or the screen is under 768 px with a coarse pointer, and `all` otherwise. `local-full` switches it to `onOpen`.
+  - **Additive service surface** (the S0 signatures are unchanged): `signIn({ mode })` for the "Sign in in this window" fallback, and the stores `signInError`, `signInRedirectOffer`, `firstSyncError`, `syncElsewhere` and `syncDeviceId`. `window.__spinnerSync` (e2e) now exposes only the stores and `expireTokenForTest`.
 - **Integrity:** every download is verified (file sha256, recomputed `resultsDigest`, definition-id rehash) before one atomic write. Newer-format data is kept, never dropped.
 - **Downloads:** every run is uploaded. Phones download a run when it is opened; desktops download everything in the background.
 - **No `CORE_VERSION` bump.** The only contract change to existing types is the additive `RunMeta.synced?`.

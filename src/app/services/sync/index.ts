@@ -23,8 +23,8 @@ import { game } from '../game';
 import {
   clearVerdictCache,
   describeRun,
-  DRY_RUN_TAG,
   isActive,
+  isDryRunDefinition,
   onRunChange,
   refreshRuns,
 } from '../runs';
@@ -92,7 +92,7 @@ function realEnv(): SyncEnv {
     isRunActive: isActive,
     onRunChange,
     describeRun,
-    isDryRun: (def) => def.definition.tags?.includes(DRY_RUN_TAG) === true,
+    isDryRun: isDryRunDefinition,
     refresh: refreshAfter,
     notify: (message, action) => void showToast(message, action ? { action } : {}),
     async storageEstimate() {

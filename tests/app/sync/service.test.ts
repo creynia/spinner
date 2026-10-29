@@ -296,7 +296,7 @@ describe('two tabs', () => {
     const runA = a.svc.syncNow();
     await until(() => state(a) === 'syncing', 'tab A syncing');
     await putLayout(b, 'lay-from-b', '5'); // edited in tab B while A holds the lock
-    await flush();
+    await advance(500, 100); // B's marks are broadcast (batched) while A is still mid-cycle
     expect(b.stores.syncStatus.get().pending).toBeGreaterThan(0);
     release();
     await runA;
@@ -854,6 +854,17 @@ describe('Drive info and runs', () => {
     const ids = t.stores.syncDevices.get().map((d) => d.id);
     expect(ids).toContain(t.stores.syncDeviceId.get());
     expect(ids).toContain(b.stores.syncDeviceId.get());
+  });
+  it('the card-open refresh is not throttled away when a cycle moved data since the last read', async () => {
+    const t = await synced();
+    await t.svc.refreshAccountInfo(true);
+    expect(t.stores.syncDevices.get()).toHaveLength(1);
+    const b = makeTab(otherDevice(world));
+    await signInAndSync(b);
+    await t.svc.syncNow(); // pulls B's library: the info is stale now
+    await advance(6000, 1000); // past the 5 s throttle between reads
+    await t.svc.refreshAccountInfo(); // no force: stale info is read again, a fresh one is not
+    await until(() => t.stores.syncDevices.get().length === 2, 'both devices listed');
   });
   it('remote runs: none yet; downloads report offline and needs-auth', async () => {
     const t = await synced();

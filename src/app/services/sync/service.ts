@@ -61,7 +61,10 @@ export const SIGNIN_KEY = 'spinner:sync:signin';
 export const DOWNLOAD_ALL_HEADROOM = 1.5;
 /** A mirrored "syncing" from another tab expires after this long without news. */
 const ELSEWHERE_TTL_MS = 90_000;
-const INFO_THROTTLE_MS = 60_000;
+/** Drive info is read at most this often... */
+const INFO_THROTTLE_MS = 5_000;
+/** ...and, when no cycle moved data, at most this often. */
+const INFO_TTL_MS = 60_000;
 const STATUS_THROTTLE_MS = 300;
 
 export type Trigger =
@@ -198,7 +201,16 @@ export interface SyncService {
 }
 
 type TimerName =
-  'dirty' | 'backoff' | 'start' | 'interval' | 'runDone' | 'continue' | 'expiry' | 'elsewhere';
+  | 'info'
+  | 'flushDirty'
+  | 'dirty'
+  | 'backoff'
+  | 'start'
+  | 'interval'
+  | 'runDone'
+  | 'continue'
+  | 'expiry'
+  | 'elsewhere';
 
 type Phase =
   'idle' | 'syncing' | 'offline' | 'backoff' | 'drive-full' | 'local-full' | 'needs-auth' | 'error';
@@ -256,6 +268,9 @@ export function createSyncService(env: SyncEnv): SyncService {
   let lastInfoAt = 0;
   /** The Account card has asked for the Drive info in this page: keep it fresh after cycles. */
   let infoWanted = false;
+  /** A cycle moved data since the info was read: the next read must not be skipped. */
+  let infoStale = true;
+  let lastSeenSig = '';
   let lastStatusPost = 0;
   let clockSkewDevice: string | undefined;
   let lastRemoteErr: RemoteError | null = null;
@@ -493,6 +508,12 @@ export function createSyncService(env: SyncEnv): SyncService {
       const notices = (await metaOf<ConflictNotice[]>('conflicts')) ?? [];
       unread = unreadOf(notices);
       stores.conflictNotices.set([...notices].reverse());
+      // another device wrote its library (even an empty one): the device list is out of date
+      const seenSig = JSON.stringify((await metaOf<Record<string, string>>('seen')) ?? {});
+      if (seenSig !== lastSeenSig) {
+        lastSeenSig = seenSig;
+        infoStale = true;
+      }
       const last = await metaOf<string>('last');
       hasLast = last !== undefined;
       if (last) lastSynced = last;
@@ -527,8 +548,12 @@ export function createSyncService(env: SyncEnv): SyncService {
 
   const ready = (): boolean => !stopped && !disabled && !!raw && prefs.enabled && hasLast && !halt;
 
+  /** Fire-and-forget for timers and events: a failure here must never be an unhandled rejection. */
+  const fireCycle = (reason: Trigger, force = false): void =>
+    void cycle(reason, force).catch(() => undefined);
+
   function schedule(k: 'backoff' | 'continue', ms: number, reason: Trigger): void {
-    after(k, ms, () => void cycle(reason));
+    after(k, ms, () => void fireCycle(reason));
   }
 
   async function verifyAccount(token: string): Promise<boolean> {
@@ -569,7 +594,7 @@ export function createSyncService(env: SyncEnv): SyncService {
     const res = await running;
     if (rerun) {
       rerun = false;
-      if (res.outcome === 'ok') after('continue', 0, () => void cycle('continue'));
+      if (res.outcome === 'ok') after('continue', 0, () => void fireCycle('continue'));
     }
     return res;
   }
@@ -670,7 +695,8 @@ export function createSyncService(env: SyncEnv): SyncService {
     publish();
     env.channel.post({ type: 'changed', from: env.tabId, kinds: r.changed });
     // the Account card shows Drive's usage and the devices: keep them fresh once it has asked
-    if (ok && infoWanted && (r.pushed > 0 || r.applied > 0)) void refreshInfo(false);
+    if (ok && (r.pushed > 0 || r.applied > 0)) infoStale = true;
+    if (ok && infoWanted && infoStale) void refreshInfo(false);
     // Edits made while the cycle ran stay marked: look again.
     if (ok && dirtyDuringCycle && reason !== 'start') scheduleDirty();
   }
@@ -708,11 +734,8 @@ export function createSyncService(env: SyncEnv): SyncService {
     if (code === 'network') {
       const retryAfter = lastRemoteErr?.retryAfterMs;
       const delay = Math.min(
-        backoffDelay(attempts, {
-          retryAfterMs: retryAfter,
-          random: rnd,
-        }),
-        Math.max(MAX_RETRY_AFTER_MS, 0),
+        backoffDelay(attempts, { retryAfterMs: retryAfter, random: rnd }),
+        MAX_RETRY_AFTER_MS,
       );
       attempts++;
       retryAt = env.now() + delay;
@@ -769,15 +792,25 @@ export function createSyncService(env: SyncEnv): SyncService {
     });
   }
 
+  /** Dirty marks made here, batched: one broadcast and one pending-count read per quiet 250 ms. */
+  const dirtyBatch = new Set<SyncKey>();
   function onLocalDirty(keys: SyncKey[]): void {
     if (disabled || !prefs.enabled) return;
     pending = Math.max(pending, 1);
-    env.channel.post({ type: 'dirty', from: env.tabId, keys });
+    if (!holding) publish();
+    for (const k of keys) dirtyBatch.add(k);
     if (running) dirtyDuringCycle = true;
-    void pendingCount().then((n) => {
-      pending = n;
-      if (!holding) publish();
-    });
+    if (!timers.flushDirty) {
+      after('flushDirty', 250, () => {
+        const batch = [...dirtyBatch];
+        dirtyBatch.clear();
+        env.channel.post({ type: 'dirty', from: env.tabId, keys: batch });
+        void pendingCount().then((n) => {
+          pending = n;
+          if (!holding) publish();
+        });
+      });
+    }
     scheduleDirty();
   }
 
@@ -840,11 +873,11 @@ export function createSyncService(env: SyncEnv): SyncService {
       owedDirty = false;
       scheduleDirty();
     }
-    if (env.now() - lastCycleAt > VISIBLE_AFTER_MS) void cycle('visible');
+    if (env.now() - lastCycleAt > VISIBLE_AFTER_MS) void fireCycle('visible');
   }
   function onOnline(): void {
     if (phase === 'offline') phaseError = undefined;
-    void cycle('online');
+    void fireCycle('online');
   }
   function onOffline(): void {
     if (ready() && !running) {
@@ -857,7 +890,7 @@ export function createSyncService(env: SyncEnv): SyncService {
   function startTimers(): void {
     if (!timers.interval && ready()) {
       timers.interval = setInterval(() => {
-        if (env.visible()) void cycle('interval');
+        if (env.visible()) void fireCycle('interval');
       }, INTERVAL_MS);
     }
   }
@@ -886,7 +919,7 @@ export function createSyncService(env: SyncEnv): SyncService {
       // another tab signed in or the redirect returned: pick up where we left off
       if (phase === 'needs-auth' && !signingIn) {
         phase = 'idle';
-        if (ready()) after('continue', 0, () => void cycle('reconnect'));
+        if (ready()) after('continue', 0, () => void fireCycle('reconnect'));
       }
     }
     publish();
@@ -1316,7 +1349,7 @@ export function createSyncService(env: SyncEnv): SyncService {
     else startTimers();
     publish();
     env.channel.post({ type: 'changed', from: env.tabId, kinds: [] });
-    if (renamed && ready()) void cycle('prefs');
+    if (renamed && ready()) void fireCycle('prefs');
   }
 
   // ---- runs on Drive
@@ -1458,8 +1491,18 @@ export function createSyncService(env: SyncEnv): SyncService {
   async function refreshInfo(force: boolean): Promise<void> {
     await started;
     if (disabled || !raw || !prefs.enabled || !auth.source.current() || !online()) return;
-    if (!force && env.now() - lastInfoAt < INFO_THROTTLE_MS) return;
+    if (!force && !infoStale && env.now() - lastInfoAt < INFO_TTL_MS) return;
+    if (!force && env.now() - lastInfoAt < INFO_THROTTLE_MS) {
+      // too soon after the last read: read again just after the throttle
+      after(
+        'info',
+        INFO_THROTTLE_MS - (env.now() - lastInfoAt) + 50,
+        () => void refreshInfo(false),
+      );
+      return;
+    }
     lastInfoAt = env.now();
+    infoStale = false;
     try {
       const about = await remote().about();
       const est = await env.storageEstimate().catch(() => ({ usage: 0, quota: null }));
@@ -1512,7 +1555,8 @@ export function createSyncService(env: SyncEnv): SyncService {
           waitingFirst = null;
           void go();
         }
-        if (e.status === 'done') after('runDone', RUN_DONE_DELAY_MS, () => void cycle('run-done'));
+        if (e.status === 'done')
+          after('runDone', RUN_DONE_DELAY_MS, () => void fireCycle('run-done'));
       }),
     );
     const doc = typeof document === 'undefined' ? undefined : document;
@@ -1528,7 +1572,7 @@ export function createSyncService(env: SyncEnv): SyncService {
     publish();
     if (prefs.enabled) {
       startTimers();
-      if (auth.source.current()) after('start', START_DELAY_MS, () => void cycle('start'));
+      if (auth.source.current()) after('start', START_DELAY_MS, () => void fireCycle('start'));
     } else if (signInMarked() && auth.source.current()) {
       // back from the redirect (the installed app): finish the sign-in that started it
       clearSignInMark();

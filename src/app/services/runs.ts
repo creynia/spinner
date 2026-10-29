@@ -93,6 +93,10 @@ async function loadVerdict(meta: RunMeta, sink: RunSink | null): Promise<RunVerd
 /** Dry runs (Define's one-session Watch runs) carry this tag on their definition. */
 export const DRY_RUN_TAG = 'dry-run';
 
+/** True for a dry run's definition: it never reaches Drive (`isDryRun` of the sync engine). */
+export const isDryRunDefinition = (d: Pick<DefinitionRecord, 'definition'>): boolean =>
+  d.definition.tags?.includes(DRY_RUN_TAG) === true;
+
 /** Ids of definitions tagged as dry runs; their runs stay out of lists and pickers. */
 export async function dryRunDefinitionIds(): Promise<Set<string>> {
   const defs = await (await getCoreRepo()).listDefinitions();
