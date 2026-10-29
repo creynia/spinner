@@ -118,20 +118,33 @@ describe.each([false, true])('GC (idb %s)', (idb) => {
       for (const d of [w.a, w.b]) expect((await records(d, 'group')).has('g')).toBe(false);
     }
 
-    it('stays while a peer still holds the key live or has not written since', async () => {
+    it('stays while a peer still holds the key live', async () => {
       const w = await deleted();
-      skew += 31 * DAY;
       // a peer that still holds the live g the tombstone replaced (it never saw the delete)
-      const old = w.live0;
-      const f = await forgeLib(w.inner, C, [old], new Date(Date.now()).toISOString());
+      await forgeLib(w.inner, C, [w.live0], new Date(Date.now()).toISOString());
+      skew += 31 * DAY;
       await settle(w.a, w.b);
       await gc(w.a);
       await stillDeleted(w);
-      // the peer lacks the key but wrote BEFORE the tombstone: it may not have seen it yet
-      await w.inner.delete(f.id);
-      await forgeLib(w.inner, C, [], new Date(Date.now() - 45 * DAY).toISOString());
+    });
+
+    it("trusts the lib file's server-side modifiedTime, not the peer's writtenAt: a peer whose clock runs ahead and has not pulled the tombstone keeps it", async () => {
+      const w = await deleted();
+      // C wrote its lib right when the tombstone was made, but its clock says it is far in the future
+      const ahead = new Date(Date.now() + 90 * DAY).toISOString();
+      await forgeLib(w.inner, C, [], ahead);
+      skew += 31 * DAY;
+      await settle(w.a, w.b); // A and B keep their libs fresh; C does not write again
       await gc(w.a);
       await stillDeleted(w);
+      // once C has really written after the tombstone (a day or more later), it counts
+      skew += 2 * DAY;
+      const c = (await w.inner.list()).find((f) => f.name === LIB_NAME(C))!;
+      await w.inner.delete(c.id);
+      await forgeLib(w.inner, C, [], new Date(Date.now()).toISOString());
+      await settle(w.a, w.b);
+      await gc(w.a);
+      expect(keysIn(await libOf(w.inner, A))).not.toContain('group:g');
     });
 
     it('a single device drops it after 30 days (no peer has to acknowledge)', async () => {

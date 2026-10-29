@@ -67,3 +67,7 @@ All "before v1" items are closed by #17 and #18:
 - The shell's db adapter (`src/app/services/db.ts`) is not switched to core-store's `createRepo`, because core's Repo has no `deleteAll` or definitions export. Add those to core-store first (#7, #18).
 - The `vite build` warning "configLoader: 'native' … unsupported" comes from `build/vite-plugin-gallery.ts` importing extensionless `src/core` modules. Fix it before Vite makes native the default: add extensions, bundle the analyzer, or set `configLoader: 'runner'` (#18 review).
 - e2e: `sw-update.spec.ts` skips the phone-360 and phone-landscape projects; `resume.spec.ts` relies on 100k sessions to outlast the reload (#18).
+
+## Sync follow-ups
+
+- **Delete on remote-only run rows** (S6). The spec does not define how a stub whose results are not on this device is tombstoned, so those rows have no Delete. Recommended answer is in `open-questions.md` row 23: write a tombstone for `run:<id>` behind a "Delete from all devices" confirm. Pick it up when the owner confirms the default.

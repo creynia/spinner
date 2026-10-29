@@ -4,6 +4,11 @@ Status: design spike, ready for reconciliation into `decisions.md`.
 Companion docs: `game.md` (roulette plugin), `strategy.md` (strategy language),
 `harness-data-analysis.md` (seeds, workers, stores, metrics).
 
+**Sync.** Google Drive sync across devices is designed in [`sync.md`](sync.md): the store v3
+tracking tables, `src/core/sync` (the engine) and `src/app/services/sync` (auth, Drive client, the
+app service). Its contracts, batons and work packages are listed there (§4, §13), and the
+rules above (import boundaries, file ownership) apply to it unchanged.
+
 **What this doc owns:** the stack and every tooling config, the repo layout and
 the import boundaries, the app shell (routes, screens, phone and desktop
 layouts), the chart approach, PWA and service worker, CI and Pages, the

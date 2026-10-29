@@ -3,53 +3,13 @@
 // B opens it in Analyze (RemoteRunCard) which downloads it, "Remove download" returns it to remote,
 // and Compare on B with A's remote run downloads it first, then compares. Screenshots go to
 // test-results/s5b/. axe runs and no state may overflow horizontally.
-import type { Browser, BrowserContext, Page } from '@playwright/test';
-import { expect, screenCheck, test, type Guard } from './helpers';
-import { createFakeDrive, routeDrive, type FakeDrive } from './fakes/drive-server';
+import type { Page } from '@playwright/test';
+import { expect, screenCheck, test } from './helpers';
+import { createFakeDrive, routeDrive } from './fakes/drive-server';
+import { secondDevice as newDevice } from './fakes/route';
 import { isFakeToken, routeGis } from './fakes/gis-fake';
 
 const status = (page: Page) => page.locator('[data-sync-status]');
-
-async function secondDevice(
-  browser: Browser,
-  use: Record<string, unknown>,
-  baseURL: string,
-  drive: FakeDrive,
-): Promise<{ page: Page; ctx: BrowserContext; guard: Guard }> {
-  const ctx = await browser.newContext({
-    baseURL,
-    ...(use.viewport ? { viewport: use.viewport as { width: number; height: number } } : {}),
-    ...(use.userAgent ? { userAgent: use.userAgent as string } : {}),
-    ...(use.isMobile !== undefined ? { isMobile: use.isMobile as boolean } : {}),
-    ...(use.hasTouch !== undefined ? { hasTouch: use.hasTouch as boolean } : {}),
-  });
-  await routeDrive(ctx, drive);
-  await routeGis(ctx);
-  const page = await ctx.newPage();
-  const errors: string[] = [];
-  await page.addInitScript(() => {
-    // device B behaves like a phone: runs download when opened, not all at once (sync.md §7.12)
-    Object.defineProperty(navigator, 'userAgentData', {
-      value: { mobile: true, platform: 'Android' },
-      configurable: true,
-    });
-    document.addEventListener('securitypolicyviolation', (e) => {
-      console.error(`CSP violation: ${e.violatedDirective} blocked ${e.blockedURI}`);
-    });
-  });
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  page.on('pageerror', (e) => errors.push(e.message));
-  const guard: Guard = {
-    async check(state) {
-      const [scroll, client] = await page.evaluate<[number, number]>(
-        '[document.documentElement.scrollWidth, document.documentElement.clientWidth]',
-      );
-      expect(scroll, `device B ${state}: horizontal overflow`).toBeLessThanOrEqual(client);
-      expect(errors, `device B ${state}: console errors`).toEqual([]);
-    },
-  };
-  return { page, ctx, guard };
-}
 
 /** Starts a small real run and waits until it is done (the Library links to Analyze then). */
 async function finishedRun(page: Page, opts: string): Promise<string> {
@@ -97,7 +57,7 @@ test('a run made on device A is remote on B: Analyze downloads it, Remove downlo
     .toBe(true);
 
   // ---- device B: signs in to that Drive; the run is listed, not downloaded
-  const b = await secondDevice(browser, info.project.use, baseURL!, drive);
+  const b = await newDevice(browser, info.project.use, baseURL!, drive, { phone: true });
   const bp = b.page;
   await bp.goto('./?e2e#/');
   await signIn(bp, 'Merge both (recommended)').catch(async () => {

@@ -11,7 +11,10 @@
 //   - no key whose maximal entries are all tombstones is alive on any device;
 //   - no (device, counter) is minted twice, across restarts;
 //   - zero copies of copies;
-//   - the devices converge to identical stores, with no dirty marks left.
+//   - the devices converge to identical stores, with no dirty marks left;
+//   - every device's LAST user op on a key is accounted for: it minted an entry (an edit or a
+//     tombstone), or it was a no-op against the index base. A mark the engine wrongly dropped
+//     without a mint would otherwise go unnoticed (S2b review).
 import { expect, vi } from 'vitest';
 import type { RunData } from '../../contracts/run';
 import type { RemoteStore, RunStub } from '../../contracts/sync';
@@ -185,12 +188,26 @@ async function run(o: Opts) {
       else superseded.add(sig(e));
     }
   }
+  /** The last user op of each (device, key): what it wrote, what the index held, how much was minted. */
+  const lastOp = new Map<string, UserOp>();
+  async function note(d: Dev, kind: SyncKind, id: string, hash: string | null): Promise<void> {
+    const key = `${kind}:${id}`;
+    const base = (await indexOf(d)).get(key)?.entry;
+    const noop =
+      hash === null
+        ? base === undefined || base.deleted === true
+        : base !== undefined && base.deleted !== true && base.hash === hash;
+    lastOp.set(`${d.id}|${key}`, { dev: d.id, key, hash, noop, mintedAt: mintedEntries.length });
+  }
   async function put(d: Dev, kind: SyncKind, id: string, rec: unknown): Promise<void> {
-    supersede(d, kind, id, await hashOf(kind, rec));
+    const hash = await hashOf(kind, rec);
+    supersede(d, kind, id, hash);
+    await note(d, kind, id, hash);
     await userPut(d, kind, rec);
   }
   async function del(d: Dev, kind: SyncKind, id: string): Promise<void> {
     supersede(d, kind, id, null);
+    await note(d, kind, id, null);
     await userDel(d, kind, id);
   }
   async function runOp(j: number): Promise<void> {
@@ -324,7 +341,7 @@ async function run(o: Opts) {
   }
 
   // Edits that are still unpushed cannot have been superseded by anything this device has seen: each
-  // must exist in the end, as itself or as a copy (model.test.mts's "last local value").
+  // must exist in the end, as itself or as a copy (the merge model's "last local value").
   const unsynced: { kind: 'group' | 'strategy' | 'layout'; body: string; at: string }[] = [];
   for (const d of devs) {
     for (const m of await marks(d)) {
@@ -369,7 +386,19 @@ async function run(o: Opts) {
     phantoms,
     unsynced,
     superseded,
+    userOps: [...lastOp.values()],
   };
+}
+
+/** A user write (`hash`) or delete (`null`) as the fuzz made it. */
+interface UserOp {
+  dev: string;
+  key: string;
+  hash: string | null;
+  /** The index base already held this content (or nothing to delete): no mint is owed. */
+  noop: boolean;
+  /** `mintedEntries.length` just before the op: mints from here on may account for it. */
+  mintedAt: number;
 }
 
 const keyOf = (e: SyncEntry): string => e.key;
@@ -378,8 +407,18 @@ const runDef = (rec: Record<string, unknown> | undefined): boolean =>
   /^Run def/.test(String((rec?.definition as { name?: string } | undefined)?.name ?? ''));
 
 export async function check(o: Opts, label: string): Promise<number> {
-  const { devs, inner, spy, violations, results, mintedEntries, phantoms, unsynced, superseded } =
-    await run(o);
+  const {
+    devs,
+    inner,
+    spy,
+    violations,
+    results,
+    mintedEntries,
+    phantoms,
+    unsynced,
+    superseded,
+    userOps,
+  } = await run(o);
   const where = `${label} seed ${o.seed}`;
   // the engine itself never fails, apart from the faults the test injects
   for (const r of results) {
@@ -388,6 +427,32 @@ export async function check(o: Opts, label: string): Promise<number> {
     }
   }
   expect(violations, `${where}: vv values minted twice`).toEqual([]);
+
+  // every device's last user op on a key is a mint or a no-op against the base
+  for (const u of userOps) {
+    if (u.noop) continue;
+    const mine = mintedEntries
+      .slice(u.mintedAt)
+      .some(
+        (e) =>
+          e.key === u.key &&
+          hlcDevice(e.hlc) === u.dev &&
+          (u.hash === null ? e.deleted === true : e.deleted !== true && e.hash === u.hash),
+      );
+    // The same content (or a tombstone) from elsewhere is the same edit: the engine saw a no-op
+    // against a base it had pulled in the meantime (a remote tombstone for a delete, the same
+    // body from another device with a small pool). Bodies are unique otherwise, so a put needs
+    // its own mint. A delete is weaker: any tombstone of the key will do.
+    const elsewhere = [...spy.published, ...mintedEntries].some(
+      (e) =>
+        e.key === u.key &&
+        (u.hash === null ? e.deleted === true : e.deleted !== true && e.hash === u.hash),
+    );
+    expect(
+      mine || elsewhere,
+      `${where} user ${u.hash === null ? 'delete' : 'write ' + u.hash.slice(0, 8)} of ${u.key} on ${u.dev} was dropped without a mint`,
+    ).toBe(true);
+  }
 
   // converge, no marks left
   const first = await dump(devs[0]!);
