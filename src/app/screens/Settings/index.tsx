@@ -24,10 +24,15 @@ import { checkForUpdates } from '../../services/updates';
 import { useStore } from '../../state/store';
 import { refreshLibrary } from '../../state/library';
 import type { ScreenProps } from '../types';
+import { Account } from './Account';
 
 /** Decisions #11, verbatim. Shown only here (and in the README). */
 export const DISCLAIMER =
   'Every roulette bet has a house edge; no betting system changes it. This is a simulation for understanding risk, not advice. If gambling is a problem for you, seek help (e.g. a national gambling helpline).';
+
+/** Sync.md §10, verbatim, after the disclaimer. */
+export const SYNC_ABOUT =
+  'Google Drive sync (optional). If you sign in with Google, spinner keeps a copy of your library and runs in a hidden app folder in your own Google Drive. spinner can see only that folder, never your other files, and there is no spinner server: your data goes only between this browser and Google. To remove it, use Settings → Account → Remove my data from Drive, or Google Drive → Settings → Manage apps → spinner → Delete hidden app data. You can revoke access at myaccount.google.com/permissions.';
 
 const THEMES = [
   { value: 'system', label: 'System' },
@@ -139,6 +144,8 @@ export function Settings({ query }: ScreenProps) {
     <>
       <h1>Settings</h1>
 
+      <Account query={query} />
+
       <Card title="Appearance">
         <Segmented<Theme>
           label="Theme"
@@ -194,9 +201,10 @@ export function Settings({ query }: ScreenProps) {
           <Button onClick={() => void exportDefinitions()}>Export definitions</Button>
           <Button onClick={() => fileRef.current?.click()}>Import definitions</Button>
           <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-            Delete all data
+            Delete everything on this device
           </Button>
         </div>
+        <p class="muted">Your Google Drive copy is kept.</p>
         <input
           ref={fileRef}
           class="visually-hidden"
@@ -245,9 +253,14 @@ export function Settings({ query }: ScreenProps) {
           <dd>MIT</dd>
         </dl>
         <p data-disclaimer>{DISCLAIMER}</p>
+        <p data-sync-about>{SYNC_ABOUT}</p>
       </section>
 
-      <Sheet open={confirmDelete} title="Delete all data?" onClose={() => setConfirmDelete(false)}>
+      <Sheet
+        open={confirmDelete}
+        title="Delete everything on this device?"
+        onClose={() => setConfirmDelete(false)}
+      >
         <p>
           This removes every definition and run stored on this device. Export first if you want to
           keep them.
