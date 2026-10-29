@@ -160,12 +160,12 @@ export function Library({ query }: ScreenProps) {
     const want = refocus.current;
     const rec = want && definitions?.find((d) => d.id === want.id);
     // Wait for the reload that carries the new name; the list before it is stale.
-    if (!want || !rec || experimentName(rec) !== want.name) return;
+    if (renaming || !want || !rec || experimentName(rec) !== want.name) return;
     const btn = document.getElementById(`rename-${want.id}`);
     if (!btn) return;
     refocus.current = null;
     if (document.activeElement === document.body || document.activeElement === null) btn.focus();
-  }, [definitions]);
+  }, [definitions, renaming]);
 
   const q = text.trim().toLowerCase();
   const matches = (...parts: (string | undefined)[]) =>
