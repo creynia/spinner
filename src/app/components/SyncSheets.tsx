@@ -20,6 +20,7 @@ function counts(c: FirstSyncPreview['local']): { lib: string; runs: string } {
 
 export function FirstSyncSheet() {
   const p = useStore(sync.firstSyncPrompt, (v) => v);
+  const error = useStore(sync.firstSyncError, (v) => v);
   const [confirmReplace, setConfirmReplace] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -34,6 +35,12 @@ export function FirstSyncSheet() {
     void sync.chooseFirstSync(c).finally(() => setBusy(false));
   };
   const local = counts(p.local);
+  // Why it did not start (e.g. Replace found nothing readable in Drive: "Nothing was deleted").
+  const errorLine = error ? (
+    <p class="sync-warn" role="alert" data-first-sync-error>
+      {error}
+    </p>
+  ) : null;
   if (p.remoteEmpty) {
     return (
       <Sheet open title="Upload this device's library?" onClose={() => choose('cancel')}>
@@ -43,6 +50,7 @@ export function FirstSyncSheet() {
           {local.runs}
         </p>
         <p class="muted">Runs upload in the background.</p>
+        {errorLine}
         <div class="sync-sheet-actions">
           <Button variant="primary" disabled={busy} onClick={() => choose('merge')}>
             Start syncing
@@ -61,6 +69,7 @@ export function FirstSyncSheet() {
           Everything on this device ({local.lib}, {local.runs}) will be replaced with what is in
           your Google Drive. Anything only on this device is lost.
         </p>
+        {errorLine}
         <div class="sync-sheet-actions">
           <Button variant="danger" disabled={busy} onClick={() => choose('replace')}>
             Replace this device's data
@@ -94,6 +103,7 @@ export function FirstSyncSheet() {
           {local.runs}
         </p>
       </div>
+      {errorLine}
       <div class="sync-sheet-actions">
         <Button variant="primary" disabled={busy} onClick={() => choose('merge')}>
           Merge both (recommended)

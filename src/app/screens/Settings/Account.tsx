@@ -23,6 +23,10 @@ export function Account({ query }: { query?: URLSearchParams }) {
   const notices = useStore(sync.conflictNotices, (v) => v);
   const devices = useStore(sync.syncDevices, (v) => v);
   const about = useStore(sync.syncAbout, (v) => v);
+  const deviceId = useStore(sync.syncDeviceId, (v) => v);
+  const elsewhere = useStore(sync.syncElsewhere, (v) => v);
+  const signInError = useStore(sync.signInError, (v) => v);
+  const redirectOffer = useStore(sync.signInRedirectOffer, (v) => v);
 
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
@@ -33,6 +37,11 @@ export function Account({ query }: { query?: URLSearchParams }) {
   const [dl, setDl] = useState<{ done: number; total: number } | null>(null);
   const dlAbort = useRef<AbortController | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Drive's usage and the device list are read when the card opens (throttled by the service).
+  useEffect(() => {
+    void sync.refreshAccountInfo();
+  }, []);
 
   useEffect(() => {
     if (query?.get('account') === '1') cardRef.current?.scrollIntoView?.();
@@ -120,22 +129,48 @@ export function Account({ query }: { query?: URLSearchParams }) {
     );
 
   const reconnectPrimary = st.pending > 0;
+  const startable = signedIn && st.state === 'off' && !disabled;
+  /** The popup failed in a way the redirect fixes (§5.1); the redirect reloads the app. */
+  const redirectButton = redirectOffer ? (
+    <Button variant="primary" onClick={() => void sync.signIn({ mode: 'redirect' })}>
+      Sign in in this window
+    </Button>
+  ) : null;
+  const errorLine = signInError ? (
+    <p class="sync-status attention" role="alert" data-sign-in-error>
+      <span class="glyph">
+        <SyncGlyph tone="attention" />
+      </span>
+      <span>{signInError}</span>
+    </p>
+  ) : null;
   const action = (() => {
     switch (view.action) {
       case 'sync':
         return (
-          <Button variant="primary" disabled={syncing} onClick={() => void sync.syncNow()}>
-            Sync now
+          <Button
+            variant="primary"
+            disabled={syncing || elsewhere}
+            onClick={() => void sync.syncNow()}
+          >
+            {elsewhere ? 'Syncing in another tab' : 'Sync now'}
           </Button>
         );
       case 'reconnect':
         return (
-          <Button
-            variant={reconnectPrimary ? 'primary' : 'secondary'}
-            onClick={() => void sync.reconnect()}
-          >
-            Reconnect
-          </Button>
+          <>
+            <Button
+              variant={reconnectPrimary ? 'primary' : 'secondary'}
+              onClick={() => void sync.reconnect()}
+            >
+              Reconnect
+            </Button>
+            {redirectOffer ? (
+              <Button onClick={() => void sync.signIn({ mode: 'redirect' })}>
+                Sign in in this window
+              </Button>
+            ) : null}
+          </>
         );
       case 'signin':
         return (
@@ -162,8 +197,12 @@ export function Account({ query }: { query?: URLSearchParams }) {
             >
               Manage Google storage
             </a>
-            <Button variant="primary" onClick={() => void sync.syncNow()}>
-              Sync now
+            <Button
+              variant="primary"
+              disabled={syncing || elsewhere}
+              onClick={() => void sync.syncNow()}
+            >
+              {elsewhere ? 'Syncing in another tab' : 'Sync now'}
             </Button>
           </>
         );
@@ -201,15 +240,30 @@ export function Account({ query }: { query?: URLSearchParams }) {
               Use your library and runs on all your devices. spinner keeps them in a hidden folder
               in your own Google Drive.
             </p>
+            {errorLine}
             <div class="actions">
-              <Button
-                variant="primary"
-                disabled={auth.state === 'redirecting'}
-                onClick={() => void sync.signIn()}
-              >
-                {auth.state === 'redirecting' ? 'Opening Google…' : 'Sign in with Google'}
-              </Button>
+              {redirectOffer ? (
+                redirectButton
+              ) : (
+                <Button
+                  variant="primary"
+                  disabled={auth.state === 'redirecting'}
+                  onClick={() => void sync.signIn()}
+                >
+                  {auth.state === 'redirecting' ? 'Opening Google…' : 'Sign in with Google'}
+                </Button>
+              )}
+              {redirectOffer ? (
+                <Button onClick={() => void sync.signIn({ mode: 'popup' })}>
+                  Try the pop-up again
+                </Button>
+              ) : null}
             </div>
+            {redirectOffer ? (
+              <p class="muted" data-redirect-note>
+                The app reloads after signing in; nothing is lost.
+              </p>
+            ) : null}
             <p class="muted">spinner sees only its own folder, never your other files.</p>
             <details>
               <summary class="link-tap">How sync works</summary>
@@ -262,7 +316,15 @@ export function Account({ query }: { query?: URLSearchParams }) {
                 Rename
               </Button>
             </p>
+            {errorLine}
             {action ? <div class="actions">{action}</div> : null}
+            {startable ? (
+              <div class="actions">
+                <Button variant="primary" onClick={() => void sync.signIn()}>
+                  Start syncing
+                </Button>
+              </div>
+            ) : null}
 
             <dl class="facts" data-sync-usage>
               <dt>Google Drive</dt>
@@ -331,7 +393,7 @@ export function Account({ query }: { query?: URLSearchParams }) {
                   {devices.map((d) => (
                     <li key={d.id}>
                       <strong>{d.name}</strong>
-                      {d.name === prefs.deviceName ? ' (this device)' : ''}
+                      {deviceId !== '' && d.id === deviceId ? ' (this device)' : ''}
                       <br />
                       <span class="muted">
                         Synced {relativeTime(d.lastSyncedAt)} · spinner {d.appVersion}

@@ -220,6 +220,8 @@ describe('Drive client against the fake Drive', () => {
       [reply(401), 'auth'],
       [reply(403, 'userRateLimitExceeded'), 'rate'],
       [reply(403, 'rateLimitExceeded'), 'rate'],
+      [reply(403, 'dailyLimitExceeded'), 'rate'],
+      [reply(403, 'sharingRateLimitExceeded'), 'rate'],
       [reply(429), 'rate'],
       [reply(403, 'storageQuotaExceeded'), 'quota'],
       [reply(403, 'insufficientScopes'), 'forbidden'],

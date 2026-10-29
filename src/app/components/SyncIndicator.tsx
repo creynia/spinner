@@ -1,6 +1,5 @@
 // SyncIndicator (sync.md §8.2): the cloud glyph in the TopBar (phones) and the NavRail (from
-// 768 px). Hidden while sync is `off`. Also owns the shared status model the Account card uses, and
-// the `?e2e` test hook that lets a browser test drive the sync stores (the S0 service is inert).
+// 768 px). Hidden while sync is `off`. Also owns the shared status model the Account card uses.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { relativeTime } from '@core/ui';
 import type { AuthState, SyncStatus } from '@core';
@@ -212,9 +211,13 @@ export function SyncGlyph({ tone }: { tone: StatusTone }) {
   );
 }
 
-/** Announces only entering or leaving an attention state; silent on first render. */
+/**
+ * Announces entering or leaving an attention state, including when the indicator first mounts
+ * already in one (it renders nothing while sync is `off`, so that is how it appears). Silent when
+ * it mounts in a calm state.
+ */
 function AttentionAnnouncer({ attention }: { attention: boolean }) {
-  const prev = useRef(attention);
+  const prev = useRef(false);
   const [msg, setMsg] = useState('');
   useEffect(() => {
     if (prev.current === attention) return;
@@ -260,17 +263,4 @@ export function SyncIndicator({ place }: SyncIndicatorProps) {
       {place === 'top' ? <AttentionAnnouncer attention={v.attention} /> : null}
     </>
   );
-}
-
-// Test hook: lets e2e drive the (inert, S0) sync stores. Same gate as `window.__spinner`.
-declare global {
-  interface Window {
-    __spinnerSync?: typeof sync;
-  }
-}
-if (
-  typeof window !== 'undefined' &&
-  (import.meta.env.MODE !== 'production' || location.search.includes('e2e'))
-) {
-  window.__spinnerSync = sync;
 }

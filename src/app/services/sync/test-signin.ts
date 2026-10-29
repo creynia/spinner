@@ -9,21 +9,27 @@ import { createDriveStore } from './drive';
 import { GOOGLE_CLIENT_ID } from './config';
 import { getAuth } from './flow';
 import { loadGis } from './gis';
+import { STATE_TTL_MS } from './redirect';
 
-/** Set while a redirect round trip for the gate is under way (survives the page leaving). */
+/**
+ * Set while a redirect round trip for the gate is under way (survives the page leaving). It holds
+ * the time it was set and expires like the OAuth state record (10 min), so a cancelled redirect
+ * does not show a stale result later.
+ */
 const GATE_KEY = 'spinner:sync:gate';
 
 const flag = {
-  get(): boolean {
+  get(now: number = Date.now()): boolean {
     try {
-      return localStorage.getItem(GATE_KEY) === '1';
+      const at = Number(localStorage.getItem(GATE_KEY));
+      return Number.isFinite(at) && at > 0 && now - at < STATE_TTL_MS;
     } catch {
       return false;
     }
   },
   set(on: boolean): void {
     try {
-      if (on) localStorage.setItem(GATE_KEY, '1');
+      if (on) localStorage.setItem(GATE_KEY, String(Date.now()));
       else localStorage.removeItem(GATE_KEY);
     } catch {
       // storage blocked

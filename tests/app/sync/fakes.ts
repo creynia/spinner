@@ -10,6 +10,7 @@ export interface FakeDriveOptions {
   pageSize?: number;
   fault?: (method: string, url: URL) => Response | undefined;
   email?: string;
+  permissionId?: string;
   omitRange?: boolean;
 }
 export interface FakeDrive {

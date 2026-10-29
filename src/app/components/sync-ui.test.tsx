@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/preac
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SyncState, SyncStatus } from '@core';
 import type * as SyncService from '../services/sync';
+import type * as Gis from '../services/sync/gis';
 
 const cfg = vi.hoisted(() => ({ id: '' }));
 vi.mock('../services/sync/config', () => ({
@@ -30,6 +31,13 @@ const spies = vi.hoisted(() => ({
   downloadRun: vi.fn(),
   remoteRun: vi.fn(() => Promise.resolve(null)),
   downloadAllRemote: vi.fn(() => Promise.resolve({ done: 2, skipped: 0 })),
+  refreshAccountInfo: vi.fn(() => Promise.resolve()),
+}));
+// happy-dom cannot load accounts.google.com: any path that reaches the GIS loader gets a stub, so
+// the Settings tests never print "Failed to load script" (sync.md §11.2).
+vi.mock('../services/sync/gis', async (orig) => ({
+  ...(await orig<typeof Gis>()),
+  loadGis: vi.fn(() => Promise.reject(new Error('GIS is stubbed in unit tests'))),
 }));
 vi.mock('../services/sync', async (orig) => ({
   ...(await orig<typeof SyncService>()),
@@ -217,19 +225,21 @@ describe('Account card', () => {
     await waitFor(() => expect(spies.downloadAllRemote).toHaveBeenCalled());
   });
 
-  it('lists devices, marking this one', () => {
+  it('lists devices, marking this one by device id (two devices may share a name)', () => {
     setStatus({ state: 'idle' });
-    void act(() =>
+    void act(() => {
+      sync.syncDeviceId.set('b');
       sync.syncDevices.set([
         { id: 'a', name: 'Pixel 11', lastSyncedAt: new Date().toISOString(), appVersion: '1.0' },
-        { id: 'b', name: 'Laptop', lastSyncedAt: '2020-01-01T00:00:00Z', appVersion: '1.0' },
-      ]),
-    );
+        { id: 'b', name: 'Pixel 11', lastSyncedAt: '2020-01-01T00:00:00Z', appVersion: '1.0' },
+      ]);
+    });
     const { container } = render(<Account />);
     const items = [...container.querySelectorAll('[data-sync-devices] li')];
     expect(items).toHaveLength(2);
-    expect(items[0]!.textContent).toContain('(this device)');
-    expect(items[1]!.textContent).not.toContain('(this device)');
+    expect(items[0]!.textContent).not.toContain('(this device)');
+    expect(items[1]!.textContent).toContain('(this device)');
+    void act(() => sync.syncDeviceId.set(''));
   });
 
   it('conflict notices open in a sheet and are marked read', () => {
@@ -419,6 +429,79 @@ describe('SyncIndicator (§8.2)', () => {
     expect(live()).toBe('Sync needs your attention');
     setStatus({ state: 'idle' });
     expect(live()).toBe('Sync is working again');
+  });
+});
+
+describe('SyncIndicator: announcer on a direct mount into attention', () => {
+  it('announces when it first appears already in an attention state', () => {
+    setStatus({ state: 'error', error: { code: 'access-removed', message: 'x' } });
+    const { container } = render(<SyncIndicator place="top" />);
+    expect(container.querySelector('[data-sync-live]')!.textContent).toBe(
+      'Sync needs your attention',
+    );
+  });
+  it('stays silent when it first appears in a calm state', () => {
+    setStatus({ state: 'idle' });
+    const { container } = render(<SyncIndicator place="top" />);
+    expect(container.querySelector('[data-sync-live]')!.textContent).toBe('');
+  });
+});
+
+describe('Account card: S5a additions', () => {
+  it('a failed popup switches the button to "Sign in in this window"', () => {
+    void act(() => sync.syncAuth.set({ state: 'signed-out' }));
+    cfg.id = 'cid';
+    setStatus({ state: 'off' });
+    void act(() => {
+      sync.signInError.set('The sign-in window was blocked.');
+      sync.signInRedirectOffer.set(true);
+    });
+    const { container, getByRole } = render(<Account />);
+    expect(container.querySelector('[data-sign-in-error]')!.textContent).toContain('blocked');
+    expect(container.querySelector('[data-redirect-note]')!.textContent).toContain(
+      'nothing is lost',
+    );
+    expect(container.textContent).not.toContain('Sign in with Google');
+    fireEvent.click(getByRole('button', { name: 'Sign in in this window' }));
+    expect(spies.signIn).toHaveBeenCalledWith({ mode: 'redirect' });
+    fireEvent.click(getByRole('button', { name: 'Try the pop-up again' }));
+    expect(spies.signIn).toHaveBeenLastCalledWith({ mode: 'popup' });
+    void act(() => {
+      sync.signInError.set(null);
+      sync.signInRedirectOffer.set(false);
+    });
+  });
+  it('Sync now says "Syncing in another tab" while another tab holds the lock', () => {
+    setStatus({ state: 'idle' });
+    void act(() => sync.syncElsewhere.set(true));
+    const { getByRole } = render(<Account />);
+    const b = getByRole('button', { name: 'Syncing in another tab' });
+    expect((b as HTMLButtonElement).disabled).toBe(true);
+    void act(() => sync.syncElsewhere.set(false));
+  });
+  it('signed in but off (a past test sign-in): "Start syncing" starts the sign-in flow', () => {
+    setStatus({ state: 'off' });
+    const { getByRole } = render(<Account />);
+    fireEvent.click(getByRole('button', { name: 'Start syncing' }));
+    expect(spies.signIn).toHaveBeenCalledTimes(1);
+  });
+  it('the first-sync sheet shows why it did not start', () => {
+    void act(() => {
+      sync.firstSyncPrompt.set({
+        remoteEmpty: false,
+        remote: { experiments: 1, strategies: 0, layouts: 0, runs: 0, runBytes: 0 },
+        local: { experiments: 1, strategies: 0, layouts: 0, runs: 0, runBytes: 0 },
+      });
+      sync.firstSyncError.set(
+        'Drive has no readable library to replace this device with. Nothing was deleted.',
+      );
+    });
+    const { container } = render(<SyncSheets />);
+    expect(document.body.querySelector('[data-first-sync-error]')!.textContent).toContain(
+      'Nothing was deleted',
+    );
+    void container;
+    void act(() => sync.firstSyncError.set(null));
   });
 });
 

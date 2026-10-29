@@ -25,6 +25,8 @@ export interface FakeDriveOptions {
   /** Fault injection: called before each request; return a Response to short-circuit it. */
   fault?: (method: string, url: URL) => Response | undefined;
   email?: string;
+  /** Drive `permissionId` (the stable account id the sync binds to); default one fixed id. */
+  permissionId?: string;
   /** Resumable `308` answers leave out the `Range` header (a CORS-hidden header; sync.md §15 R3). */
   omitRange?: boolean;
 }
@@ -132,7 +134,7 @@ export function createFakeDrive(o: FakeDriveOptions = {}) {
         user: {
           emailAddress: opts.email ?? 'owner@example.com',
           displayName: 'Owner',
-          permissionId: '0123456789',
+          permissionId: opts.permissionId ?? '0123456789',
         },
         storageQuota: { limit: String(15 * 2 ** 30), usage: String(usage) },
       });

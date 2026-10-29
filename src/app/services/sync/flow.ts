@@ -2,6 +2,7 @@
 // redirect" state. Click handlers only: a popup needs a user gesture.
 import { createStore, type Store } from '../../state/store';
 import { GOOGLE_CLIENT_ID } from './config';
+import { isActive } from '../runs';
 import { createDriveStore } from './drive';
 import { AuthError, createGisTokenSource, type GisTokenSource } from './gis';
 
@@ -50,6 +51,8 @@ export function getAuth(): AuthFlow {
   shared ??= createAuthFlow(
     createGisTokenSource({
       clientId: GOOGLE_CLIENT_ID,
+      // the redirect navigates away and would pause a run (sync.md §5.1)
+      isRunActive: () => isActive(),
       whoAmI: async (token) => (await createDriveStore({ token: () => token }).about()).email,
     }),
   );

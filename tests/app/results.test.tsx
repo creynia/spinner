@@ -18,9 +18,12 @@ import { Run } from '@app/screens/Run';
 import { liveCharts, livePrefix } from '@app/screens/Run/useRun';
 import { setPoolForTests } from '@app/services/pool';
 import {
+  describeRun,
   dryRunDefinitionIds,
   getController,
+  isActive,
   getCoreRepo,
+  isDryRunDefinition,
   listRecentRuns,
   startRun,
 } from '@app/services/runs';
@@ -84,6 +87,20 @@ describe('Run to Analyze with a real roulette run', () => {
     expect(an.container.querySelector('[data-metric="p-bust"]')).not.toBeNull();
   }, 60_000);
 
+  it('describeRun gives the stub verdict of a done run, and isActive is false once it ends', async () => {
+    const runId = await startRun(definition);
+    const c = getController(runId)!;
+    expect(isActive(runId)).toBe(true);
+    while (c.status !== 'done') await c.settled();
+    await waitFor(() => expect(isActive()).toBe(false));
+    const meta = (await (await getCoreRepo()).getRun(runId))!;
+    const v = await describeRun(meta);
+    const listed = (await listRecentRuns(50)).find((r) => r.runId === runId)!.verdict!;
+    expect(v).toEqual(listed);
+    expect(v?.n).toBe(meta.completedSessions);
+    expect(await describeRun({ ...meta, status: 'paused' })).toBeUndefined();
+  }, 60_000);
+
   it('a run id that does not exist shows a not-found card, not a crash', async () => {
     const r = render(<Run params={{ runId: 'nope-nope' }} query={new URLSearchParams()} />);
     await waitFor(() => expect(r.container.querySelector('[role=alert]')).not.toBeNull());
@@ -116,6 +133,8 @@ describe('Run to Analyze with a real roulette run', () => {
     while (c.status !== 'done') await c.settled();
     expect((await listRecentRuns(50)).some((r) => r.runId === runId)).toBe(false);
     expect((await dryRunDefinitionIds()).size).toBeGreaterThan(0);
+    const defs = await (await getCoreRepo()).listDefinitions();
+    expect(defs.filter(isDryRunDefinition).map((d) => d.definition.name)).toEqual(['Dry']);
     expect((await (await getCoreRepo()).loadRun(runId))?.meta.status).toBe('done');
   }, 60_000);
 
