@@ -22,6 +22,9 @@ Each entry is a question the orchestrator would have asked the user. It was deci
 | 16 | 2026-10-29 | sync.md | Upload big runs on mobile data? | Always. | Wi-Fi only (the browser can't reliably tell). | Low. |
 | 17 | 2026-10-29 | sync.md | Leave the Google app in Testing mode or publish it? | Testing, with you as the only test user (you'll see "Google hasn't verified this app" → Continue). | Publish to production. | Low. |
 | 18 | 2026-10-29 | sync.md | Encrypt Drive data with a passphrase? | No in v1 (appDataFolder is private to this app and your account). | Add passphrase encryption. | Medium. |
+| 19 | 2026-10-29 | sync.md rev 2 | How are conflicted copies named? | "<name> (<device name>)"; you set each device's name in Settings → Account. | "(conflict, <date>)". | Low. |
+| 20 | 2026-10-29 | sync.md rev 2 | How do other devices' paused, cancelled or errored runs show? | Greyed, with their status; you can't open their full data. | Hide them. | Low. |
+| 21 | 2026-10-29 | sync.md rev 2 | Do conflicted strategy copies need action? | No. Definitions carry their own strategy, so runs are unaffected; tidy the Library when convenient. | Prompt to merge. | Low. |
 
 ## Checks only you can do
 

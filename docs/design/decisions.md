@@ -104,10 +104,19 @@ This file overrides every design doc under `docs/design/` and `PLAYBOOK.md`. Whe
   - IndexedDB stays the source of truth.
   - Change tracking wraps the store backend, with a dirty mark written in the same transaction.
   - DB v3 adds `syncIndex`, `syncDirty` and `syncMeta`, following the v2 upgrade discipline.
-- **Merge:** per-record last-writer-wins on a hybrid logical clock, with tombstones.
-  - Definitions are content-addressed and merge only metadata: `runIds` union and `displayName` LWW.
-  - Strategies and layouts that conflict keep both copies with a notice, and an edit beats a delete.
-  - Runs are written only by the device that made them.
+- **Merge (rev 2):**
+  - Each entry carries an HLC minted at edit time, a parent pointer `basis` and a per-key version vector.
+  - Entries in an ancestor chain take the descendant. Concurrent edits keep both: the loser becomes a deterministic conflicted copy "… (device)", with a notice. An edit beats a delete.
+  - A re-pull and recheck run just before each library-file write.
+  - Definitions are content-addressed. Their `runIds` merge as a sorted union, and `displayName` merges by `displayNameAt`.
+  - Compare and sweep groups are whole-record, never unioned.
+  - Merges preserve unknown keys.
+- **Runs:**
+  - Only done runs get bundles; paused, cancelled and errored runs sync as stubs.
+  - The same run imported on several devices (gallery or file) is one shared entry, uploaded once.
+  - Dry and benchmark runs are excluded.
+  - Every run list shows remote-only runs, and Sweep reuses remote runs.
+- **Sign-in gate:** after the sign-in package, the owner tests "Test Google sign-in" on the Pixel before the sync service is built. Android standalone defaults to the redirect flow. The token is kept in localStorage until it expires.
 - **Integrity:** every download is verified (file sha256, recomputed `resultsDigest`, definition-id rehash) before one atomic write. Newer-format data is kept, never dropped.
 - **Downloads:** every run is uploaded. Phones download a run when it is opened; desktops download everything in the background.
 - **No `CORE_VERSION` bump.** The only contract change to existing types is the additive `RunMeta.synced?`.
