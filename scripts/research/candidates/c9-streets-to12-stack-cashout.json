@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "id": "keeper-c9-streets-to12-cashout",
+  "name": "Keeper c9 + cash-out ($280 win, $2,460 loss)",
+  "game": "roulette",
+  "unit": 100,
+  "progressions": {
+    "q": {
+      "kind": "sequence",
+      "track": "round",
+      "onWin": "reset",
+      "onLoss": "advance",
+      "onCap": "stop",
+      "amounts": [
+        100, 200, 200, 300, 500, 700, 1100, 1600, 2400, 3600, 5400, 8100, 12200, 18300, 27400, 41100
+      ]
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "street:1-2-3",
+          "amount": {
+            "prog": "q"
+          }
+        },
+        {
+          "bet": "street:4-5-6",
+          "amount": {
+            "prog": "q"
+          },
+          "when": {
+            "cmp": [
+              {
+                "progStep": "q"
+              },
+              ">=",
+              1
+            ]
+          }
+        },
+        {
+          "bet": "street:7-8-9",
+          "amount": {
+            "prog": "q"
+          },
+          "when": {
+            "cmp": [
+              {
+                "progStep": "q"
+              },
+              ">=",
+              2
+            ]
+          }
+        },
+        {
+          "bet": "street:10-11-12",
+          "amount": {
+            "prog": "q"
+          },
+          "when": {
+            "cmp": [
+              {
+                "progStep": "q"
+              },
+              ">=",
+              3
+            ]
+          }
+        }
+      ],
+      "rules": [
+        {
+          "id": "stop-win",
+          "when": {
+            "cmp": ["net", ">=", 28000]
+          },
+          "then": [
+            {
+              "stop": "cash-out"
+            }
+          ]
+        },
+        {
+          "id": "stop-loss",
+          "when": {
+            "cmp": ["net", "<=", -245950]
+          },
+          "then": [
+            {
+              "stop": "loss-limit"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": "Table setup: needs a $1 outside minimum and a $1 inside minimum total (rules override limits.outside.min 100, limits.inside.minTotal 100, cents). EV is -2.70% of turnover; this is a skew trade, not an edge. c9 (streets 1-12, stacked) with in-strategy stops: stop when net is +$280 or -$2,459.50 (half the cap loss). Research ledger e7-c9-W20-SLhalf: median $286, mean -$46, CVaR5 -$3,210, P(win) 90.3% over 500 spins from $5,000."
+}
