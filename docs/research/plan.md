@@ -442,3 +442,23 @@ cycle-model median and P(no cap) (the screens matched them within 3 %); realized
 Screening verdict: H3's ceiling held in all four families (no 1 − cap rate above e^(−x)). Every
 cash-out and trailing rule lies on the frontier P(win) ≈ (1 − q)^(M/τ̄). The a1-family edge readings
 (z ≈ +2 to +2.7) share one seed's paths: one draw, to be checked on the holdouts.
+
+### 7.7 Edge oracle under clamping (`briefs/edge-check.md`)
+
+e4-dozen-x2-u5 gave realized edge −3.20 % (z −2.4) on the reporting seed, and other clamp-heavy reset
+ladders leaned negative. Chased as a potential bug. The runner now reports `edge.residual` from
+per-session residuals r = net + expected loss. That is the correct test; the old sd(net) version ran
+3–5 % narrow.
+
+| ladder | pooled residual z, seeds 101–110 (10 × 10,000) | ten-seed edge | mean | CVaR 5 % | bust |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| e4-dozen-x2-u5 | +0.67 | -2.66 % | -$645 | -$5,000 | 45.9 % |
+| e4-sixline-g | +0.95 | -2.64 % | -$753 | -$5,000 | 54.9 % |
+| e4-dozen-g | -0.27 | -2.72 % | -$913 | -$5,000 | 50.7 % |
+| flat-red control | -1.56 | -2.73 % | -$341 | -$1,490 | 0 % |
+
+Verdict: **noise, no bug.** `src/core/harness/session.ts` charges expected loss on the layout as
+placed after reconcile (clamped bets at the clamped amount; a bust round places nothing). The
+residual is therefore mean-zero under any stopping rule. Across all 57 committed rows recomputed,
+max |z| = 2.36, and same-seed rows count as one draw. Every realized edge in this file is
+consistent with −2.70 %.
