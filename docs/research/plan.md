@@ -281,3 +281,15 @@ What this already says:
   much.
 - **Not a result: a positive mean.** No row has one, none will, and a candidate in a later batch
   that shows one is a sampling fluke or a bug to chase down.
+
+### 7.1 Predictions for wave 0 (written before the runs, 2026-10-31)
+
+All rows: European wheel, 10,000 sessions, seed 20261031, realized edge −2.70 % within CI.
+q = (1 − p)^L, n½ = ln2/(q·p), P(no cap by S) = e^(−q·p·S).
+
+| spec | id | prediction |
+| --- | --- | --- |
+| e1-spread | red / red12+dozen3 13 / 25 straights $1 | mean −$337.84 each; per-spin SD $25.0 / $22.0 / $16.9; p10–p90 narrows in that order |
+| e3a-levels | L5…L10 ($5 unit, bankroll = 2^L − 1 units) | n½ 40 / 78 / 151 / 295 / 574 / 1117; median@500 < 0 for L ≤ 8, > 0 for L9 (P .55, marginal) and L10 (P .73), ≈ +$1,216 |
+| e3b-lengths | L8, L10 × S 250 / 1,000 / 2,000 | ahead-until ≈ min(S, n½), independent of S; median > 0 for L8-S250 (marginal), L10-S250, L10-S1000 (marginal) |
+| e7-mart | stop-win W = 5…100 units, onCap reset/stop, SL half ladder | P(win) .976 / .953 / .908 / .785 / .617; median = +W; reset ≈ stop; SL half: same P(win), CVaR 5 % ≈ −$3,200 |
