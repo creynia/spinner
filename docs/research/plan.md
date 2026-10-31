@@ -423,3 +423,22 @@ beat. Wide-coverage levels push a ladder below it. Score 1 − cap rate against 
 
 Expected verdict: stacking at moderate coverage ties Martingale-on-red-scaled ladders at equal B/u.
 Widening and widen-to-24 sit at or below the e^(−x) ceiling. Nothing has a positive mean.
+
+**E6 selection (screening seed 9001, 2,000 sessions).** These go to full size on the reporting seed
+20261031 and holdout seeds 1 and 2 (10,000 sessions each). Prediction for every seed = D6's
+cycle-model median and P(no cap) (the screens matched them within 3 %); realized edge −2.70 % within CI.
+
+| id | family | screen median | mean | CVaR 5 % | P(win) | predicted median / P(win) |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| b3-two-streets-l29 | stack | $1,708 | -$199 | -$4,481 | 63.0 % | $1,698 / .63 |
+| b1-street-l53 | stack | $1,697 | -$216 | -$4,806 | 63.1 % | $1,684 / .63 |
+| c8-sixlines-to18-stack | hybrid | $1,608 | -$334 | -$4,507 | 63.6 % | $1,602 / .64 |
+| c9-streets-to12-stack | hybrid | $1,548 | -$243 | -$4,820 | 67.8 % | $1,542 / .67 |
+| a1-streets-w27 | widen | $1,527 | -$221 | -$3,370 | 57.4 % | $1,503 / .55 |
+| d-b1-trail-j36 | cash-out | $1,603 | -$210 | -$4,806 | 64.7 % | $1,575 / .645 |
+| d-b1-stopwin30 | cash-out | $1,334 | -$96 | -$4,806 | 74.4 % | $1,333 / .73 |
+| d-c8-stopwin20 | cash-out | $200 | -$54 | -$4,507 | 94.6 % | $200 / .945 |
+
+Screening verdict: H3's ceiling held in all four families (no 1 − cap rate above e^(−x)). Every
+cash-out and trailing rule lies on the frontier P(win) ≈ (1 − q)^(M/τ̄). The a1-family edge readings
+(z ≈ +2 to +2.7) share one seed's paths: one draw, to be checked on the holdouts.
