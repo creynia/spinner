@@ -1,7 +1,10 @@
 # Research screen: design (WP D1)
 
 Status: design for wave B of `docs/research/app-plan.md` §6. Inputs: app-plan §1–§7, `docs/design/decisions.md`
-(wins over everything here), `architecture.md` §6–§7, the code cited in each section. Where this file and
+(wins over everything here), `architecture.md` §6–§7, the code cited in each section, and what wave A
+landed by commit 64bdd81: I1's scaffold (`index.tsx`, `chapters.tsx`, `research.css`, stub `content.ts`),
+T1's `data.json`/`data.ts`, T2's `ladderMath.ts`. Rows marked **I1b** are changes to the landed scaffold
+that must be made before wave B (§11 Q1). Where this file and
 app-plan.md disagree, this file is the later decision, except where `decisions.md` says otherwise. The
 conflicts it resolves are listed in §11.
 
@@ -29,20 +32,18 @@ edge.
 | More | first entry of `LINKS`: `{ path: '/research', label: 'Research', hint: 'What progressions can and cannot do' }` | `More/index.tsx` |
 | Nav | `'/research'` added to the More item's `also` | `Nav.tsx` |
 | Back / title | `parentOf('/research')` returns `'/more'` (`router.ts`, new `case 'research'`); TopBar `TITLES.research = 'Research'` | `router.ts`, `TopBar.tsx` |
-| Phone nav (< 768 px) | `<nav aria-label="Chapters" class="research-chips">`: one row of chips under the h1 and the intro, scrolling sideways inside its own container (`overflow-x: auto`; architecture §6.1 allows component scrollers). Not sticky | `.chip`, `.chips` (`kit.css`, `app.css`) |
-| Desktop nav (≥ 768 px) | `<nav aria-label="Chapters" class="research-toc">`: sticky ordered list on the left, numbered "0 Start here" … "9 Try it" with full titles | Nav.tsx: both navs render, CSS shows one |
-| Anchors | Section ids `research-<id>`, heading ids `research-<id>-h`. **No `href="#research-…"` links**: the hash router would read them as a route (`router.ts` `parseHash`) and `RouteBoundary key={hash}` would remount the screen. Every chapter link is `<a href="#/research?chapter=<id>">` whose click handler (no modifier keys) calls `preventDefault`, `history.replaceState(null, '', '#/research?chapter=<id>')` in try/catch, `scrollIntoView({ block: 'start', behavior })` and `h2.focus({ preventScroll: true })` | replaceState without remount: `Analyze/index.tsx:33-40` |
+| Phone nav (< 768 px) | landed: `<nav class="research-nav research-nav-chips" aria-label="Chapters">`, an `ol` of `a.chip` with the full chapter titles, one row scrolling sideways in its own container (architecture §6.1 allows component scrollers). Not sticky | `.chip` (`kit.css`) |
+| Desktop nav (≥ 768 px) | landed: `<nav class="research-nav research-nav-column" aria-label="Chapter list">`, sticky `ol` of `a.research-nav-link` | Nav.tsx: both navs render, CSS shows one |
+| Anchors | landed: section ids `chapter-<id>`, heading ids `chapter-<id>-h`. **No `href="#research-…"` links**: the hash router would read them as a route (`router.ts` `parseHash`) and `RouteBoundary key={hash}` would remount the screen. Every chapter link is `<a href="#/research?chapter=<id>">` (landed) whose click handler (**I1b**: the landed links have none, so each tap remounts the screen and resets the calculator) (no modifier keys) calls `preventDefault`, `history.replaceState(null, '', '#/research?chapter=<id>')` in try/catch, `scrollIntoView({ block: 'start', behavior })` and `h2.focus({ preventScroll: true })` | replaceState without remount: `Analyze/index.tsx:33-40` |
 | Initial deep link | on mount, a valid `query.get('chapter')` scrolls its section into view after one `requestAnimationFrame`, `behavior: 'auto'`, without moving focus | `Settings/index.tsx:86-88` |
-| Current chapter | an `IntersectionObserver` (`rootMargin: '0px 0px -60% 0px'`) sets `aria-current="location"` on the link of the topmost visible chapter, in both navs. Skipped when `IntersectionObserver` is undefined (happy-dom). Scrolling never rewrites the URL | |
-| Next link | each chapter ends with `<a class="link-tap research-next">Next: <title></a>` (same handler); chapter 9 ends with "Back to the top" (scrolls to the h1) | `a.link-tap` (`Settings/index.tsx:231`) |
+| Current chapter (**I1b**) | an `IntersectionObserver` (`rootMargin: '0px 0px -60% 0px'`) sets `aria-current="location"` on the link of the topmost visible chapter, in both navs. Skipped when `IntersectionObserver` is undefined (happy-dom). Scrolling never rewrites the URL | |
+| Next link (**I1b**) | each chapter ends with `<a class="link-tap research-next">Next: <title></a>` (same handler); chapter 9 ends with "Back to the top" (scrolls to the h1) | `a.link-tap` (`Settings/index.tsx:231`) |
 | Motion | `behavior: 'smooth'` unless `matchMedia('(prefers-reduced-motion: reduce)')` matches, then `'auto'` | architecture §6.1 |
 
 **Headings.** One `h1` ("Research") per screen (architecture §6.1). Each chapter title is an `h2`
-(`tabIndex={-1}` so it can take focus). Inside a chapter only `h3` is used: "What to take away", the two
-column heads of chapter 0, "Try a candidate" / "Build your own ladder" / "After you run it" in chapter 9.
+(`tabIndex={-1}` so it can take focus). Inside a chapter only `h3` is used: the two column heads of chapter 0, "Try a candidate" / "Build your own ladder" / "After you run it" in chapter 9.
 Chart titles are `figcaption`s (ChartFrame), not headings. The math `summary` is not a heading. Under the
-h1 sits one `p.lead`: "What progressions can and cannot do to a roulette session, told with the
-simulation results." (no number, so nothing to trace).
+h1 sits the landed `p.lead.research-intro` (no number in it, so nothing to trace).
 
 ## 3. Page layout
 
@@ -92,38 +93,37 @@ chapter 0 stats, chapter 6 glyph row, chapter 9 calculator (inputs | outputs). B
 
 ## 4. The chapter component
 
-`ChapterSection` (in `kit.tsx`, owner I1) renders one chapter. It follows the hand-rolled card of Settings
+`ChapterCard` (landed in `index.tsx`) renders one chapter. It follows the hand-rolled card of Settings
 About (`Settings/index.tsx:237`: `<section class="card" id aria-labelledby>`), because `Card` has no `id`
-prop.
+prop. Target markup, with the **I1b** additions marked `+`:
 
 ```
-<section class="card research-chapter" id="research-<id>" aria-labelledby="research-<id>-h">
-  <p class="research-eyebrow">Chapter <n></p>            0.8rem, var(--muted), uppercase, letter-spacing .04em
-  <h2 id="research-<id>-h" tabIndex={-1}>title</h2>      .card h2 (1.1rem); 1.25rem from 768 px
-  <p class="research-lead">lead</p>                      1.05rem, weight 600, var(--text), margin 0 0 8px
+<section class="card research-chapter" id="chapter-<id>" aria-labelledby="chapter-<id>-h">
++ <p class="research-eyebrow">Chapter <n></p>            0.8rem, var(--muted), uppercase, letter-spacing .04em
+  <h2 id="chapter-<id>-h" tabIndex={-1}>title</h2>      + tabIndex; .card h2 (1.1rem), 1.25rem from 768 px
+  <p class="lead">lead</p>                               landed; + .research-chapter .lead { color: var(--text); font-weight: 600 }
   <p>body[0]</p> <p>body[1]</p> …                        1rem, line-height 1.5
-  <div class="research-figure">{chapter body}</div>      margin 12px 0; the chart(s) of §5
-  <h3 class="research-sub">What to take away</h3>        1rem, weight 700
-  <ul class="research-takeaways">…</ul>                  ≤ 3 items; chapter 0 renders them as tiles (below)
-  <details class="math"><summary>The math</summary><div class="math-body">…</div></details>
-  <a class="link-tap research-next" href="#/research?chapter=<next>">Next: <next title></a>
+  <Chart chapter={chapter} />                            the chart(s) of §5, from CHAPTER_CHARTS
+  <ul class="takeaways">…</ul>                           landed, ≤ 3 items
+  <details class="math"><summary>The math</summary>
+    <div class="math-body"><MathText … /></div></details>  + MathText for text[] and formulas[]
++ <a class="link-tap research-next" href="#/research?chapter=<next>">Next: <next title></a>
 </section>
 ```
 
 | Part | Spec |
 | --- | --- |
-| Takeaways as tiles (chapter 0 only, `takeaways: 'tiles'` in `CHAPTER_META`) | `ul.research-points`: grid, 1 column below 768, 3 columns from 768; each `li` has `border: 1px solid var(--border)`, `border-radius: 10px`, `padding: 12px`, `background: var(--bg)`; first sentence bold. No "What to take away" heading then (the tiles sit above the stats) |
-| `details.math` | Native `<details>`; summary text exactly **"The math"**. Closed on every mount; the open state is never stored (no localStorage, no URL). `margin-top: 12px`; `border-left: 3px solid var(--accent)`; `background: var(--bg)`; `border-radius: 0 8px 8px 0`; `padding: 0 12px` |
-| `summary` | `min-height: 44px` (tap target), `display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; list-style: none`; `::-webkit-details-marker { display: none }`; marker is `::before { content: '▸' }`, `details[open] > summary::before { content: '▾' }` (`aria-hidden` by being generated content; the open state is announced natively). Focus ring: the global `:focus-visible` (3 px `var(--focus)`, offset 2, `app.css`); no override. Keyboard: Enter and Space toggle natively; nothing custom. Pattern: `.sp-chart__table > summary` in `charts.css` |
-| `.math-body` | `padding: 0 0 12px`; `font-size: 0.95rem`; formula paragraphs `p.math-formula`: `font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` (system fonts only), `overflow-x: auto`, `white-space: pre`, `padding: 6px 8px`, `background: var(--surface)`, `border: 1px solid var(--border)`, `border-radius: 6px`, `tabIndex={0}` with `role="region"` and `aria-label="Formula"` only when it overflows (simpler: always) |
-| `MathText` | Renders `chapter.math: string[]` with no `innerHTML`: an entry that starts with four spaces is a formula (`p.math-formula`), else a paragraph. Inside both, `^x` / `^(…)` become `<sup>` and `_x` / `_(…)` become `<sub>`; every other character is text. Unit-tested |
+| `details.math` | Native `<details>`; summary text exactly **"The math"**. Closed on every mount; the open state is never stored (no localStorage, no URL). Styled in the landed `research.css` (`details.math`, accent left border, `::before` marker ▸/▾, `::-webkit-details-marker` hidden). Required, check against the landed CSS: `summary` `min-height: 44px` (tap target), focus ring = the global `:focus-visible` (3 px `var(--focus)`, offset 2, `app.css`) or the landed `summary:focus-visible` rule if it is at least as visible, both themes. Keyboard: Enter and Space toggle natively; nothing custom. Pattern: `.sp-chart__table > summary` in `charts.css` |
+| `.math-body` | landed: `chapter.math.text` as `p`, `chapter.math.formulas` as `code.formula`. **I1b**: `code.formula` is `display: block`, `font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` (system fonts only), `white-space: pre-wrap`, `overflow-wrap: anywhere`, `padding: 6px 8px`, `background: var(--surface)`, `border: 1px solid var(--border)`, `border-radius: 6px`, `margin: 6px 0` |
+| `MathText` (**I1b**, `kit.tsx`) | `MathText({ text: string })`: no `innerHTML`; `^x` / `^(…)` become `<sup>`, `_x` / `_(…)` become `<sub>`, every other character stays text. Used for each `math.text` entry and each formula. Unit-tested |
 | Next link | `display: inline-flex; min-height: 44px; margin-top: 8px; font-weight: 600` |
 
-Chapter text (title, lead, body, takeaways, math) comes only from `content.ts` (C1). Numbers drawn in
-charts, stats and tables come only from `data.json` through `rowOf` / `pathOf` (`kit.tsx`), which throw
-`Error('research data: missing row <key>')` so a missing key fails a unit test, never renders `NaN`.
+Chapter text (title, lead, body, takeaways, math) comes only from `content.ts` (C1; the landed stub has
+the final `Chapter` type: `math: { text: string[]; formulas: string[] }`). Numbers drawn in charts, stats
+and tables come only from `data.json` through `row(key)` / `path(key)` / `data` from `./data` (T1, landed),
+which throw `research data: no row "<key>"`, so a missing key fails a unit test and never renders `NaN`.
 
-Formats (all in `kit.tsx`): money `formatMoney(c, { sign: true })` from `@core` for net amounts ("+$286",
+Formats (all in `kit.tsx`, **I1b**): money `formatMoney(c, { sign: true })` from `@core` for net amounts ("+$286",
 "-$46"); bankroll-like amounts without sign; `pct1(x)` = `${(x * 100).toFixed(1)}%` (Gallery's `pct`,
 `Gallery/index.tsx:56`); spins `n.toLocaleString('en-US')`; compact axis money `axisMoney(c)`: `$0`,
 `$500`, `$1.5k`, `-$5k`.
@@ -153,14 +153,16 @@ Rules for every chart on the screen:
   dotted, 4th purple `--chart-4` dash-dot. `Bars` colours by sign (positive `--chart-1`, negative
   `--chart-2`).
 
-Keys are `"<results file without .json>:<row id>"`, e.g. `e7-c9:e7-c9-W20-SLhalf` (app-plan §5).
+Keys are `"<results file without .json>:<row id>"`, e.g. `e7-c9:e7-c9-W20-SLhalf` (app-plan §5); every key
+below exists in the landed `data.json`, and every `path(...)` key is among its `paths`. `medianAheadUntil`:
+last checkpoint with a positive typical session, `null` = never ahead, 500 = still ahead at the end.
 
 | Ch | Component (owner) | Data keys | Series / marks, in colour order | Axes, formats | Legend, table, notes |
 | --- | --- | --- | --- | --- | --- |
-| 0 `start` | `Stat` ×8 in `.research-versus` (no chart) | `observations:flat-red`, `e7-c9:e7-c9-W20-SLhalf` | two columns, h3 "Flat $25 on red" / "Streets with a cash-out"; per column: Typical session (`median`, interval `medianCI`), Chance of ending ahead (`pWin`), Average (`mean`, interval `meanCI`), Worst 5 % of sessions (`cvar5`) | money signed, pct1; `tone="neutral"` always | grid 2 columns at every width (each ≥ 140 px at 360), gap 12; ≥ 1200 a column is a 2 × 2 grid. Takeaways as tiles above |
+| 0 `start` | `Stat` ×8 in `.research-versus` (no chart) | `observations:flat-red`, `e7-c9:e7-c9-W20-SLhalf` | two columns, h3 "Flat $25 on red" / "Streets with a cash-out"; per column: Typical session (`median`, interval `medianCI`), Chance of ending ahead (`pWin`), Average (`mean`, interval `meanCI`), Worst 5 % of sessions (`cvar5`) | money signed, pct1; `tone="neutral"` always | grid 2 columns at every width (each ≥ 140 px at 360), gap 12; ≥ 1200 a column is a 2 × 2 grid. Takeaways stay the normal list |
 | 1 `edge` | `DotRows` (§5.1) | `e1-spread:e1-red`, `e1-spread:e1-red12-dozen3-13`, `e1-spread:e1-straights25` | rows "Red", "Red + a dozen", "25 numbers"; range bar `p10`–`p90` (`--band-inner` fill, `--chart-1` stroke); marks: Typical session `median` circle `--chart-1`; Average `mean` diamond `--chart-2` | x money (`axisMoney`), label "Result after 500 spins"; zero line `--zero` labelled "Break-even" | legend: range "Middle 80 % of sessions", circle, diamond. Table columns: Bet, Average, Typical, 10th pct, 90th pct, SD (`sd`) |
 | 2 `martingale` | `LineBand` (core) | paths `observations:flat-red`, `observations:martingale-red`, `observations:fibonacci-red` | 1 Flat (`p50`); 2 Martingale (`p50`, band `p10`/`p90`, `bandLabel` "Martingale, middle 80 %"); 3 Fibonacci (`p50`) | `xKind 'linear'`, x = `rounds`, `xAxisLabel` "Spin", `xFmt` `spin n`; `yFmt` money signed, `yAxisFmt` `axisMoney`; `refs: [{ y: 0, label: 'Break-even' }]` | built-in legend and table. Summary names Martingale's `medianPeak` and `medianAheadUntil` |
-| 3 `levels` | `LineBand` (core) + 2 `Stat` | `e3a-levels:e3a-L5` … `e3a-L10`; `observations:martingale-red`, `observations:martingale-red-br10k` | x categorical `L5…L10` labels "5" … "10"; 1 Measured: typical session ahead until (`medianAheadUntil`, `null` → 0, value ≥ `maxRounds` drawn at 500); 2 Predicted n½ (`ladder({ c: 18, g: 2, base: 500, unit: 500, betMax: 500000, maxLevels: L }).nHalf`, `ladderMath.ts`) | `xAxisLabel` "Levels in the ladder"; `yFmt` `spin n`; `yDomain [0, 1200]`; `refs: [{ y: 500, label: 'Session ends (500 spins)', dash: '4 4' }]` | table shows "500+" for still-ahead rows. Stats under the chart: "Ahead until, $5,000 bankroll" / "… $10,000 bankroll" (`medianAheadUntil` of the two observations rows) |
+| 3 `levels` | `LineBand` (core) + 2 `Stat` | `e3a-levels:e3a-L5` … `e3a-L10`; `observations:martingale-red`, `observations:martingale-red-br10k` | x categorical `L5…L10` labels "5" … "10"; 1 Measured: typical session ahead until (`medianAheadUntil`, `null` → 0, 500 = still ahead); 2 Predicted n½ (`ladder({ c: 18, g: 2, base: 500, unit: 500, betMax: 500000, maxLevels: L }).nHalf`, `ladderMath.ts`) | `xAxisLabel` "Levels in the ladder"; `yFmt` `spin n`; `yDomain [0, 1200]`; `refs: [{ y: 500, label: 'Session ends (500 spins)', dash: '4 4' }]` | table shows "500+" for still-ahead rows. Stats under the chart: "Ahead until, $5,000 bankroll" / "… $10,000 bankroll" (`medianAheadUntil` of the two observations rows) |
 | 4 `placement` | `DotRows` | per placement `p` in `dozen, two-dozens, sixline, corner, straights25, straights35`: `e4-<p>:e4-<p>-g-stop`, `e4-<p>:e4-<p>-x2`; plus `e4-dozen:e4-dozen-g-u5-stop`, `e4-dozen:e4-dozen-x2-u5` | rows "Dozen", "Dozen, $5 base", "Two dozens", "Six-line", "Corner", "25 numbers", "35 numbers"; marks: Right growth factor (`-g-stop` `medianAheadUntil`) circle `--chart-1`; Doubling (`-x2` `medianAheadUntil`) square `--chart-2`; Predicted n½ (`ln 2 / (q·p)` from the `-g-stop` row's `meta`, §11 Q2) tick `--chart-text` | x "Spins the typical session stays ahead", domain [0, 500], `clampAt 500` | `null` (never ahead) draws no mark, table says "never". Table adds growth factor `meta.g` as "×1.5". If `meta` is absent the n½ series is omitted |
 | 5 `curve` | `Scatter` (new, §5.2) | `data.curve` | points `x` vs `neverCapped`, grouped (below); curve `e^(−x)` | x "Session length ÷ ladder cost (x)", domain [0, 2.5], ticks 0, 0.5 … 2.5, fmt `toFixed(2)`; y "Share never capped", [0, 1], pct axis `0%…100%` | legend with shape swatches; points with `x > 2.5` (all near 0) are not drawn and the summary says how many; table: Ladder, Group, x, Never capped, e^(−x), k |
 | 6 `shapes` | `ShapesExplorer` (Board ×3 + range input) + `LineBand` + table | `e6-full:<id>@20261031`, `@1`, `@2`, `e8-seed3:<id>@3` for `c9-streets-to12-stack`, `b3-two-streets-l29`, `a1-streets-w27`; paths `e6-full:<id>@20261031` | LineBand: 1 c9, 2 b3, 3 a1 (`p50` only) | as chapter 2 | 4-seed table (§5.3); boards (§5.4) |
@@ -168,7 +170,7 @@ Keys are `"<results file without .json>:<row id>"`, e.g. `e7-c9:e7-c9-W20-SLhalf
 | 8 `limits` | visible table + 2 `Bars` | for `flat-red`, `b3-two-streets-l29`, `c9-streets-to12-stack`, `a1-streets-w27` (`<sid>`): `e6-full:<sid>@20261031`, `e8-american:e8-am-<sid>`, `e8-length:e8-S250-<sid>`, `e8-length:e8-S1000-<sid>`, `e8-br10k:e8-br10k-<sid>` | table rows = 4 strategies, columns "European, 500 spins", "American wheel", "250 spins", "1,000 spins", "$10,000 bankroll"; each cell "typical / average" (`median` / `mean`, both signed). Bars 1 "Typical session, American wheel" (`e8-am-*` `median`); Bars 2 "Typical session at 1,000 spins" (`e8-S1000-*` `median`) | money signed | table in `div.research-tablewrap` (`overflow-x: auto`, `tabIndex 0`, `role="region"`, `aria-label`), like `DataTable`'s `.sp-chart__tablewrap`; `th scope`; average cells muted. The $25-minimum point is prose only (no row) |
 | 9 `try` | `TryIt` + `LadderCalculator` | `data.candidates`, each `candidate.rows[0]` | §6, §7 | | |
 
-### 5.1 `DotRows` (new, `DotRows.tsx`, owner I1)
+### 5.1 `DotRows` (new, `DotRows.tsx`, owner I1b)
 
 Horizontal rows like `Bars` horizontal (`Bars.tsx`): label column `min(40 % of width, maxChars × 7 + 12)`
 px, row pitch 36 px, x axis 30 px at the bottom, `svgH = 8 + rows × 36 + 34`. Range bar: 6 px tall, centred
@@ -258,7 +260,7 @@ same `amounts` and `bets`.
 
 ## 6. Try it (chapter 9, `TryIt.tsx` + `share.ts`, owner I4)
 
-One block per `data.candidates` entry (order as in the file: c9 cash-out, c9, b3), each a
+One block per `data.candidates` entry, in plan §9 order by id: `keeper-c9-streets-to12-cashout`, `keeper-c9-streets-to12-stack`, `keeper-b3-two-streets-l29`, each a
 `div.research-candidate` (border `var(--border)`, radius 10, padding 12): `h3`-less bold name, one line
 "Typical session +$286 · ends ahead 90.3% · average −$46 · worst 5 % −$3,210" from `rows[c.rows[0]]`, and
 the button.
@@ -368,28 +370,30 @@ it." A visually hidden `aria-live="polite"` sentence ("10 levels; typical sessio
 ## 9. Files and ownership
 
 All under `src/app/screens/Research/` unless a path is given. A wave-B implementer edits **only** files in
-its row. I1 creates every chapter file as a placeholder and wires all of them in `chapters.tsx`, so
-`chapters.tsx` and `index.tsx` are never edited in wave B.
+its row. I1b creates every chapter file as a placeholder and points `chapters.tsx` at them, so
+`chapters.tsx` and `index.tsx` are never edited in wave B (three agents editing adjacent lines of one map
+would conflict on rebase).
 
 | File | Owner | Exports (props/types) |
 | --- | --- | --- |
-| `src/app/routes.tsx`, `More/index.tsx`, `components/Nav.tsx`, `router.ts`, `components/TopBar.tsx` | I1 (one line each, §2) | — |
-| `index.tsx` | I1 | `Research(props: ScreenProps)`: h1, lead, `ChapterNav` ×2, sections in `CHAPTER_ORDER`, deep-link scroll, IntersectionObserver |
-| `chapters.tsx` | I1 | `CHAPTER_ORDER: readonly ChapterId[]`; `CHAPTER_META: Record<ChapterId, { short: string; takeaways: 'list' \| 'tiles'; Body: ComponentType<ChapterBodyProps> }>`; `interface ChapterBodyProps { chapter: Chapter; data: ResearchData }` |
-| `kit.tsx` | I1 | `ChapterSection(props: { chapter: Chapter; n: number; next: Chapter \| null; takeaways: 'list' \| 'tiles'; onJump(id: ChapterId): void; children })`; `ChapterNav(props: { variant: 'chips' \| 'toc'; current: ChapterId \| null; onJump(id: ChapterId): void })`; `MathText(props: { math: string[] })`; `jumpTo(id: ChapterId, opts: { focus: boolean })`; `useWidth(): { ref; width }`; `scaleLinear(d0, d1, r0, r1)`; `niceTicks(lo, hi, n)`; `rowOf(data, key): RowStats`; `pathOf(data, key): PathSeries`; `pct1`, `money`, `axisMoney`, `spins` |
-| `DotRows.tsx` | I1 | `DotRows(props: DotRowsProps)`; `DotSeries { id; label; shape: 'circle' \| 'square' \| 'diamond' \| 'tick'; color: 1–6 }`; `DotRow { id; label; range?: [number, number]; values: Record<string, number \| null> }`; `DotRowsProps { title; summary; series; rows; domain?: [number, number]; clampAt?: number; zeroLine?: string; fmt(v): string; axisFmt(v): string; axisLabel: string; table: TableSpec; rangeLabel?: string }` |
-| `research.css` | I1 | page grid, navs, `.research-chapter`, eyebrow, lead, takeaways/points, `details.math`, `.research-tablewrap`, `.research-table`, `.research-versus`, next link |
-| `ChStart.tsx`, `ChEdge.tsx`, `ChMartingale.tsx`, `ChLevels.tsx` (+ optional `chapters-0-3.css`) | I1 placeholder → **I2** | each `ChXxx(props: ChapterBodyProps): JSX.Element` |
-| `ChPlacement.tsx`, `ChCurve.tsx`, `ChShapes.tsx`, `Scatter.tsx`, `Board.tsx`, `survivors.ts` (+ optional `chapters-4-6.css`) | I1 placeholder for `Ch*` → **I3** | `Ch*` as above; `Scatter(props: ScatterProps)` with `ScatterProps { title; summary; points: { id; x; y; group }[]; groups: { id; label; shape: 'circle' \| 'square' \| 'triangle' \| 'diamond'; color: 1–6 }[]; xDomain; yDomain; curve?: { label; f(x): number; labelAt: number }; xLabel; yLabel; xFmt; yFmt; table: TableSpec }`; `curveGroup(family: string): string`; Board and survivors per §5.4 |
-| `ChCashout.tsx`, `ChLimits.tsx`, `ChTry.tsx`, `TryIt.tsx`, `share.ts`, `LadderCalculator.tsx`, `calculator.ts` (+ optional `chapters-7-9.css`) | I1 placeholder for `Ch*` → **I4** | per §6, §7 |
-| `content.ts` | C1 | `Chapter { id: ChapterId; title; lead; body: string[]; takeaways: string[]; math: string[]; dataKeys: string[] }`, `CHAPTERS: Chapter[]`, `ChapterId` (§11 Q4) |
-| `data.json`, `data.ts` | T1 | `ResearchData`, `RowStats`, `PathSeries`, `CurvePoint`, `Candidate` (app-plan §5) |
-| `ladderMath.ts` | T2 | `ladder`, `LadderInput`, `LadderResult` |
+| `routes.tsx`, `router.ts` (`parentOf`), `More/index.tsx`, `Nav.tsx` `also`, `shell.spec.ts` route loop | I1, landed | — |
+| `components/TopBar.tsx` | **I1b**: `TITLES.research = 'Research'` (missing; the TopBar now says "spinner") | — |
+| `index.tsx` | I1 landed; **I1b** adds the §2 jump handler, IntersectionObserver, next links, eyebrow, `tabIndex={-1}`, `MathText` | `Research(props: ScreenProps)` |
+| `chapters.tsx` | I1 landed; **I1b** replaces `Placeholder` by imports of the ten `Ch*.tsx` | `CHAPTER_CHARTS: Record<string, ChapterChart>`; `type ChapterChart = ComponentType<{ chapter: Chapter }>` (landed; chapter files read numbers by importing `row`, `path`, `data` from `./data`) |
+| `kit.tsx` | **I1b** | `MathText(props: { text: string })`; `jumpTo(id: string, opts: { focus: boolean }): void`; `useWidth(): { ref: Ref<HTMLDivElement>; width: number }`; `scaleLinear(d0, d1, r0, r1): (v: number) => number`; `niceTicks(lo, hi, n): number[]`; `pct1(x)`; `money(c)` (signed `formatMoney`); `axisMoney(c)`; `spins(n)` |
+| `DotRows.tsx` | **I1b** | `DotRows(props: DotRowsProps)`; `DotSeries { id; label; shape: 'circle' \| 'square' \| 'diamond' \| 'tick'; color: 1–6 }`; `DotRow { id; label; range?: [number, number]; values: Record<string, number \| null> }`; `DotRowsProps { title; summary; series; rows; domain?: [number, number]; clampAt?: number; zeroLine?: string; fmt(v): string; axisFmt(v): string; axisLabel: string; table: TableSpec; rangeLabel?: string }` |
+| `research.css` | I1 landed; **I1b** adds eyebrow, next link, `code.formula`, `.research-tablewrap`, `.research-table`, `.research-versus`, `.research-candidate`, §3 grid widths (check against the landed values) | — |
+| `ChStart.tsx`, `ChEdge.tsx`, `ChMartingale.tsx`, `ChLevels.tsx` (+ optional `chapters-0-3.css`) | I1b placeholder → **I2** | each `ChXxx(props: { chapter: Chapter }): JSX.Element` |
+| `ChPlacement.tsx`, `ChCurve.tsx`, `ChShapes.tsx`, `Scatter.tsx`, `Board.tsx`, `survivors.ts` (+ optional `chapters-4-6.css`) | I1b placeholder for `Ch*` → **I3** | `Ch*` as above; `Scatter(props: ScatterProps)` with `ScatterProps { title; summary; points: { id; x; y; group }[]; groups: { id; label; shape: 'circle' \| 'square' \| 'triangle' \| 'diamond'; color: 1–6 }[]; xDomain; yDomain; curve?: { label; f(x): number; labelAt: number }; xLabel; yLabel; xFmt; yFmt; table: TableSpec }`; `curveGroup(family: string): string`; Board and survivors per §5.4 |
+| `ChCashout.tsx`, `ChLimits.tsx`, `ChTry.tsx`, `TryIt.tsx`, `share.ts`, `LadderCalculator.tsx`, `calculator.ts` (+ optional `chapters-7-9.css`) | I1b placeholder for `Ch*` → **I4** | per §6, §7 |
+| `content.ts` | C1 (stub landed by I1 with the final type) | `Chapter { id; title; lead; body: string[]; takeaways: string[]; math: { text: string[]; formulas: string[] }; dataKeys: string[] }`, `CHAPTERS: Chapter[]` |
+| `data.json`, `data.ts`, `dataTypes.ts` | T1, landed | `data`, `row`, `path`, `candidate`, `rowsOf`; types of app-plan §5 |
+| `ladderMath.ts` | T2, landed | `ladder`, `LadderInput`, `LadderResult` |
 | `tests/e2e/research.spec.ts` | Q1 | — |
-| `tests/e2e/shell.spec.ts` (route loop entry `#/research`) | I1 | — |
 
-Placeholders: each `ChXxx.tsx` from I1 returns `<p class="muted">Chart coming in wave B.</p>` and has the
-final export name and signature. Optional CSS files are imported by the owner's `Ch*.tsx` files.
+Placeholders: each `ChXxx.tsx` from I1b returns the landed placeholder markup
+(`<div class="chart-slot" aria-hidden="true">`) and has the final export name and signature. Optional CSS
+files are imported by the owner's `Ch*.tsx` files.
 
 ## 10. Test plan
 
@@ -397,9 +401,9 @@ Unit tests (Vitest; `src/app/**` runs in happy-dom; `@testing-library/preact` as
 
 | Test file | Owner | Asserts |
 | --- | --- | --- |
-| `kit.test.tsx` | I1 | `MathText`: formula vs paragraph, `^`/`_` to sup/sub, no HTML injection (`<b>` stays text); `rowOf` throws on a missing key; `pct1(0.9031)` = "90.3%"; `axisMoney` values; `ChapterSection` renders h2 with `tabIndex -1`, `details.math` closed, summary text "The math", tiles vs list |
-| `index.test.tsx` | I1 | one h1; ten `section.research-chapter` in `CHAPTER_ORDER`; ten links per nav; clicking a chip calls `history.replaceState` with `#/research?chapter=<id>` and focuses the h2; unknown `?chapter=` renders without error |
-| `DotRows.test.tsx` | I1 | marks per row and series; `null` draws nothing; clamp triangle above `clampAt`; table rows = data rows |
+| `kit.test.tsx` | I1b | `MathText`: `^`/`_` to sup/sub, no HTML injection (`<b>` stays text); `pct1(0.9031)` = "90.3%"; `axisMoney` values; `niceTicks` |
+| `research.test.tsx` (landed) | I1, extended by I1b | landed: ten chapters in order, one h1, sections with details, both navs, `?chapter=` scroll, unknown id. I1b adds: clicking a chip calls `history.replaceState` with `#/research?chapter=<id>` and focuses the h2 (`tabIndex -1`); summary text "The math"; next links |
+| `DotRows.test.tsx` | I1b | marks per row and series; `null` draws nothing; clamp triangle above `clampAt`; table rows = data rows |
 | `chapters-0-3.test.tsx` | I2 | each chapter renders with the real `data.json` (every key exists), the right number of series/marks and a non-empty summary; ch 3 predictions equal `ladder()` for L5–L10 (L10 within 3 of 1,117) |
 | `chapters-4-6.test.tsx`, `survivors.test.ts`, `board.test.tsx` | I3 | real-data render; `curveGroup` on every `data.curve` family; scatter hides x > 2.5 and counts them in the summary; `ladderFromStrategy` matches `SURVIVORS` for the three e6-full strategies; `betsAtLevel` (c9 level 0 → 1 street, level 3 → 4, level 16 → 'capped'); `chipCount(100)` 1, `(41100)` 10; board draws 37 cells, covered cells filled |
 | `share.test.ts` | I4 | for each candidate: `normalizeDefinition` ok; `encodeShareLink` gives `#/define?d=…&h=…`; `decodeShareLink` round trip equals the normalized definition (rules override, bankroll 500000, maxRounds 500, seed 20261031, sessions 10000, strategy unchanged); `tooLong` path with a stubbed encoder gives `kind: 'file'` |
@@ -421,24 +425,27 @@ phone-360, phone 390 × 844, phone-landscape 844 × 390, desktop 1280 × 800; `p
 | Try it | button named `/Open Keeper c9 \+ cash-out/` → URL matches `/#\/define\?d=/`, text "Loaded from a link. This is an unsaved draft.", seed field 20261031, spins 500 (phone-360 and desktop only) |
 | Dark | `localStorage['spinner:theme'] = 'dark'` before load: axe clean, screenshots `research-<project>-dark.png` (with `SHOTS_DIR`, as `shell.spec.ts`) |
 
-`shell.spec.ts` gains `#/research` in its route loop (I1).
+`shell.spec.ts` already has `#/research` in its route loop (I1, landed).
 
 ## 11. Open questions for the orchestrator
 
-1. **I1 timing.** I1 runs in wave A beside this design. If it lands without `kit.tsx`, `DotRows.tsx`, the
-   ten placeholder `Ch*.tsx` and the full `chapters.tsx`, a small "I1b" should add them before wave B
-   starts; otherwise I2/I3/I4 collide in `chapters.tsx`. Proposal: I1b, one Sonnet, ~1 h.
+1. **I1b before wave B.** I1 landed (0444b3d) before this design and without `kit.tsx`, `DotRows.tsx`,
+   the ten placeholder `Ch*.tsx`, the jump handler (each chip tap now remounts the screen through
+   `RouteBoundary key={hash}`) and the TopBar title. Proposal: one Sonnet "I1b" makes the §9 **I1b** rows
+   before I2/I3/I4 start (about an hour).
 2. **`RowStats.meta`.** Chapters 4 and 7 draw predictions from the spec meta (`c, p, q, B, g, L, base`),
-   which the app-plan §5 schema lacks. Proposal: T1 adds `meta: Record<string, number> | null` copied from
-   each spec row; without it those prediction series are omitted (designed to degrade).
+   which T1's `data.json` lacks (app-plan §5 has no such field). Proposal: T1 adds
+   `meta: Record<string, number> | null` copied from each spec row; until then those prediction series
+   are omitted (the charts are designed to work without them).
 3. **Risk notice vs decisions #11.** app-plan §3 puts "the risk notice" in chapter 9; decisions #11 keeps
    the disclaimer on Settings/About only. This design links to `#/settings?section=about` and shows no
    disclaimer text. Confirm, or record an exception in decisions.md.
-4. **`content.ts` shape.** This design assumes `body`, `takeaways` and `math` are `string[]`, with formula
-   lines in `math` marked by four leading spaces and `^`/`_` for super/subscripts. C1 should match or the
-   orchestrator should tell I1 the actual shape before `MathText` is written.
-5. **`medianAheadUntil` semantics.** Chapters 3 and 4 read `null` as "never ahead after spin 0" and a value
-   ≥ `maxRounds` as "still ahead at the end". T1 should confirm (or define) this in `data.ts`.
+
+Settled while writing (no longer open): the `content.ts` shape is the landed stub's
+(`math: { text, formulas }`); `medianAheadUntil` is the last checkpoint round with `p50 > 0` and `null`
+when the typical session is never ahead (`scripts/research/run.ts:245-269`), so 500 means "still ahead at
+the end"; candidates come in file order (b3, c9 cash-out, c9) and `TryIt` sorts them as plan §9 does
+(c9 cash-out, c9, b3) by id.
 
 Conflicts with app-plan.md found in the code, resolved above: chapter 1's "overlaid histograms" (no
 histogram data in §5, so `DotRows`); chapter 4's "grouped bars" (`Bars` has no groups, so `DotRows`);
