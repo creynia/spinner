@@ -72,6 +72,18 @@ Every sub-agent brief should name this file and the plan section it serves.
 - Commit messages: `docs: ...` for ledger and plan updates, `feat(research): ...` for tooling.
   Push with `git push -u origin claude/roulette-strategy-variance-utbjcd`. Never open a pull
   request unless the owner asks.
+- **Shared-file ownership when agents run in parallel.** `ledger.md`, `plan.md` and this file
+  belong to the orchestrator. A sub-agent commits only files it created: its spec under
+  `scripts/research/specs/`, its report under `docs/research/results/`, and a ledger fragment
+  `docs/research/ledger/<spec>.md` (same columns as `ledger.md`, rows only). The orchestrator
+  folds fragments into `ledger.md`. Before pushing, every agent runs
+  `git pull --rebase origin claude/roulette-strategy-variance-utbjcd`; appends to one shared file
+  from two agents conflict, separate files never do. Give each agent its own worktree (the Agent
+  tool's `isolation: "worktree"`, or `git worktree add`) so working trees do not collide.
+- **Compute.** The runner is one process on one core; parallelise by running several `sim.mjs`
+  processes at once, one spec (or `--only id,id` subset) each. The VM has 4 cores and 15 GB:
+  four runs at a time is the ceiling, more only slows all of them. A 10,000-session,
+  500-spin experiment is about 20 s; a 2,000-spin one about 80 s.
 - Money is integer cents everywhere in specs: bankroll `500000` is $5,000, `stopWin: 50000` is
   $500, `unit: 2500` is $25.
 
@@ -114,10 +126,94 @@ At the end of the loop (or at any checkpoint the owner asks for), the branch sho
 
 A separate reviewer will read these and present them; keep prose short and numbers in tables.
 
-## 6. Suggested order
+## 6. Dependency graph
 
-E3 (horizon law) and the ladder calculator first, in parallel: the calculator's predictions are
-what every later ledger row is checked against. Then E4 (placements with the right factor, with
-the naive ×2 controls), then E5 (does everything collapse onto x = p·S/B), then E6 and E7 on the
-owner's ladders, E8 last. E1 is a property of every run, not a separate batch, except for the
-three-layout direct test in plan §4.
+```
+T1 calculator ─────────────┐
+T2 --seeds, T4 aggregator ─┤ (tooling, no data dependency)
+E1 direct test ────────────┤
+E3a levels, E3b lengths ───┼──► E5 curve (analysis over E3 + E4 reports)
+D4 amounts table ──► E4 per placement (×6) ──┘        │
+D6 ladder families ──► E6 screening (×4 families) ──► E6 full size + holdout ──┐
+E7-mart (cash-out on Martingale red, runs now)                                  ├──► E8 per axis ──► §7/§8/§9
+                                               E7 on E4/E6 winners (per strategy) ┘
+```
+
+D4 and D6 are Opus design briefs (an amounts table per placement; the ladder families with the
+deficit recursion worked out). Everything else is Sonnet execution until the analysis steps. The
+only true serial chain is D6 → E6 screen → E6 full → E7 → E8 → write-up; every other box can
+start the moment its inputs exist.
+
+## 7. Parallel breakdown (waves; each bullet is one agent)
+
+Each experiment inside a spec is independent of the others, so any spec can be cut by id into
+smaller specs without changing a result (seeds are per session, not per spec). The limits on
+fan-out are the 4 cores, not the design. Within a wave, keep at most four simulation agents
+running and let the design and tooling agents overlap with them.
+
+**Wave 0 (start all at once; nothing depends on anything).**
+
+- T1 (Sonnet): `scripts/research/ladder.ts` + `npm run research:ladder`. Inputs: coverage c,
+  growth g (default 36/(36 − c)), base stake, chip unit, bet max, bankroll, S. Outputs: L, q, B,
+  n½, predicted median at S, predicted P(ahead at S). Pin two cases in a unit test under
+  `scripts/research/ladder.test.ts` (Martingale red L = 8: q 0.0048, n½ 295; dozen doubling:
+  n½ ≈ 50). Add the test glob to `vitest.config.ts` only if `scripts/**` is not picked up.
+- T2 + T4 (Sonnet, one agent, both touch the runner): `--seeds a,b,c` in `run.ts` (one report
+  per seed, ids suffixed `@seed`), and `scripts/research/aggregate.ts` that reads every
+  `results/*.json` and prints one row per experiment with x = p·S/B (p, B taken from a small
+  `meta` block the spec may carry per experiment), P(ahead at S), median at S. Test it on
+  `results/observations.json`.
+- E1 (Sonnet): one spec, three layouts at $25 total (red; red $12 + dozen 3 $13 rounded to chips;
+  25 straight-ups at $1), same seed, 10,000 sessions. Acceptance: equal realized edge within CI,
+  variance ordered by concentration.
+- E3a (Sonnet): Martingale red, maxSteps 5, 6, 7, 8, 9, 10, outside minimum lowered so every
+  ladder fits under the $5,000 max, bankroll = 2^L − 1 units. Prediction column from the H1
+  formula. 500 spins.
+- E3b (Sonnet): maxSteps 8 and 10 at 250, 1,000 and 2,000 spins (six experiments; the 2,000-spin
+  ones take four times longer, so this is the slowest agent of the wave).
+- E7-mart (Sonnet): Martingale red with stop-win 5, 10, 20, 50, 100 units and stop-loss at one
+  and half a ladder; `onCap: reset` and `onCap: stop` variants. Prediction: P(win) ≈ e^(−qW).
+- D4 (Opus): for each placement in E4 (dozen, two dozens, six-line, corner, 25 straight-ups at
+  $1, 35 straight-ups at $1) the amounts list g^k rounded up to the chip unit, the level count
+  that fits $5,000 and the bet max, the bankroll to use, q, n½, plus the naive ×2 control. Output:
+  a table in `docs/research/briefs/E4.md` that six Sonnet agents can turn into specs verbatim.
+- D6 (Opus): the four ladder families of E6 (widening at constant stake per number; stacking at
+  fixed coverage; widen to 24 then stack; each with cash-out and trailing stop), each as a
+  concrete strategy JSON skeleton with the deficit recursion checked by hand for the first five
+  levels. Output: `docs/research/briefs/E6.md` with one section per family and the prediction
+  for each candidate.
+
+**Wave 1 (as wave-0 outputs land).**
+
+- E4 × 6 (Sonnet, one per placement, from `briefs/E4.md`): spec, 10,000 sessions, report, ledger
+  fragment. Four at a time.
+- E6 screening × 4 (Sonnet, one per family, from `briefs/E6.md`): 2,000 sessions per candidate,
+  up to 12 candidates per family; report back the top two by median with mean and CVaR beside
+  them. Also report any non-zero `rejected`/`adjusted` counts (the ladder did not run as drawn).
+- A3 (Opus): compare E3a/E3b measurements with the H1 predictions; write the §7 paragraph and
+  decide whether the formula needs the checkpoint-spacing correction.
+
+**Wave 2.**
+
+- E5 (Opus, with `aggregate.ts`): does P(ahead at S) collapse onto e^(−x)? Write up residuals by
+  coverage and bet type. This decides whether E6 keeps searching layouts or moves to B/u and
+  cash-out.
+- E6 full size (Sonnet, one agent per family's top two): 10,000 sessions on the reporting seed
+  and on holdout seeds 1 and 2 via `--seeds`.
+- E7 on winners (Sonnet, one agent per strategy): the stop-win/stop-loss grid of E7-mart applied
+  to each E4 and E6 winner.
+
+**Wave 3.**
+
+- E8 × per axis (Sonnet, one agent each: American wheel; la partage; $10,000 bankroll; 250 and
+  1,000 spins; three holdout seeds), each applied to the same two or three survivors. Five
+  agents, four at a time.
+- Final write-up (Opus): `plan.md` §7 per group, §8 open questions, §9 candidates table, fold
+  ledger fragments into `ledger.md`, save keepers under `scripts/research/candidates/`, run
+  `npm run check`, push.
+
+What cannot be split further: a single experiment (one strategy, one seed, N sessions) is the
+atom; the runner does not shard sessions across processes, and the T3 worker pool from the plan
+is not worth building while four cores are the ceiling. Design briefs D4 and D6 should stay with
+one author each so the amounts and the recursion are consistent across the agents that consume
+them.
