@@ -1,0 +1,81 @@
+/* Chapters cashout, limits and try. Tokens only; phone width first. */
+.research-cashout-versus h3,
+.research-try h3 {
+  margin: 16px 0 6px;
+  font-size: 1rem;
+}
+.research-cashout-versus h3 {
+  margin-top: 0;
+}
+.research-limits-note {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+}
+
+.research-tryit {
+  display: grid;
+  gap: 12px;
+}
+.research-candidate > p {
+  margin: 0 0 8px;
+}
+.research-candidate-name {
+  font-weight: 700;
+}
+.research-candidate-line {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.research-tryit-note {
+  margin: 0;
+  font-size: 0.875rem;
+  max-width: 68ch;
+}
+
+.research-calc-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.research-calc-grid {
+  display: grid;
+  gap: 16px;
+}
+.research-calc-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 389px) {
+  .research-calc-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.research-calc-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+.research-calc-stats > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.research-calc-stats .stat-value {
+  font-size: 1.15rem;
+}
+.research-calc-outputs[data-stale] {
+  opacity: 0.5;
+}
+.research-calc-note {
+  margin: 12px 0 0;
+  font-size: 0.875rem;
+  max-width: 68ch;
+}
+@media (min-width: 1200px) {
+  .research-calc-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+}
