@@ -592,3 +592,34 @@ Predictions held for medians and P(no cap), including a1's flip (.473 vs .49 pre
 predictions for b3/c9 were too negative: I used a turnover that ignored the stop at the cap. With the
 realized wager, −5.26 % × turnover matches within 1 z. The American wheel costs 3–4 points of P(win);
 the widening ladder, whose late levels cover the most numbers, loses its median.
+
+### 7.14 E5, the universal curve (`briefs/E5.md`; 53 ladders from E3, E4 and E6)
+
+Never-capped share at S against x = p·S/B, with B in cycle profits. Excluded: recovers:false ×2
+controls, cash-out rows (censored), and screen rows duplicated by the 3-seed full rows.
+
+| group | mean residual vs e^(−x) | RMS residual vs D6 form e^(−k·x), k = qB/(1 − q) |
+| --- | ---: | ---: |
+| all 53 ladders | −6.0 pts (none above 0) | 0.8 pts (RMS z 1.47) |
+| E3 Martingale red | −4.9 | ≤ 1.1 |
+| E4 outside | −6.2 | ≤ 1.1 |
+| E4 inside | −15.7 (35 straight-ups −44.6, k 3.79) | 1.1 (z 3.59: long ladders, Poisson approx.) |
+| E6 widen / stack / hybrid | −7.3 / −4.8 / −5.9 | 0.4–1.1 |
+
+- **H3 holds as a ceiling, and D6's form is the point prediction.** No ladder sits above e^(−x).
+  e^(−k·x) predicts to 0.8 points RMS; the three |z| > 2 outliers (L 20–53) close with an exact
+  run-length DP (34 single-coverage ladders: RMS z 0.72, max |z| 1.49). It also predicts the
+  American wheel (b3: .585 measured, .580 D6, .587 DP).
+- **Coverage is not a lever beyond B.** At equal B, layouts tie within sampling error (b3/b4 .635/.615,
+  b5/b6 .639/.650, b7/b8 .534/.554). Layout enters only through k = 1 + 0.027 × turnover per dollar
+  of cycle profit: one street stacked 1.14, Martingale red 1.27, two dozens 1.37, widening to 33
+  numbers 1.58. The best case over red is +3.3 points of P(no cap) at the leaders' x (never more than
+  +7 points, the k = 1 limit), worth under $70 of median at fixed risk. **Widening moves k the wrong way.**
+- **What moves the median horizon:** S½ = ln2·B/(k·p), so bankroll in cycle profits first, then k, then
+  the stopping rule.
+- **Median check.** "Median ≈ x·B profits" runs 2–15 % high: the median session is the poorest
+  survivor. τ̄ × the (1 − 1/(2P₀)) quantile of Bin(S, p) lands within −3 % to +6 %. "Median > 0 iff
+  e^(−k·x) > ½" held on all 65 recovering, uncensored rows. Every positive median sits beside a
+  negative mean (−$110 to −$602) and a CVaR 5 % of −$1,275 to −$5,115.
+- Tooling note: E4's `meta.B` is in level-0 stakes, so the aggregator's x for E4 rows is too large by
+  the payout m. The brief uses corrected values.
