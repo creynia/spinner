@@ -48,7 +48,7 @@ function ChapterNav({
               class={variant === 'chips' ? 'chip' : 'research-nav-link'}
               href={chapterHref(c.id)}
               aria-current={current === c.id ? 'location' : undefined}
-              aria-label={variant === 'chips' ? `Chapter ${i + 1}: ${c.title}` : undefined}
+              aria-label={variant === 'chips' ? `Chapter ${i}: ${c.title}` : undefined}
               onClick={(e) => onJump(e, c.id, () => onCurrent(c.id))}
             >
               {c.title}
@@ -66,7 +66,7 @@ function ChapterCard({ chapter, index }: { chapter: Chapter; index: number }) {
   const next = CHAPTERS[index + 1];
   return (
     <section class="card research-chapter" id={`chapter-${chapter.id}`} aria-labelledby={headingId}>
-      <p class="research-eyebrow">Chapter {index + 1}</p>
+      <p class="research-eyebrow">Chapter {index}</p>
       <h2 id={headingId} tabIndex={-1}>
         {chapter.title}
       </h2>

@@ -490,10 +490,11 @@ S½ = ln 2 × B / (k·p)
 
 **Pick one of the three candidates, play it on a $1-minimum table from $5,000 for up to 500 spins, and judge it by the typical session, the average and the worst 5 % together.**
 
-The candidates are saved strategy files. For now: open Define, switch to its JSON mode and paste the
-file, then set the table’s outside minimum and inside minimum total to $1, because a strategy file
-cannot carry table limits. Use a $5,000 bankroll and 500 spins. The Research screen will offer a
-one-tap Open in Define that does all of this for you.
+Each candidate has an Open in Define button below. It opens Define with the strategy, the $1-minimum
+table (outside minimum and inside minimum total), a $5,000 bankroll, 500 spins and the seed of the
+reporting row, so a run reproduces the numbers in this chapter. If you would rather start from the
+saved strategy file, paste it into Define's JSON mode and set those table minimums yourself, because
+a strategy file cannot carry table limits.
 
 After the run, read Analyze: the typical session, the chance of ending ahead, the average and the
 worst 5 % of sessions. Expect the average to be negative; that is the wheel, not a bug. Play only
@@ -564,5 +565,6 @@ n½ = ln 2 / (q·p);  P(win) ≈ (1 − q)^W
 5. Read **Analyze**: the typical session, chance ahead, average and worst 5 % should land near the
    first number of each cell in the chapter 9 table.
 
-The Research screen will offer a one-tap **Open in Define** per candidate that carries the strategy,
-the $1-minimum table, the $5,000 bankroll, 500 spins and the stops in one link.
+The Research screen (More, then Research, chapter 9) has a one-tap **Open in Define** per candidate
+that carries the strategy, the $1-minimum table, the $5,000 bankroll, 500 spins and the stops in one
+link, so steps 1 to 4 collapse into one tap.

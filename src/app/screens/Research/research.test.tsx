@@ -148,7 +148,7 @@ describe('Research chapter links', () => {
   it('labels each chapter with an eyebrow', () => {
     const { container } = view();
     expect(container.querySelector('#chapter-start .research-eyebrow')?.textContent).toBe(
-      'Chapter 1',
+      'Chapter 0',
     );
   });
 });
