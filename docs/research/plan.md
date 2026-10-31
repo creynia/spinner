@@ -1,6 +1,6 @@
 # Progressions, variance and the median: a research plan
 
-Owner: creynia. Status: draft v1 (2026-10-31). Tooling: `scripts/research/sim.mjs` (this branch).
+Owner: creynia. Status: v2, loop complete (2026-10-31). Tooling: `scripts/research/sim.mjs` (this branch).
 
 This plan answers three questions with the spinner engine, in an agentic loop that proposes a
 strategy, simulates it, records the numbers and proposes the next one:
@@ -15,7 +15,8 @@ strategy, simulates it, records the numbers and proposes the next one:
    to lock the median in?
 
 Sections 1 and 2 are the position this plan starts from (theory plus the first simulation batch).
-Sections 3 to 6 are the experiments and the loop. Section 7 is what the loop has found so far.
+Sections 3 to 6 are the experiments and the loop. Section 7 is what the loop found (§7.0 answers
+the three questions), §8 the open questions, §9 the candidate strategies.
 
 ## 1. What the engine guarantees, and what that rules out
 
@@ -241,7 +242,35 @@ seed is what corrects for it).
 - If E6 produces a ladder worth keeping: its JSON as a preset candidate with the cash-out rule
   built in, plus a gallery bundle.
 
-## 7. Findings so far (batch one: `specs/observations.json`, 10,000 sessions, seed 20261031)
+## 7. Findings
+
+### 7.0 Answers
+
+**Q1. Does spread, or varying the stake, change EV?** No. EV per dollar is fixed at −2.70 %
+(−5.26 % American; −1.36 % on flat red under la partage, the one placement effect on EV). E1
+(§7.2): $25 on red, red + dozen or 25 straight-ups loses −$338.21 / −$336.64 / −$337.98 per 500
+spins (pred −$337.84); only the session SD moves ($557 / $490 / $375). Varying the stake changes
+turnover, and turnover sets EV in dollars: flat red wagers $12,500 (mean −$338), Fibonacci $30,397
+(−$784), c9 with cash-out $1,962 (−$46). The edge oracle held on every row (§7.7).
+
+**Q2. Why the median rises then falls, and why only on even money.** The median stays above
+break-even while fewer than half the sessions have capped: n½ = ln2/(q·p) (H1; E3 §7.3: Martingale
+red 295 predicted, 290 measured; L5–L10 all inside their 10-spin checkpoint). Placement enters
+through the growth factor g = 36/(36 − c), ×2 only for 18 numbers, and the table log-budget
+ln(max/min)/ln g (H2; E4 §7.12: with the right g all 6 placements cross within one checkpoint of
+n½; doubling on a dozen cuts n½ to 33). At equal bankroll the horizon ranks by B/(m·p); only the
+$5-base dozen (B 921) keeps a positive median to spin 500: +$1,611, mean −$345, CVaR 5 % −$5,000,
+bust 16.4 %.
+
+**Q3. Can widening or stacking plus a cash-out report an above-break-even median?** Yes over 500
+spins, as a skew trade only. c9 (streets widened to 12, then stacked) with a $280 stop-win (W20) and
+a half-ladder stop-loss: median $286, P(win) 90.3 / 89.9 / 90.1 % on three seeds, mean −$46 / −$60 /
+−$54, CVaR 5 % −$3,210 / −$3,214 / −$3,212, bust 0 (§7.11, §9). Limits (E5 §7.14): P(no cap) ≤
+e^(−x), a ceiling none of 53 ladders beat; layout is no lever beyond B; widening raises k (1.58 at
+33 numbers vs 1.14 for one street), and the widening survivor lost its median on the American wheel
+(§7.13). The mean is negative on every row.
+
+### Batch one (`specs/observations.json`, 10,000 sessions, seed 20261031)
 
 | experiment | mean | median | P(win) | bust | median > 0 until | median peak |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -623,3 +652,127 @@ controls, cash-out rows (censored), and screen rows duplicated by the 3-seed ful
   negative mean (−$110 to −$602) and a CVaR 5 % of −$1,275 to −$5,115.
 - Tooling note: E4's `meta.B` is in level-0 stakes, so the aggregator's x for E4 rows is too large by
   the payout m. The brief uses corrected values.
+
+### 7.15 E8 robustness (`specs/e8-{american,length,partage,br10k}.json`, `results/e8-seed3.json`)
+
+Survivors as in `specs/e6-full.json` (onCap stop), 10,000 sessions per row. Reporting seed 20261031
+unless the axis is a seed; holdouts 1 and 2 come from e6-full. Predictions are in §7.10. Bust 0 and
+rejected/adjusted 0 on every row. Edge is the realized value; analytic −2.70 % (American −5.26 %).
+
+**b3-two-streets-l29** (stacking)
+
+| axis | median | mean | CVaR 5 % | bust | P(win) | cap rate | edge | prediction → result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| reporting seed | $1,679 | -$320.90 | -$4,491 | 0 % | 60.8 % | 38.7 % | -3.41 % | $1,698 / .63 → low; unlucky stream (§7.8) |
+| holdout 1 | $1,698 | -$246.96 | -$4,487 | 0 % | 62.1 % | 37.4 % | -2.63 % | held |
+| holdout 2 | $1,698 | -$245.78 | -$4,483 | 0 % | 62.1 % | 37.3 % | -2.62 % | held |
+| holdout 3 | $1,687 | -$285.86 | -$4,490 | 0 % | 61.5 % | 37.9 % | -3.03 % | $1,698 / .62 → held |
+| American | $1,594 | -$520.74 | -$4,510 | 0 % | 58.0 % | 41.5 % | -5.43 % | ≈ $1,600, P(no cap) .58 → held (.585); mean (−$626) off, turnover |
+| la partage | $1,679 | -$320.90 | -$4,491 | 0 % | 60.8 % | 38.7 % | -3.41 % | identical to European → held |
+| $10,000 bankroll | $1,679 | -$320.90 | -$4,491 | 0 % | 60.8 % | 38.7 % | -3.41 % | identical to $5,000 → held |
+| 250 spins | $862 | -$166.99 | -$4,491 | 0 % | 77.5 % | 20.3 % | -3.22 % | ≈ $850, P(no cap) .79 → held (.797) |
+| 1,000 spins | -$1,947 | -$474.46 | -$4,491 | 0 % | 37.5 % | 62.5 % | -3.12 % | median < 0, P(no cap) .38 → held (.375) |
+
+**c9-streets-to12-stack** (hybrid)
+
+| axis | median | mean | CVaR 5 % | bust | P(win) | cap rate | edge | prediction → result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| reporting seed | $1,540 | -$295.45 | -$4,820 | 0 % | 67.1 % | 32.7 % | -2.82 % | $1,542 / .67 → held |
+| holdout 1 | $1,542 | -$297.28 | -$4,827 | 0 % | 67.2 % | 32.6 % | -2.85 % | held |
+| holdout 2 | $1,537 | -$320.50 | -$4,826 | 0 % | 66.7 % | 33.0 % | -3.09 % | held |
+| holdout 3 | $1,540 | -$326.25 | -$4,819 | 0 % | 66.6 % | 33.2 % | -3.12 % | $1,540 / .67 → held |
+| American | $1,497 | -$535.24 | -$4,836 | 0 % | 63.3 % | 36.4 % | -4.91 % | ≈ $1,500, P(no cap) .63 → held (.636); mean (−$575) off, turnover |
+| la partage | $1,540 | -$295.45 | -$4,820 | 0 % | 67.1 % | 32.7 % | -2.82 % | identical → held |
+| $10,000 bankroll | $1,540 | -$295.45 | -$4,820 | 0 % | 67.1 % | 32.7 % | -2.82 % | identical → held |
+| 250 spins | $777 | -$156.42 | -$4,820 | 0 % | 81.8 % | 17.4 % | -2.74 % | ≈ $780, P(no cap) .82 → held (.826) |
+| 1,000 spins | -$2,126.50 | -$472.93 | -$4,820 | 0 % | 45.2 % | 54.7 % | -2.70 % | median < 0, P(no cap) .45 → held (.453) |
+
+**a1-streets-w27** (widening)
+
+| axis | median | mean | CVaR 5 % | bust | P(win) | cap rate | edge | prediction → result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| reporting seed | $1,494 | -$330.93 | -$3,380 | 0 % | 55.1 % | 44.9 % | -2.62 % | $1,503 / .55 → held |
+| holdout 1 | $1,497 | -$348.13 | -$3,377 | 0 % | 54.6 % | 45.3 % | -2.76 % | held |
+| holdout 2 | $1,498 | -$324.08 | -$3,385 | 0 % | 55.3 % | 44.6 % | -2.57 % | held |
+| holdout 3 | $1,492 | -$351.14 | -$3,381 | 0 % | 54.7 % | 45.2 % | -2.79 % | $1,497 / .55 → held |
+| American | **-$1,978** | -$699.61 | -$3,397 | 0 % | 47.3 % | 52.7 % | -5.47 % | median flips ≤ 0, P(no cap) .49 → flip held (.473) |
+| la partage | $1,494 | -$330.93 | -$3,380 | 0 % | 55.1 % | 44.9 % | -2.62 % | identical → held |
+| $10,000 bankroll | $1,494 | -$330.93 | -$3,380 | 0 % | 55.1 % | 44.9 % | -2.62 % | identical → held |
+| 250 spins | $775 | -$190.84 | -$3,380 | 0 % | 74.1 % | 25.5 % | -2.65 % | ≈ $750, P(no cap) .74 → held (.745) |
+| 1,000 spins | -$1,568 | -$538.08 | -$3,380 | 0 % | 29.5 % | 70.5 % | -2.74 % | median < 0, P(no cap) .30 → held (.295) |
+
+**flat-red control** (median / mean / CVaR 5 %, bust 0): reporting −$350 / −$338.21 / −$1,480;
+seed 3 −$350 / −$344.60 / −$1,496; American −$650 / −$653.14 / −$1,794 (edge −5.23 %); la partage
+−$175 / −$169.82 / −$1,302 (edge −1.36 %, pred −1.35 %); $10,000 identical to $5,000; 250 spins
+−$150 / −$170.85 / −$966; 1,000 spins −$650 / −$675.80 / −$2,324.
+
+- **Seeds.** Across four seeds the medians move by at most $19 (b3), $5 (c9) and $6 (a1), and P(win)
+  by at most 1.3 points. The low b3 reporting row is §7.8's spin stream; seed 3 sits with the
+  holdouts.
+- **La partage and $10,000 matched the European $5,000 rows exactly, row for row.** The survivors
+  place no even-money bets. With onCap stop, the cap loss (under $5,000) never reaches the extra
+  bankroll. Flat red under la partage: edge −1.36 % (pred −1.35 %), mean −$169.82.
+- **American** (§7.13) costs 3–8 points of P(win). b3 and c9 keep their medians; a1 loses its median.
+- **Length.** All three are positive at 250 spins, with roughly half the 500-spin median. All three
+  are negative at 1,000 spins. At 1,000 spins the median stays ahead until spin 690 / 860 / 570,
+  against n½ = ln2/(q·p) from the specs' meta (723 / 874 / 577). That check was not registered
+  before the run.
+
+## 8. Open questions
+
+- **A trailing stop for widening ladders.** a1's half-ladder stop-loss never fires: the last level
+  carries $2,592 of the $3,444 cap loss (§7.11). The E7b analogue, `maxSteps L−1, onCap stop`,
+  is untested on a1.
+- **The stop is checked after the round, so it overshoots.** b3: stop $2,287, CVaR 5 % −$2,720. c9:
+  stop $2,459.50, CVaR 5 % −$3,210, worst −$3,275. A pre-bet guard is untested. It would skip a
+  level whose loss would cross the limit.
+- **The c9 cash-out candidate's stops have never run.** The file uses strategy `rules` (net ≥ +$280
+  or ≤ −$2,459.50). The ledger row used session `stopWin`/`stopLoss`. One run of the file itself
+  should reproduce e7-c9-W20-SLhalf.
+- **The runner should report the never-capped share and the cap count directly.** Today they are
+  read from `endedBy` `strategy:cap-*` or from `onCap: stop` twins (§7.3, §7.14).
+- **The aggregator's x for E4.** `meta.B` is in level-0 stakes, not cycle profits, so x is too large
+  by m (§7.14). Fix the meta or the aggregator.
+- **Put the exact run-length DP into `ladder.ts`.** The Poisson form misses long ladders (L 20–53,
+  |z| > 2) that the DP closes (§7.14).
+- **The reporting seed's b-family stream.** b1, b3 and d-b1 run at z −2.4 to −3.1 on 20261031
+  (§7.8), and b3's reporting median ($1,679) sits below its three holdouts ($1,687–$1,698). Quote
+  the holdout medians as the estimate.
+- **Default-table versions.** All survivors need $1 minimums. The default-table references in D6
+  (a9, b11, c6) had P(no cap) .001–.099 (§7.6). A $25-base survivor needs 25× the bankroll for the
+  same B, and that has not been simulated.
+- **Longer sessions and the cash-out on other axes.** No survivor keeps a positive median at 1,000
+  spins without a cash-out. E8 ran only the no-stop survivors. c9 cash-out (median session length
+  85 spins) has no American, 250/1,000-spin or seed-3 row.
+- **Reproducibility.** `results/e8-seed3.json` has no spec of its own (it reruns e6-full ids on seed
+  3). Three batch-one ledger rows (flat-red-cashout-500, fibonacci-red, fibonacci-red-cashout-500)
+  carry an interpretation, not a pre-run prediction. The e1/e3/e7-mart rows predate the "CVaR5
+  first" note rule; their CVaR values are in §7.2–7.4.
+
+## 9. Candidates
+
+Strategy documents under `scripts/research/candidates/`, ordered by how well they answer question 3.
+500 spins, $5,000 bankroll, European wheel. Seeds: reporting 20261031 / holdout 1 / 2 / 3.
+
+| candidate file | spec id | median | P(win) | mean | CVaR 5 % | bust |
+| --- | --- | --- | --- | --- | --- | --- |
+| `c9-streets-to12-stack-cashout.json` | e7-c9 `e7-c9-W20-SLhalf` (holdouts: `results/e7-c9-holdout.json`) | $286 / $286 / $286 / — | 90.3 / 89.9 / 90.1 % / — | -$46.25 / -$60.12 / -$53.65 / — | -$3,210 / -$3,214 / -$3,212 / — | 0 / 0 / 0 / — |
+| `c9-streets-to12-stack.json` | e6-full `c9-streets-to12-stack` (seed 3: `results/e8-seed3.json`) | $1,540 / $1,542 / $1,537 / $1,540 | 67.1 / 67.2 / 66.7 / 66.6 % | -$295.45 / -$297.28 / -$320.50 / -$326.25 | -$4,820 / -$4,827 / -$4,826 / -$4,819 | 0 / 0 / 0 / 0 |
+| `b3-two-streets-l29.json` | e6-full `b3-two-streets-l29` (seed 3: `results/e8-seed3.json`) | $1,679 / $1,698 / $1,698 / $1,687 | 60.8 / 62.1 / 62.1 / 61.5 % | -$320.90 / -$246.96 / -$245.78 / -$285.86 | -$4,491 / -$4,487 / -$4,483 / -$4,490 | 0 / 0 / 0 / 0 |
+
+- **What each is.** c9 cash-out is the direct answer to question 3: a median above break-even on
+  90 % of sessions and the smallest mean loss and tail of the three. c9 without a stop has the best
+  P(win) of the no-stop ladders. b3 has the highest median and a 29-level stacked ladder on two
+  streets.
+- **American wheel** (§7.13, no-stop versions only). c9: median $1,497, mean −$535.24, CVaR 5 %
+  −$4,836, bust 0, P(win) 63.3 %. b3: $1,594, −$520.74, −$4,510, 0, 58.0 %. The cash-out version
+  was not run.
+- **Session length** (§7.15, no-stop). At 250 spins: c9 $777 (mean −$156.42, CVaR 5 % −$4,820,
+  bust 0) and b3 $862 (−$166.99, −$4,491, 0). At 1,000 spins both medians are negative: c9
+  −$2,126.50 (−$472.93, −$4,820, 0) and b3 −$1,947 (−$474.46, −$4,491, 0). c9 cash-out sessions end
+  at a median of about spin 85, so session length barely binds it (not run).
+- **Table requirement.** Every candidate needs a $1 outside minimum and a $1 inside minimum total
+  (rules override `limits.outside.min 100`, `limits.inside.minTotal 100`, in cents). The default
+  table's $25 minimums break all three. The strategy document does not carry table limits, so set
+  them on the run's table. Import a file by pasting it into the Define screen's JSON mode (the JSON
+  tab, strategy.md §13). The `notes` field of each file repeats the setup and the ledger numbers.
