@@ -549,3 +549,46 @@ the b3 rows share §7.8's unlucky stream.
   for 3 points of P(win). It overshoots half the cap loss by one level because the stop is checked
   after the round. On a widening ladder (a1) the last level carries $2,592 of the $3,444 cap loss, so
   an equity stop at half never fires before it (cf. Martingale, §7.4).
+
+### 7.12 E4, placement with the right growth factor (`specs/e4-*.json`, 10,000 sessions, seed 20261031)
+
+Base ≈ $25, $5,000 bankroll. "Crossing" = first spin where the never-capped share (the `-g-stop` twin)
+drops below ½, against n½ = ln2/(q·p).
+
+| placement (c) | g | n½ | crossing (stop twin) | g median@500 | g mean | g CVaR 5 % | g bust | ×2 control: median / ahead until |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| dozen (12) | 1.5 | 159 | 160 | -$4,984 | -$930 | -$5,000 | 51.2 % | -$5,000 / 70 (n½ 33) |
+| dozen, $5 base (12) | 1.5 | 765 | > 500 | **+$1,611** | -$345 | -$5,000 | 16.4 % | -$2,948 / 70 |
+| two dozens (24) | 3 | 200 | 200 | -$1,569 | -$1,070 | -$5,000 | 34.1 % | -$182 / 220 (does not recover) |
+| six-line (6) | 1.2 | 147 | ≈ 147 | -$4,994 | -$865 | -$5,000 | 55.9 % | -$5,000 / 9 |
+| corner (4) | 1.125 | 141 | ≈ 135 | -$4,989 | -$764 | -$5,000 | 56.5 % | -$5,000 / never |
+| 25 straight-ups (25) | 36/11 | 286 | 290 | -$635 | -$1,107 | -$5,000 | 47.9 % | -$272 / 130 (does not recover) |
+| 35 straight-ups (35) | 36 | 251 | 250 | -$824 | -$1,323 | -$4,940 | 4.3 % | -$480 / 12 (does not recover) |
+
+- **H2 confirmed.** With the right growth factor every placement's crossing lands within one
+  checkpoint of n½ (6 of 6). Doubling collapses the horizon wherever g ≠ 2 (dozen 33 → measured 70
+  ahead-until on a noisy flat crossing; six-line 9; corner never).
+  The "only even money works" observation is the wrong growth factor plus the table's log-budget, not
+  placement.
+- **Ranking follows B/(m·p)** (D4's correction): at equal B, wider coverage holds longer (25 straight-ups
+  286 > two dozens 200 > dozen 159 > six-line 147 > corner 141).
+- **No placement keeps a positive median to 500 spins at B ≈ 200 base stakes.** The $5-base dozen
+  (B 921) does, with median +$1,611 and a never-capped share that equals e^(−q·p·s) to within .003.
+  Base stakes, not placement, set the horizon.
+- Reset ladders show `medianAheadUntil` beyond n½ (dozen 330, two dozens 460) because sessions
+  survive one cap on banked profit (§7.3). The stop twins give the clean number. Realized edges −2.16 %
+  to −3.20 %, all consistent with −2.70 % (§7.7).
+
+### 7.13 E8 American wheel (`specs/e8-american.json`)
+
+| id | median Eur → Am | mean Eur → Am | CVaR 5 % Eur → Am | P(win) Eur → Am | edge (analytic −5.26 %) | residual z |
+| --- | --- | --- | --- | --- | ---: | ---: |
+| b3 | $1,679 → $1,594 | -$321 → -$521 | -$4,491 → -$4,510 | 60.8 → 58.0 % | -5.43 % | -0.56 |
+| c9 | $1,540 → $1,497 | -$295 → -$535 | -$4,820 → -$4,836 | 67.1 → 63.3 % | -4.91 % | 1.38 |
+| a1 | $1,494 → **-$1,978** | -$331 → -$700 | -$3,380 → -$3,397 | 55.1 → 47.3 % | -5.47 % | -1.10 |
+| flat-red | -$350 → -$650 | -$338 → -$653 | -$1,480 → -$1,794 | 25.5 → 11.4 % | -5.23 % | 0.85 |
+
+Predictions held for medians and P(no cap), including a1's flip (.473 vs .49 predicted). My mean
+predictions for b3/c9 were too negative: I used a turnover that ignored the stop at the cap. With the
+realized wager, −5.26 % × turnover matches within 1 z. The American wheel costs 3–4 points of P(win);
+the widening ladder, whose late levels cover the most numbers, loses its median.
