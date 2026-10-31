@@ -25,7 +25,7 @@ export function Sources() {
               <li key={i.id} data-source-id={i.id} class="source-item">
                 <span class="row-title">
                   {i.url ? (
-                    <a href={i.url} target="_blank" rel="noopener noreferrer">
+                    <a class="link-tap" href={i.url} target="_blank" rel="noopener noreferrer">
                       {i.title}
                     </a>
                   ) : (

@@ -255,7 +255,11 @@ export function Settings({ query }: ScreenProps) {
         <p data-disclaimer>{DISCLAIMER}</p>
         <p data-sync-about>{SYNC_ABOUT}</p>
         <p class="muted">
-          Rules, figures and algorithms are credited on the <a href="#/sources">Sources</a> page.
+          Rules, figures and algorithms are credited on the{' '}
+          <a class="link-tap" href="#/sources">
+            Sources
+          </a>{' '}
+          page.
         </p>
       </section>
 
