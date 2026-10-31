@@ -293,3 +293,69 @@ q = (1 − p)^L, n½ = ln2/(q·p), P(no cap by S) = e^(−q·p·S).
 | e3a-levels | L5…L10 ($5 unit, bankroll = 2^L − 1 units) | n½ 40 / 78 / 151 / 295 / 574 / 1117; median@500 < 0 for L ≤ 8, > 0 for L9 (P .55, marginal) and L10 (P .73), ≈ +$1,216 |
 | e3b-lengths | L8, L10 × S 250 / 1,000 / 2,000 | ahead-until ≈ min(S, n½), independent of S; median > 0 for L8-S250 (marginal), L10-S250, L10-S1000 (marginal) |
 | e7-mart | stop-win W = 5…100 units, onCap reset/stop, SL half ladder | P(win) .976 / .953 / .908 / .785 / .617; median = +W; reset ≈ stop; SL half: same P(win), CVaR 5 % ≈ −$3,200 |
+
+### 7.2 E1, spreading a fixed $25 (`specs/e1-spread.json`)
+
+| layout | mean | median | CVaR 5 % | bust | realized edge (95 % CI) | session SD (pred) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| red $25 | -$338.21 | -$350.00 | -$1,479.60 | 0 % | -2.71 % ± 0.09 | $557 ($559) |
+| red $12 + dozen 3 $13 | -$336.64 | -$338.00 | -$1,354.56 | 0 % | -2.69 % ± 0.08 | $490 ($493) |
+| 25 straight-ups × $1 | -$337.98 | -$332.00 | -$1,128.82 | 0 % | -2.70 % ± 0.06 | $375 ($377) |
+
+Confirmed. Same EV per dollar (predicted −$337.84); only dispersion moves, and it falls as coverage
+widens, as predicted to within $3. Question 1, first half: spread changes variance, not EV.
+
+### 7.3 E3, the horizon law (`specs/e3a-levels.json`, `e3b-lengths.json`; analysis `briefs/A3.md`)
+
+$5 unit, bankroll = one ladder (2^L − 1 units), onCap reset. "Never capped" = e^(−q·p·S);
+"renewal" = A3's chain that lets a session survive a cap on banked profit.
+
+| id | n½ pred | ahead until | median@S | mean | CVaR 5 % | bust | P(ahead@S): never capped / renewal / measured |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| L5, S 500 | 40 | 39 | -$155 | -$63.25 | -$155 | 82.1 % | .000 / .178 / .167 |
+| L6, S 500 | 78 | 70 | -$315 | -$99.34 | -$315 | 71.6 % | .012 / .258 / .244 |
+| L7, S 500 | 151 | 150 | -$635 | -$151.37 | -$635 | 58.1 % | .101 / .323 / .310 |
+| L8, S 500 | 295 | 290 | -$180 | -$209.14 | -$1,275 | 42.2 % | .308 / .345 / .333 |
+| L9, S 500 | 574 | 500 | $1,130 | -$290.70 | -$2,555 | 25.9 % | .547 / — / .542 |
+| L10, S 500 | 1,117 | 500 | $1,185 | -$327.56 | -$5,115 | 14.4 % | .733 / — / .734 |
+| L8, S 250 | 295 | 250 | $550 | -$117.58 | -$1,275 | 24.2 % | .555 / — / .557 |
+| L8, S 1,000 | 295 | 290 | -$1,275 | -$349.01 | -$1,275 | 60.0 % | .095 / .301 / .287 |
+| L8, S 2,000 | 295 | 290 | -$1,275 | -$513.09 | -$1,275 | 74.8 % | .009 / .225 / .212 |
+| L10, S 250 | 1,117 | 250 | $595 | -$165.17 | -$5,115 | 7.0 % | .856 / — / .855 |
+| L10, S 1,000 | 1,117 | 1,000 | $2,300 | -$601.81 | -$5,115 | 26.1 % | .538 / — / .539 |
+| L10, S 2,000 | 1,117 | 1,120 | -$1,073 | -$1,045 | -$5,115 | 44.7 % | .289 / — / .293 |
+
+- **H1 holds with no correction.** Every n½ lies inside the 10-spin checkpoint window
+  [ahead-until, ahead-until + 10); interpolated crossings 39.3 / 79.0 / 154.8 / 296.7 / 1,120.9 vs
+  39.9 / 77.7 / 151.3 / 294.7 / 1,117.5. The horizon does not depend on S. The three L8 rows share
+  paths (same seed), so they are one confirmation, not three.
+- **Refinement: "ahead" ≠ "never capped"** once p·S > B + 1. A session that banked more than a ladder
+  survives a cap. That lifts P(ahead) at long horizons (L8 at 2,000 spins: .212 vs .009 never capped)
+  but never moves the median horizon, because recovery takes ≈ (B + 1)/p spins > n½. H3 should be
+  scored against the never-capped share (an `onCap: stop` twin on the same seed gives it exactly).
+- Realized edge −2.55 % to −2.85 %, all inside CI.
+
+### 7.4 E7 on Martingale red (`specs/e7-mart.json`; analysis `briefs/A3.md` §3)
+
+$25 unit, 8 levels, $5,000 bankroll, stop-win W units. Reset and stop rows are identical for W ≤ 50
+(a cap empties the bankroll either way), so only reset is shown.
+
+| W | P(win): e^(−qW) / A3 model / measured | median | mean | CVaR 5 % | bust |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 5 | .976 / .969 / .970 | $125 | -$28.24 | -$2,940 | 3.0 % |
+| 10 | .953 / .939 / .941 | $250 | -$59.75 | -$5,000 | 5.9 % |
+| 20 | .908 / .885 / .888 | $500 | -$113.80 | -$5,000 | 11.2 % |
+| 50 | .785 / .754 / .761 | $1,250 | -$241.38 | -$5,000 | 23.9 % |
+| 100 | .617 / .593 / .601 | $2,500 | -$448.99 | -$5,000 | 38.7 % |
+| 20, stop-loss $3,187.50 | .908 / — / .884 | $500 | -$104.97 | -$5,000 | 0 % (11.6 % stop-loss at −$5,000) |
+
+- **e^(−qW) refuted, mechanism found.** The 8th $3,200 bet does not fit a $5,000 bankroll after seven
+  losses (−$3,175): reconcile cuts it to the remaining equity (runner counts: 499 adjusted rounds in
+  331 of 500 sessions; 254 refused as unaffordable). A cut-down win leaves the cycle at −(55 − P)
+  units, so q_eff = .0060 → .0051 as W grows. A3's exact model of reconcile lands inside the 95 % CI
+  on all 12 rows.
+- **The median equals +W in every row**, and the mean stays at −2.4 % of turnover: the cash-out is a
+  skew trade, as predicted.
+- **The half-ladder stop-loss is a no-op**: −$3,175 is above −$3,187.50, so the 8th bet always fires.
+  A trailing stop of 7 losses (`maxSteps 7, onCap stop`) is the version that cuts the tail; it runs as
+  E7b with A3's predictions (P(win) at W20 .828, CVaR 5 % −$3,120, bust 0).
