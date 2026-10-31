@@ -40,6 +40,8 @@ import { RunBadge, stubLine } from '../../components/RunBadge';
 import { listRunRows, startRun } from '../../services/runs';
 import { formatVerdict, type VerdictInput } from '../../services/verdict';
 import type { ScreenProps } from '../types';
+import { href } from '../../router';
+import { PRESET_SOURCES, sourceById } from '../../sources';
 import {
   analyze,
   cardOf,
@@ -167,6 +169,25 @@ function DiagList(p: {
   );
 }
 
+function PresetSource(p: { id: string }) {
+  const sid = PRESET_SOURCES[p.id];
+  const src = sid ? sourceById(sid) : undefined;
+  if (!src) return null;
+  return (
+    <p class="muted" data-preset-source>
+      Source:{' '}
+      {src.url ? (
+        <a href={src.url} target="_blank" rel="noopener noreferrer">
+          {src.title}
+        </a>
+      ) : (
+        <>{src.title}</>
+      )}{' '}
+      (<a href={href('/sources')}>all sources</a>)
+    </p>
+  );
+}
+
 function PresetSheet(p: { onPick: (id: string) => void; onClose: () => void }) {
   return (
     <Sheet open title="Start from a preset" onClose={p.onClose}>
@@ -177,6 +198,7 @@ function PresetSheet(p: { onPick: (id: string) => void; onClose: () => void }) {
               <span class="row-title">{s.name}</span>
               <span class="row-sub">{s.id}</span>
             </button>
+            <PresetSource id={s.id} />
           </li>
         ))}
       </ul>

@@ -1,3 +1,5 @@
+// xoshiro128** by David Blackman and Sebastiano Vigna (public domain, https://prng.di.unimi.it/).
+// Rewritten here as a mutable class; the step is the published one.
 // xoshiro128**: mutable and allocation-free (harness-data-analysis.md §1.2). The step and the
 // `below` rejection rule are identical to the sibling apps, so a pocket drawn from a given state is
 // the same in every app of the family.

@@ -1,3 +1,4 @@
+// SHA-256 as specified in NIST FIPS 180-4 (the round constants and initial hash values are the standard ones).
 // SHA-256: WebCrypto when available (secure contexts and workers), else the pure-TS fallback
 // (plain http on a LAN phone during development; harness-data-analysis.md §8.3).
 

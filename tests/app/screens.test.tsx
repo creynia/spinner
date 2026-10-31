@@ -30,6 +30,7 @@ const addresses: [hash: string, pattern: string][] = [
   ['#/import', '/import'],
   ['#/settings', '/settings'],
   ['#/settings/benchmark', '/settings/benchmark'],
+  ['#/sources', '/sources'],
   ['#/more', '/more'],
   ['#/research', '/research'],
   ['#/research?chapter=cashout', '/research'],

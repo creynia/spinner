@@ -5,7 +5,7 @@ import { expect, expectAxeClean, test } from './helpers';
 
 const SHOTS = process.env.SHOTS_DIR;
 
-for (const route of ['#/', '#/settings', '#/more', '#/research', '#/nope']) {
+for (const route of ['#/', '#/settings', '#/more', '#/research', '#/sources', '#/nope']) {
   test(`${route}: one h1, no overflow, axe clean, tap targets >= 44px`, async ({
     page,
     guard,

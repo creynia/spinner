@@ -47,7 +47,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     href: '#/more',
     path: '/more',
     label: 'More',
-    also: ['/settings', '/gallery', '/import', '/research'],
+    also: ['/settings', '/gallery', '/import', '/research', '/sources'],
     icon: svg('M5 12h.01M12 12h.01M19 12h.01'),
   },
 ];

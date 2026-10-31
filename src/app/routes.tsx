@@ -15,6 +15,7 @@ import { Research } from './screens/Research';
 import { Run } from './screens/Run';
 import { Benchmark } from './screens/Settings/Benchmark';
 import { Settings } from './screens/Settings';
+import { Sources } from './screens/Sources';
 import { Sweep } from './screens/Sweep';
 import { Watch } from './screens/Watch';
 import type { ScreenProps } from './screens/types';
@@ -41,6 +42,7 @@ export const routes: readonly Route[] = [
   { pattern: '/import', screen: Import },
   { pattern: '/settings', screen: Settings },
   { pattern: '/settings/benchmark', screen: Benchmark },
+  { pattern: '/sources', screen: Sources },
   { pattern: '/more', screen: More },
   { pattern: '/research', screen: Research },
 ];

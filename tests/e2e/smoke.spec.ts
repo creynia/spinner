@@ -22,6 +22,7 @@ const ROUTES = [
   '#/import',
   '#/settings',
   '#/settings/benchmark',
+  '#/sources',
   '#/more',
   '#/no/such/page',
 ];
