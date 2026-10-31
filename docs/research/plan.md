@@ -726,9 +726,10 @@ seed 3 −$350 / −$344.60 / −$1,496; American −$650 / −$653.14 / −$1,7
 - **The stop is checked after the round, so it overshoots.** b3: stop $2,287, CVaR 5 % −$2,720. c9:
   stop $2,459.50, CVaR 5 % −$3,210, worst −$3,275. A pre-bet guard is untested. It would skip a
   level whose loss would cross the limit.
-- **The c9 cash-out candidate's stops have never run.** The file uses strategy `rules` (net ≥ +$280
-  or ≤ −$2,459.50). The ledger row used session `stopWin`/`stopLoss`. One run of the file itself
-  should reproduce e7-c9-W20-SLhalf.
+- **Resolved (not open): the c9 cash-out candidate's in-strategy stops.** The candidate file was run as
+  is (rules override, seed 20261031, 10,000 sessions; commit 4939916). It reproduced e7-c9-W20-SLhalf
+  exactly (median $286, mean −$46.25, P(win) 90.3 %, CVaR 5 % −$3,210, rej/adj 0). Open remainder: no
+  E8 axis other than seed 3 ran on the cash-out version (American, 250/1,000 spins).
 - **The runner should report the never-capped share and the cap count directly.** Today they are
   read from `endedBy` `strategy:cap-*` or from `onCap: stop` twins (§7.3, §7.14).
 - **The aggregator's x for E4.** `meta.B` is in level-0 stakes, not cycle profits, so x is too large
@@ -756,7 +757,7 @@ Strategy documents under `scripts/research/candidates/`, ordered by how well the
 
 | candidate file | spec id | median | P(win) | mean | CVaR 5 % | bust |
 | --- | --- | --- | --- | --- | --- | --- |
-| `c9-streets-to12-stack-cashout.json` | e7-c9 `e7-c9-W20-SLhalf` (holdouts: `results/e7-c9-holdout.json`) | $286 / $286 / $286 / — | 90.3 / 89.9 / 90.1 % / — | -$46.25 / -$60.12 / -$53.65 / — | -$3,210 / -$3,214 / -$3,212 / — | 0 / 0 / 0 / — |
+| `c9-streets-to12-stack-cashout.json` | e7-c9 `e7-c9-W20-SLhalf` (holdouts: `results/e7-c9-holdout.json`, seed 3: `results/e7-c9-seed3.json`) | $286 / $286 / $286 / $286 | 90.3 / 89.9 / 90.1 / 89.8 % | -$46.25 / -$60.12 / -$53.65 / -$60.90 | -$3,210 / -$3,214 / -$3,212 / -$3,209 | 0 / 0 / 0 / 0 |
 | `c9-streets-to12-stack.json` | e6-full `c9-streets-to12-stack` (seed 3: `results/e8-seed3.json`) | $1,540 / $1,542 / $1,537 / $1,540 | 67.1 / 67.2 / 66.7 / 66.6 % | -$295.45 / -$297.28 / -$320.50 / -$326.25 | -$4,820 / -$4,827 / -$4,826 / -$4,819 | 0 / 0 / 0 / 0 |
 | `b3-two-streets-l29.json` | e6-full `b3-two-streets-l29` (seed 3: `results/e8-seed3.json`) | $1,679 / $1,698 / $1,698 / $1,687 | 60.8 / 62.1 / 62.1 / 61.5 % | -$320.90 / -$246.96 / -$245.78 / -$285.86 | -$4,491 / -$4,487 / -$4,483 / -$4,490 | 0 / 0 / 0 / 0 |
 
