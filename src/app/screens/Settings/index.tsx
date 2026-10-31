@@ -254,6 +254,9 @@ export function Settings({ query }: ScreenProps) {
         </dl>
         <p data-disclaimer>{DISCLAIMER}</p>
         <p data-sync-about>{SYNC_ABOUT}</p>
+        <p class="muted">
+          Rules, figures and algorithms are credited on the <a href="#/sources">Sources</a> page.
+        </p>
       </section>
 
       <Sheet
