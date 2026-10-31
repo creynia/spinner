@@ -51,6 +51,7 @@ npm run dev        # local dev server
 npm run check      # lint, typecheck, format check, gallery size check, unit tests
 npm run build      # dist/ (the PWA, service worker and gallery index)
 npm run test:e2e   # Playwright (builds first; see CONTRIBUTING.md)
+npm run research:sim scripts/research/specs/baseline.json   # headless runs for docs/research/plan.md
 ```
 
 The plan is in [PLAYBOOK.md](PLAYBOOK.md) and the design documents are in [`docs/design/`](docs/design/) (start with `decisions.md`, which wins over everything else). The game-agnostic core is [`src/core`](src/core/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.

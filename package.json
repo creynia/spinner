@@ -22,6 +22,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "gallery:check": "node scripts/check-gallery.mjs",
+    "research:sim": "node scripts/research/sim.mjs",
     "check": "npm run lint && npm run typecheck && npm run format:check && npm run gallery:check && npm test"
   },
   "dependencies": {
