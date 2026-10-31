@@ -1,3 +1,0 @@
-| e1-spread | e1-red | 20261031 | 10000 | -$338.21 | -$350.00 | 25.5 % | 0.0 % | — | $0.00 @ 0 | -2.71 % | E1: EV -$337.84, edge -2.70 % within CI; SD $25.0/spin ⇒ ≈ $559/session (observed $557); widest spread. Flat, no caps → held |
-| e1-spread | e1-red12-dozen3-13 | 20261031 | 10000 | -$336.64 | -$338.00 | 24.5 % | 0.0 % | 5 | $1.00 @ 5 | -2.69 % | E1: EV -$337.84, edge -2.70 % within CI; SD $22.0/spin ⇒ ≈ $493/session (observed $490); middle spread. Flat, no caps → held |
-| e1-spread | e1-straights25 | 20261031 | 10000 | -$337.98 | -$332.00 | 17.5 % | 0.0 % | 23 | $11.00 @ 1 | -2.70 % | E1: EV -$337.84, edge -2.70 % within CI; SD $16.9/spin ⇒ ≈ $377/session (observed $375); narrowest spread. Flat, no caps → held |

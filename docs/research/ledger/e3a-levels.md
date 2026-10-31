@@ -1,9 +1,0 @@
-| spec | id | seed | N | mean | median | P(win) | bust | ahead until | median peak | realized edge | prediction / note |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| e3a-levels | e3a-L5 | 20261031 | 10000 | -$63.25 | -$155.00 | 16.7 % | 82.1 % | 39 | $55.00 @ 28 | -2.66 % | H1: q .0357, n½ 40, median negative at 500 → held (39; median -$155 = bankroll lost). onCap reset, bankroll = one ladder ($155), so first cap ≈ bust |
-| e3a-levels | e3a-L6 | 20261031 | 10000 | -$99.34 | -$315.00 | 24.4 % | 71.6 % | 70 | $125.00 @ 70 | -2.58 % | H1: q .0183, n½ 78, median negative at 500 → held (70, one 10-spin checkpoint below). onCap reset, bankroll = one ladder |
-| e3a-levels | e3a-L7 | 20261031 | 10000 | -$151.37 | -$635.00 | 31.0 % | 58.1 % | 150 | $280.00 @ 140 | -2.63 % | H1: q .0094, n½ 151, median negative at 500 → held (150). onCap reset, bankroll = one ladder |
-| e3a-levels | e3a-L8 | 20261031 | 10000 | -$209.14 | -$180.00 | 33.3 % | 42.2 % | 290 | $580.00 @ 270 | -2.62 % | H1: q .0048, n½ 295, median negative at 500 → held (290; median -$180). onCap reset, bankroll = one ladder |
-| e3a-levels | e3a-L9 | 20261031 | 10000 | -$290.70 | $1,130 | 54.2 % | 25.9 % | 500 | $1,130 @ 500 | -2.85 % | H1: q .0025, n½ 574 > 500, median positive (P(no cap) e^(−qp·500) .55) → held (ahead 54.2 %). onCap reset, bankroll = one ladder |
-| e3a-levels | e3a-L10 | 20261031 | 10000 | -$327.56 | $1,185 | 73.4 % | 14.4 % | 500 | $1,185 @ 500 | -2.63 % | H1: q .0013, n½ 1117, median ≈ 500·p·$5 = +$1,216, ahead ≈ .73 → held (73.4 %, +$1,185). onCap reset, bankroll = one ladder |
-| e3a-levels | e3a-flat-red | 20261031 | 10000 | -$67.64 | -$70.00 | 25.5 % | 0.0 % | — | $0.00 @ 0 | -2.71 % | control: median ≈ -$68, ahead until — → held. Flat $5 on red, bankroll $5,115 |

@@ -1,8 +1,0 @@
-| spec | id | seed | N | mean | median | P(win) | bust | ahead until | median peak | realized edge | prediction / note |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| e3b-lengths | e3b-L8-S250 | 20261031 | 10000 | -$117.58 | $550.00 | 55.7 % | 24.2 % | 250 | $550.00 @ 250 | -2.60 % | P(no cap) .56, median ≈ +$608 (marginal), ahead until 250 → held (P .557, median $550, ahead 250; CVaR 5 % -$1,275); onCap reset |
-| e3b-lengths | e3b-L8-S1000 | 20261031 | 10000 | -$349.01 | -$1,275 | 28.7 % | 60.0 % | 290 | $580.00 @ 270 | -2.67 % | P(no cap) .10, median negative, ahead until ≈ 295 → median and ahead-until held (290); share ahead .287 vs e^(−qpS) .095 (see note: P(win) counts post-cap recoveries, not "no cap"); CVaR 5 % -$1,275; onCap reset |
-| e3b-lengths | e3b-L8-S2000 | 20261031 | 10000 | -$513.09 | -$1,275 | 21.2 % | 74.8 % | 290 | $580.00 @ 270 | -2.60 % | P(no cap) .009, median negative, ahead until ≈ 295 → median and ahead-until held (290); share ahead .212 vs e^(−qpS) .009; CVaR 5 % -$1,275; onCap reset |
-| e3b-lengths | e3b-L10-S250 | 20261031 | 10000 | -$165.17 | $595.00 | 85.5 % | 7.0 % | 250 | $595.00 @ 250 | -2.55 % | P .86, median +$608 → held (P .855, median $595); CVaR 5 % -$5,115; onCap reset |
-| e3b-lengths | e3b-L10-S1000 | 20261031 | 10000 | -$601.81 | $2,300 | 53.9 % | 26.1 % | 1000 | $2,300 @ 1000 | -2.62 % | P .54, median ≈ +$2,432 (marginal), ahead until 1000 → held (P .539, median $2,300, ahead 1000); CVaR 5 % -$5,115; onCap reset |
-| e3b-lengths | e3b-L10-S2000 | 20261031 | 10000 | -$1,045 | -$1,073 | 29.3 % | 44.7 % | 1120 | $2,423 @ 1090 | -2.61 % | P .29, median negative, ahead until ≈ 1117 → held (P .293, median -$1,073, ahead 1120); CVaR 5 % -$5,115; onCap reset |
