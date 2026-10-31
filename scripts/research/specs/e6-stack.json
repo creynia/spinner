@@ -1,0 +1,363 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": { "bankroll": 500000, "maxRounds": 500 },
+    "run": { "sessions": 2000, "seed": 20261031 }
+  },
+  "experiments": [
+    { "id": "flat-red", "strategy": "preset:flat-red" },
+    {
+      "id": "b1-street-l53",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b1-street-l53",
+        "name": "b1 street l53",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              400, 500, 500, 600, 600, 700, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600,
+              1800, 2000, 2100, 2300, 2500, 2800, 3000, 3300, 3600, 3900, 4300, 4700, 5100, 5600,
+              6100, 6600, 7200, 7900, 8600, 9400, 10200, 11200, 12200, 13300, 14500, 15800, 17200,
+              18800, 20500, 22400, 24400, 26600, 29100, 31700, 34600, 37700, 41200
+            ]
+          }
+        },
+        "stages": [
+          { "id": "play", "layout": [{ "bet": "street:1-2-3", "amount": { "prog": "q" } }] }
+        ]
+      },
+      "meta": { "c": 3, "p": 0.0811, "B": 99.6, "q": 0.01132 }
+    },
+    {
+      "id": "b2-corner-l42",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b2-corner-l42",
+        "name": "b2 corner l42",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              400, 500, 600, 600, 700, 800, 900, 1000, 1100, 1300, 1400, 1600, 1800, 2000, 2300,
+              2600, 2900, 3300, 3700, 4100, 4600, 5200, 5900, 6600, 7400, 8400, 9400, 10600, 11900,
+              13400, 15100, 17000, 19100, 21500, 24200, 27200, 30600, 34400, 38700, 43500, 49000,
+              55100
+            ]
+          }
+        },
+        "stages": [
+          { "id": "play", "layout": [{ "bet": "corner:1-2-4-5", "amount": { "prog": "q" } }] }
+        ]
+      },
+      "meta": { "c": 4, "p": 0.1081, "B": 139.7, "q": 0.00819 }
+    },
+    {
+      "id": "b3-two-streets-l29",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b3-two-streets-l29",
+        "name": "b3 two streets l29",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              200, 300, 300, 400, 500, 600, 700, 800, 1000, 1200, 1400, 1700, 2100, 2500, 3000,
+              3600, 4300, 5200, 6200, 7400, 8900, 10700, 12800, 15400, 18500, 22200, 26600, 31900,
+              38300
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              { "bet": "street:16-17-18", "amount": { "prog": "q" } }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 6, "p": 0.1622, "B": 196.7, "q": 0.00591 }
+    },
+    {
+      "id": "b4-sixline-l29",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b4-sixline-l29",
+        "name": "b4 sixline l29",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              400, 500, 600, 700, 900, 1100, 1300, 1500, 1800, 2200, 2600, 3200, 3800, 4600, 5500,
+              6600, 7900, 9500, 11400, 13700, 16400, 19700, 23600, 28300, 34000, 40800, 49000,
+              58800, 70500
+            ]
+          }
+        },
+        "stages": [
+          { "id": "play", "layout": [{ "bet": "sixline:1-2-3-4-5-6", "amount": { "prog": "q" } }] }
+        ]
+      },
+      "meta": { "c": 6, "p": 0.1622, "B": 196.7, "q": 0.00591 }
+    },
+    {
+      "id": "b5-two-sixlines-l15",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b5-two-sixlines-l15",
+        "name": "b5 two sixlines l15",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              200, 300, 500, 700, 1100, 1600, 2400, 3600, 5400, 8100, 12200, 18300, 27400, 41100,
+              61700
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "sixline:1-2-3-4-5-6", "amount": { "prog": "q" } },
+              { "bet": "sixline:19-20-21-22-23-24", "amount": { "prog": "q" } }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 12, "p": 0.3243, "B": 436.6, "q": 0.00279 }
+    },
+    {
+      "id": "b6-dozen-l15",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b6-dozen-l15",
+        "name": "b6 dozen l15",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              400, 600, 900, 1400, 2100, 3100, 4700, 7000, 10500, 15800, 23700, 35500, 53300, 79900,
+              119900
+            ]
+          }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "dozen:1", "amount": { "prog": "q" } }] }]
+      },
+      "meta": { "c": 12, "p": 0.3243, "B": 436.5, "q": 0.00279 }
+    },
+    {
+      "id": "b7-three-sixlines-l9",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b7-three-sixlines-l9",
+        "name": "b7 three sixlines l9",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [200, 400, 800, 1600, 3200, 6400, 12800, 25600, 51200]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "sixline:1-2-3-4-5-6", "amount": { "prog": "q" } },
+              { "bet": "sixline:13-14-15-16-17-18", "amount": { "prog": "q" } },
+              { "bet": "sixline:25-26-27-28-29-30", "amount": { "prog": "q" } }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 18, "p": 0.4865, "B": 511.0, "q": 0.00248 }
+    },
+    {
+      "id": "b8-red-l9",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b8-red-l9",
+        "name": "b8 red l9",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [500, 1000, 2000, 4000, 8000, 16000, 32000, 64000, 128000]
+          }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "q" } }] }]
+      },
+      "meta": { "c": 18, "p": 0.4865, "B": 511.0, "q": 0.00248 }
+    },
+    {
+      "id": "b9-two-dozens-l6",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b9-two-dozens-l6",
+        "name": "b9 two dozens l6",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [300, 900, 2700, 8100, 24300, 72900]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "dozen:1", "amount": { "prog": "q" } },
+              { "bet": "dozen:2", "amount": { "prog": "q" } }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 24, "p": 0.6486, "B": 728.0, "q": 0.00188 }
+    },
+    {
+      "id": "b10-street-l60",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b10-street-l60",
+        "name": "b10 street l60",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              200, 300, 300, 300, 300, 400, 400, 400, 500, 500, 600, 600, 700, 700, 800, 900, 1000,
+              1100, 1200, 1300, 1400, 1500, 1600, 1800, 2000, 2100, 2300, 2500, 2800, 3000, 3300,
+              3600, 3900, 4300, 4700, 5100, 5600, 6100, 6600, 7200, 7900, 8600, 9400, 10200, 11200,
+              12200, 13300, 14500, 15800, 17200, 18800, 20500, 22400, 24400, 26600, 29100, 31700,
+              34600, 37700, 41200
+            ]
+          }
+        },
+        "stages": [
+          { "id": "play", "layout": [{ "bet": "street:1-2-3", "amount": { "prog": "q" } }] }
+        ]
+      },
+      "meta": { "c": 3, "p": 0.0811, "B": 183.9, "q": 0.00626 }
+    },
+    {
+      "id": "b11-red-default-l7",
+      "strategy": {
+        "schema": 1,
+        "id": "b11-red-default-l7",
+        "name": "b11 red default l7",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [2500, 5000, 10000, 20000, 40000, 80000, 160000]
+          }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "q" } }] }]
+      },
+      "meta": { "c": 18, "p": 0.4865, "B": 127.0, "q": 0.00942 }
+    }
+  ]
+}

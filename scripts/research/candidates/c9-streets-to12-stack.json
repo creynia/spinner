@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "id": "keeper-c9-streets-to12-stack",
+  "name": "Keeper c9: streets to 12, stacked",
+  "game": "roulette",
+  "unit": 100,
+  "progressions": {
+    "q": {
+      "kind": "sequence",
+      "track": "round",
+      "onWin": "reset",
+      "onLoss": "advance",
+      "onCap": "stop",
+      "amounts": [
+        100, 200, 200, 300, 500, 700, 1100, 1600, 2400, 3600, 5400, 8100, 12200, 18300, 27400, 41100
+      ]
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "street:1-2-3",
+          "amount": {
+            "prog": "q"
+          }
+        },
+        {
+          "bet": "street:4-5-6",
+          "amount": {
+            "prog": "q"
+          },
+          "when": {
+            "cmp": [
+              {
+                "progStep": "q"
+              },
+              ">=",
+              1
+            ]
+          }
+        },
+        {
+          "bet": "street:7-8-9",
+          "amount": {
+            "prog": "q"
+          },
+          "when": {
+            "cmp": [
+              {
+                "progStep": "q"
+              },
+              ">=",
+              2
+            ]
+          }
+        },
+        {
+          "bet": "street:10-11-12",
+          "amount": {
+            "prog": "q"
+          },
+          "when": {
+            "cmp": [
+              {
+                "progStep": "q"
+              },
+              ">=",
+              3
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "notes": "Table setup: needs a $1 outside minimum and a $1 inside minimum total (rules override limits.outside.min 100, limits.inside.minTotal 100, cents). EV is -2.70% of turnover; this is a skew trade, not an edge. Widens to four streets (1-12) by level 3 and stacks chips to 16 levels, reset on win, stops at the cap. No cash-out rule (the no-stop version). Research ledger e6-full: median $1,540, mean -$295, CVaR5 -$4,820, P(win) 67.1% over 500 spins from $5,000."
+}
