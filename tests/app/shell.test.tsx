@@ -467,7 +467,7 @@ describe('Settings', () => {
 });
 
 describe('More and NotFound', () => {
-  it('More lists Gallery, Import, Settings and About', () => {
+  it('More lists Research, Gallery, Import, Sources, Settings and About', () => {
     window.location.hash = '#/more';
     const { container } = render(<App />);
     const hrefs = [...container.querySelectorAll('ul[aria-label="More destinations"] a')].map((a) =>
@@ -477,6 +477,7 @@ describe('More and NotFound', () => {
       '#/research',
       '#/gallery',
       '#/import',
+      '#/sources',
       '#/settings',
       '#/settings?section=about',
     ]);
@@ -500,6 +501,7 @@ describe('back navigation', () => {
     expect(parentOf('/gallery')).toBe('/more');
     expect(parentOf('/import')).toBe('/more');
     expect(parentOf('/research')).toBe('/more');
+    expect(parentOf('/sources')).toBe('/more');
     expect(parentOf('/run/r1')).toBe('/');
     expect(parentOf('/analyze/r1')).toBe('/');
     expect(parentOf('/define/abc')).toBe('/library');
