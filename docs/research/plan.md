@@ -519,3 +519,33 @@ Survivors b3, c9, a1 as in `specs/e6-full.json` (onCap stop), plus a flat-red co
 | holdout seed 3 | as §7.8 holdouts (b3 $1,698, .62) | ($1,540, .67) | ($1,497, .55) | −$350 |
 
 Edge: −2.70 % (European) or −5.26 % (American) within the residual-z interval on every row.
+
+### 7.11 E7 on the survivors (`specs/e7-{b3,c9,a1}.json`, 10,000 sessions, seed 20261031)
+
+Stop-win at W mean cycle profits. Bust 0 and rejected/adjusted 0 on every row. Residual |z| ≤ 2.4;
+the b3 rows share §7.8's unlucky stream.
+
+| survivor | W | target | median | mean | CVaR 5 % | P(win) measured (pred) |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| b3 | 5 / 10 / 20 / 50 | $115 / 230 / 460 / 1,150 | $124 / 240 / 470 / 1,156 | -$32 / -39 / -79 / -212 | -$3,038 / -4,491 / -4,491 / -4,491 | .966 / .941 / .886 / .736 (.971 / .942 / .888 / .744) |
+| b3 | 100 / none | $2,300 / — | $1,680 / 1,679 | -$321 / -321 | -$4,491 | .608 / .608 (.62) |
+| b3 | 20 + SL $2,287 | $460 | $468 | -$77 | **-$2,720** | .817 (.845) |
+| c9 | 5 / 10 / 20 / 50 | $70 / 140 / 280 / 700 | $77 / 146 / 286 / 705 | -$11 / -27 / -56 / -143 | -$1,705 / -3,344 / -4,820 / -4,820 | .982 / .965 / .932 / .839 (.982 / .965 / .931 / .837) |
+| c9 | 100 / none | $1,400 / — | $1,404 / 1,540 | -$269 / -295 | -$4,820 | .704 / .671 (.62 / .67) |
+| c9 | 20 + SL $2,460 | $280 | $286 | **-$46** | **-$3,210** | .903 (.855) |
+| a1 | 5 / 10 / 20 / 50 | $57 / 113 / 226 / 565 | $63 / 119 / 232 / 570 | -$13 / -32 / -64 / -138 | -$1,465 / -2,920 / -3,380 / -3,380 | .978 / .957 / .917 / .811 (.976 / .952 / .906 / .781) |
+| a1 | 100 / none | $1,130 / — | $1,133 / 1,494 | -$251 / -331 | -$3,380 | .658 / .551 (.61 / .55) |
+| a1 | 20 + SL $1,722 | $226 | $232 | -$64 | -$3,380 | .917 (.69): SL never fires before the cap level |
+
+- **The cash-out works exactly as a skew trade on every survivor.** The median sits at the target
+  (plus one win's overshoot) while P(win) > ½. The mean shrinks with W only because sessions are
+  shorter. Edge per dollar is unchanged.
+- **Prediction misses are in my inputs, not the model.** (1) For a1 I used τ̄ = $11.30 from the D6
+  stop-win; cap loss / B = $3,444/258 = $13.30, and with it (1 − q)^(W·11.3/13.3) gives .919 / .810 /
+  .657 against measured .917 / .811 / .658. (2) "Target unreachable in 500 spins" for b3/c9 at W100
+  was wrong for c9: 70 % reach it, and the b3 row is marginal (1.2 %).
+- **The half-ladder stop-loss depends on the ladder's shape.** Where the deficit grows smoothly (b3,
+  c9) it fires mid-ladder and halves the tail: c9 CVaR 5 % −$4,820 → −$3,210 and mean −$56 → −$46,
+  for 3 points of P(win). It overshoots half the cap loss by one level because the stop is checked
+  after the round. On a widening ladder (a1) the last level carries $2,592 of the $3,444 cap loss, so
+  an equity stop at half never fires before it (cf. Martingale, §7.4).
