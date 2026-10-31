@@ -359,3 +359,19 @@ $25 unit, 8 levels, $5,000 bankroll, stop-win W units. Reset and stop rows are i
 - **The half-ladder stop-loss is a no-op**: −$3,175 is above −$3,187.50, so the 8th bet always fires.
   A trailing stop of 7 losses (`maxSteps 7, onCap stop`) is the version that cuts the tail; it runs as
   E7b with A3's predictions (P(win) at W20 .828, CVaR 5 % −$3,120, bust 0).
+
+**E7b, a trailing stop of 7 losses** (`specs/e7b-mart-L7stop.json`: `maxSteps 7, onCap stop`, the
+same seed). The A3 predictions were committed before the run (e8289e9).
+
+| W | P(win) pred / measured | median | mean (pred) | CVaR 5 % (pred) | bust | rej / adj |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 5 | .954 / .955 | $125 | -$22.61 (-$25) | -$2,827 (-$2,879) | 0 % | 0 / 0 |
+| 10 | .910 / .911 | $250 | -$46.67 (-$49) | -$3,119 (-$3,120) | 0 % | 0 / 0 |
+| 20 | .828 / .830 | $500 | -$87.03 (-$94) | -$3,119 (-$3,120) | 0 % | 0 / 0 |
+| 50 | .623 / .631 | $1,250 | -$175.31 (-$205) | -$3,119 (-$3,120) | 0 % | 0 / 0 |
+| 100 | .388 / .395 | -$1,300 | -$296.77 (-$333) | -$3,119 (-$3,120) | 0 % | 0 / 0 |
+| 20, L8 reset control | .885 / .888 | $500 | -$113.80 (-$130) | -$5,000 | 11.2 % | 1,116 / 2,160 |
+
+Confirmed on every row. The trailing stop swaps 6 points of P(win) at W20 for a CVaR 5 % that is
+$1,881 better and a mean $27 better, with zero bust. The median flips negative between W50 and
+W100: P(win) crosses ½ near qW = ln 2 with q_eff = (19/37)^7 = .0094, at W ≈ 74.
