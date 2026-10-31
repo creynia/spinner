@@ -167,6 +167,11 @@ function horizon(n: number): string {
   return !Number.isFinite(n) || n > 1_000_000 ? 'more than 1,000,000' : WHOLE.format(Math.round(n));
 }
 
+/** "about spin 1,117", or "past spin 1,000,000" for horizons far beyond any session. */
+function horizonPhrase(n: number): string {
+  return !Number.isFinite(n) || n > 1_000_000 ? 'past spin 1,000,000' : `about spin ${horizon(n)}`;
+}
+
 /** "$5, $10, $20 … $2,560": the first three bets and the last. */
 export function amountsHint(amounts: number[]): string {
   const show = (a: number): string => formatMoney(a);
@@ -187,7 +192,7 @@ export function runOutText(q: number): string {
 /** The sentence the live region announces. */
 export function summarySentence(r: CalcResult): string {
   const l = r.ladder;
-  return `${l.L} levels; typical session ahead until about spin ${horizon(l.nHalf)}; chance of ending ahead ${pct1(r.pWin)}`;
+  return `${l.L} levels; typical session ahead until ${horizonPhrase(l.nHalf)}; chance of ending ahead ${pct1(r.pWin)}`;
 }
 
 function Outputs({ r, input, stale }: { r: CalcResult; input: CalcInput; stale: boolean }) {
@@ -208,7 +213,7 @@ function Outputs({ r, input, stale }: { r: CalcResult; input: CalcInput; stale: 
         <Stat label="Chance a cycle runs out" value={runOutText(l.q)} />
         <Stat
           label="Typical session stays ahead until"
-          value={`about spin ${horizon(l.nHalf)}`}
+          value={horizonPhrase(l.nHalf)}
           hint={beyond ? `beyond this ${WHOLE.format(input.spins)}-spin session` : undefined}
         />
         <Stat

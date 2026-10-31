@@ -34,7 +34,7 @@ export function ChCurve(_props: { chapter: Chapter }): JSX.Element {
     `${all.length} ladders: ${shown.length} are drawn, and ${hidden} with x above ${X_MAX} ` +
     `(none above ${pct1(hiddenTop)}) are in the table only. ` +
     `${below} of ${all.length} sit on or under the ceiling e^(−x). The sharper form e^(−k·x), ` +
-    `with k from the table, misses the measured share by ${(rms * 100).toFixed(1)} points (root mean square).`;
+    `with k from the table, misses the measured share by about ${(rms * 100).toFixed(1)} points.`;
 
   return (
     <Scatter
