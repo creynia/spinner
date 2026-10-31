@@ -20,6 +20,7 @@ const TITLES: Record<string, string> = {
   import: 'Import',
   settings: 'Settings',
   more: 'More',
+  research: 'Research',
 };
 
 export function titleFor(path: string): string {
