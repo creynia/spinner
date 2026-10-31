@@ -24,6 +24,7 @@
     "gallery:check": "node scripts/check-gallery.mjs",
     "research:sim": "node scripts/research/sim.mjs",
     "research:ladder": "node scripts/research/ladder.mjs",
+    "research:aggregate": "node scripts/research/sim.mjs --aggregate",
     "check": "npm run lint && npm run typecheck && npm run format:check && npm run gallery:check && npm test"
   },
   "dependencies": {

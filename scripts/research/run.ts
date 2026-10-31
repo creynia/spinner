@@ -35,6 +35,8 @@ export interface ExperimentSpec {
   run?: { sessions?: number; seed?: number };
   /** Spin spacing of the equity path (default: every 10 spins, plus a dense head). */
   pathEvery?: number;
+  /** Free-form per-experiment parameters (c, p, B, q, ...) copied into the report for aggregate.ts. */
+  meta?: Record<string, number | string>;
 }
 
 export interface SpecFile {
@@ -56,6 +58,8 @@ export interface PathPoint {
 
 export interface Report {
   id: string;
+  /** The spec's `meta` block, present only when the spec carried one. */
+  meta?: Record<string, number | string>;
   sessions: number;
   bankroll: number;
   maxRounds: number;
@@ -312,7 +316,7 @@ export function formatLine(r: Report): string {
 
 function usage(): never {
   console.error(
-    'usage: node scripts/research/sim.mjs <spec.json> [--sessions N] [--spins N] [--bankroll CENTS] [--seed N] [--out report.json] [--only id,id]',
+    'usage: node scripts/research/sim.mjs <spec.json> [--sessions N] [--spins N] [--bankroll CENTS] [--seed N | --seeds a,b,c] [--out report.json] [--only id,id]',
   );
   process.exit(2);
 }
@@ -336,28 +340,43 @@ export async function main(argv: string[]): Promise<void> {
   if (opt.seed) defaults.run.seed = Number(opt.seed);
   if (opt.spins) defaults.session.maxRounds = Number(opt.spins);
   if (opt.bankroll) defaults.session.bankroll = Number(opt.bankroll);
+  if (opt.seed !== undefined && opt.seeds !== undefined) {
+    console.error('--seed and --seeds are mutually exclusive');
+    process.exit(2);
+  }
+  const seeds = opt.seeds !== undefined ? opt.seeds.split(',').map((x) => x.trim()) : null;
+  if (seeds && (seeds.length === 0 || seeds.some((x) => x === '' || !Number.isFinite(Number(x)))))
+    usage();
   const only = opt.only ? new Set(opt.only.split(',')) : null;
   const reports: Report[] = [];
   for (const e of spec.experiments) {
     if (only && !only.has(e.id)) continue;
-    // Command-line overrides win over the experiment's own values.
-    const merged: ExperimentSpec = {
-      ...e,
-      session: {
-        ...e.session,
-        ...(opt.spins ? { maxRounds: Number(opt.spins) } : {}),
-        ...(opt.bankroll ? { bankroll: Number(opt.bankroll) } : {}),
-      },
-      run: {
-        ...e.run,
-        ...(opt.sessions ? { sessions: Number(opt.sessions) } : {}),
-        ...(opt.seed ? { seed: Number(opt.seed) } : {}),
-      },
-    };
-    const def = toDefinition(merged, defaults);
-    const r = runOne(def, e.id, e.pathEvery ?? defaults.pathEvery ?? 10);
-    reports.push(r);
-    console.log(formatLine(r));
+    for (const sd of seeds ?? [null]) {
+      // Command-line overrides win over the experiment's own values.
+      const merged: ExperimentSpec = {
+        ...e,
+        session: {
+          ...e.session,
+          ...(opt.spins ? { maxRounds: Number(opt.spins) } : {}),
+          ...(opt.bankroll ? { bankroll: Number(opt.bankroll) } : {}),
+        },
+        run: {
+          ...e.run,
+          ...(opt.sessions ? { sessions: Number(opt.sessions) } : {}),
+          ...(opt.seed ? { seed: Number(opt.seed) } : {}),
+          ...(sd !== null ? { seed: Number(sd) } : {}),
+        },
+      };
+      const def = toDefinition(merged, defaults);
+      const r = runOne(
+        def,
+        sd !== null ? `${e.id}@${sd}` : e.id,
+        e.pathEvery ?? defaults.pathEvery ?? 10,
+      );
+      if (e.meta) r.meta = e.meta;
+      reports.push(r);
+      console.log(formatLine(r));
+    }
   }
   if (opt.out) {
     writeFileSync(resolve(opt.out), JSON.stringify(reports, null, 1));

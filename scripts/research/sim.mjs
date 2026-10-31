@@ -1,7 +1,7 @@
 // Launcher for the headless research runner (docs/research/plan.md). Vite's module runner gives
 // the TypeScript sources the same `@core` / `@game` aliases and extensionless imports as the app,
 // without a build step. Usage: node scripts/research/sim.mjs <spec.json> [options]; `run.ts` has
-// the options.
+// the options. `sim.mjs --aggregate [paths] [--csv|--json]` runs aggregate.ts.
 import { fileURLToPath } from 'node:url';
 import { createServer, createServerModuleRunner } from 'vite';
 
@@ -26,8 +26,11 @@ const server = await createServer({
 });
 try {
   const runner = createServerModuleRunner(server.environments.ssr, { hmr: false });
-  const mod = await runner.import('/scripts/research/run.ts');
-  await mod.main(process.argv.slice(2));
+  const args = process.argv.slice(2);
+  // `--aggregate` runs the results aggregator (aggregate.ts) instead of the simulator.
+  const agg = args[0] === '--aggregate';
+  const mod = await runner.import(`/scripts/research/${agg ? 'aggregate' : 'run'}.ts`);
+  await mod.main(agg ? args.slice(1) : args);
 } finally {
   await server.close();
 }
