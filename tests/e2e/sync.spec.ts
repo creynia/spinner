@@ -743,11 +743,23 @@ test('#10 #11: a sweep on B reuses A’s remote done variant runs; a paused remo
   await bp.goto('./?e2e#/sweep/new');
   const pick = async (label: string, test: (t: string, v: string) => boolean) => {
     const sel = bp.getByLabel(label, { exact: true });
-    const opts = await sel
-      .locator('option')
-      .evaluateAll((os) => os.map((o) => [(o as HTMLOptionElement).value, o.textContent ?? '']));
+    // The screen shows "Loading the library..." until the remote runs are listed, so the select
+    // (and its options) can appear a moment after navigation: poll instead of reading once.
+    let opts: string[][] = [];
+    await expect
+      .poll(
+        async () => {
+          opts = await sel
+            .locator('option')
+            .evaluateAll((os) =>
+              os.map((o) => [(o as HTMLOptionElement).value, o.textContent ?? '']),
+            );
+          return opts.some(([v, t]) => test(t!, v!));
+        },
+        { message: `${label}: no matching option`, timeout: 30_000 },
+      )
+      .toBe(true);
     const hit = opts.find(([v, t]) => test(t!, v!));
-    expect(hit, `${label}: ${JSON.stringify(opts)}`).toBeTruthy();
     await sel.selectOption(hit![0]!);
   };
   await pick('Experiment', (t) => t.startsWith('Sweep base'));
