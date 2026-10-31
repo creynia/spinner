@@ -503,3 +503,19 @@ Half-ladder stop-loss: CVaR 5 % ≈ −½ cap loss; P(win) at W20 falls to (1 �
 | b3 (.00591, 81) | .971 | .942 | .888 | .744 | target unreachable ⇒ ≈ no-stop row (.62, median ≈ $1,690) | ≈ .845, CVaR ≈ −$2,300 |
 | c9 (.00356, 111) | .982 | .965 | .931 | .837 | .700 × .89 ≈ .62 | ≈ .855, CVaR ≈ −$2,400 |
 | a1 (.00494, 122) | .976 | .952 | .906 | .781 | .610 | ≈ .69, CVaR ≈ −$1,700 |
+
+### 7.10 Predictions for E8 robustness (written before the runs)
+
+Survivors b3, c9, a1 as in `specs/e6-full.json` (onCap stop), plus a flat-red control. Reporting seed
+20261031 unless noted; 10,000 sessions.
+
+| axis | b3 | c9 | a1 | flat-red |
+| --- | --- | --- | --- | --- |
+| American wheel (p → c/38, q × Π((38 − c_k)/38 ÷ (37 − c_k)/37)) | q .00685, P(no cap) .58, median still > 0 (≈ $1,600), mean ≈ −$626 (−5.26 % of turnover) | q .00425, P(no cap) .63, median > 0 (≈ $1,500), mean ≈ −$575 | q .00598, P(no cap) .49: **median flips to ≤ 0** (marginal), mean ≈ −$645 | edge −5.26 %, mean ≈ −$658 |
+| la partage (even money only) | identical to European, row for row (no even-money bets) | identical | identical | edge −1.35 %, mean ≈ −$169 |
+| $10,000 bankroll | identical to $5,000 (fixed ladder, onCap stop, cap loss < $5,000) | identical | identical | identical |
+| 250 spins | P(no cap) .79, median ≈ +$850 | .82, ≈ +$780 | .74, ≈ +$750 | median ≈ −$175 |
+| 1,000 spins | P(no cap) .38: median < 0 | .45: median < 0 | .30: median < 0 | median ≈ −$700 |
+| holdout seed 3 | as §7.8 holdouts (b3 $1,698, .62) | ($1,540, .67) | ($1,497, .55) | −$350 |
+
+Edge: −2.70 % (European) or −5.26 % (American) within the residual-z interval on every row.
