@@ -80,6 +80,10 @@ export interface Report {
   /** P(net > 0) with its Wilson interval. */
   pWin: { p: number; lo: number; hi: number };
   pBust: number;
+  /** Share of sessions ended by a progression cap (an `endedBy` label starting `strategy:cap`). */
+  capRate: number;
+  /** 1 - capRate: the share of sessions that never hit a cap. */
+  neverCapped: number;
   /** Reconcile outcomes summed over sessions: a non-zero count means the strategy did not run as drawn. */
   rejectedRounds: number;
   adjustedRounds: number;
@@ -271,6 +275,10 @@ export function runOne(def: NormalizedDefinition, id: string, every = 10): Repor
   }
   const ddSorted = sortedCopy(dd);
   const rSorted = sortedCopy(rounds);
+  let capped = 0;
+  for (const [label, n] of ended) if (label.startsWith('strategy:cap')) capped += n;
+  const capRate = capped / N;
+
   return {
     id,
     sessions: N,
@@ -300,6 +308,8 @@ export function runOne(def: NormalizedDefinition, id: string, every = 10): Repor
     },
     pWin: { p: wins / N, lo: w.lo, hi: w.hi },
     pBust: (ended.get('bust') ?? 0) / N,
+    capRate,
+    neverCapped: 1 - capRate,
     rejectedRounds,
     adjustedRounds,
     sessionsWithRejected,
@@ -342,6 +352,7 @@ export function formatLine(r: Report): string {
     `p10 ${$(r.net.q.p10)}`.padEnd(16),
     `win ${pct(r.pWin.p)}`.padEnd(11),
     `bust ${pct(r.pBust)}`.padEnd(11),
+    `cap ${pct(r.capRate)}`.padEnd(11),
     `edge ${(100 * r.edge.realized).toFixed(2)}% (${(100 * r.edge.analytic).toFixed(2)}%)`.padEnd(
       24,
     ),

@@ -36,6 +36,24 @@ describe('aggregate toRow', () => {
     });
   });
 
+  it("divides B by the payout m = (36 − c)/c when meta.BUnits is 'stakes'", () => {
+    // e4-dozen-g: B = 172.92 level-0 stakes, c = 12, m = 2, p = 0.32432, S = 500.
+    const meta = { c: 12, p: 0.32432, B: 172.92 };
+    const stakes = toRow('f.json', report({ ...meta, BUnits: 'stakes' }));
+    expect(stakes.x).toBeCloseTo((0.32432 * 500) / (172.92 / 2), 12);
+    expect(stakes.x!).toBeCloseTo(1.9, 1);
+    expect(stakes.B).toBeCloseTo(86.46, 12);
+    // e4-corner-g: B = 187.84, c = 4, m = 8.
+    expect(
+      toRow('f.json', report({ c: 4, p: 0.10811, B: 187.84, BUnits: 'stakes' })).x!,
+    ).toBeCloseTo(2.3, 1);
+    // 'profits' and an absent BUnits leave B alone; stakes without c gives no x.
+    const plain = (0.32432 * 500) / 172.92;
+    expect(toRow('f.json', report({ ...meta, BUnits: 'profits' })).x).toBeCloseTo(plain, 12);
+    expect(toRow('f.json', report(meta)).x).toBeCloseTo(plain, 12);
+    expect(toRow('f.json', report({ p: 0.3, B: 10, BUnits: 'stakes' })).x).toBeNull();
+  });
+
   it('takes the residual edge z when the report has one', () => {
     const r = toRow('f.json', {
       ...report(),

@@ -36,10 +36,24 @@ export interface Row {
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
+/**
+ * B in the units x = p·S/B needs (cycle profits, E5). A spec whose `meta.B` is a sum of level-0
+ * stakes (E4) declares `BUnits: 'stakes'`; one cycle then profits m stakes, m = (36 − c)/c, so
+ * B_profits = B / m. `BUnits: 'profits'` (or absent) leaves B as given.
+ */
+function profitsB(meta: Report['meta']): number | null {
+  const B = num(meta?.B);
+  if (B === null) return null;
+  if (meta?.BUnits !== 'stakes') return B;
+  const c = num(meta.c);
+  if (c === null || !(c > 0 && c < 36)) return null;
+  return B / ((36 - c) / c);
+}
+
 /** Pure row computation for one report; `meta.p` and `meta.B` are optional. */
 export function toRow(file: string, r: Report): Row {
   const p = num(r.meta?.p);
-  const B = num(r.meta?.B);
+  const B = profitsB(r.meta);
   const S = r.maxRounds;
   const x = p !== null && B !== null && B > 0 ? (p * S) / B : null;
   return {
