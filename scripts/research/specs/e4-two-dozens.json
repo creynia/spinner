@@ -1,0 +1,192 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": {
+      "bankroll": 500000,
+      "maxRounds": 500
+    },
+    "run": {
+      "sessions": 10000,
+      "seed": 20261031
+    }
+  },
+  "experiments": [
+    {
+      "id": "e4-two-dozens-g",
+      "meta": {
+        "c": 24,
+        "p": 0.64865,
+        "B": 121,
+        "q": 0.0053544,
+        "g": 3,
+        "L": 5,
+        "base": 2600,
+        "recovers": true
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e4-two-dozens-g",
+        "name": "E4 dozens 1 and 2, g = 36/12, 5 levels",
+        "game": "roulette",
+        "unit": 1300,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "reset",
+            "amounts": [1300, 3900, 11700, 35100, 105300]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "dozen:1",
+                "amount": {
+                  "prog": "q"
+                }
+              },
+              {
+                "bet": "dozen:2",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 1300
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "e4-two-dozens-g-stop",
+      "meta": {
+        "c": 24,
+        "p": 0.64865,
+        "B": 121,
+        "q": 0.0053544,
+        "g": 3,
+        "L": 5,
+        "base": 2600,
+        "recovers": true
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e4-two-dozens-g-stop",
+        "name": "E4 dozens 1 and 2, g = 36/12, 5 levels (onCap stop)",
+        "game": "roulette",
+        "unit": 1300,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [1300, 3900, 11700, 35100, 105300]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "dozen:1",
+                "amount": {
+                  "prog": "q"
+                }
+              },
+              {
+                "bet": "dozen:2",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 1300
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "e4-two-dozens-x2",
+      "meta": {
+        "c": 24,
+        "p": 0.64865,
+        "B": 127,
+        "q": 0.00066098,
+        "g": 2,
+        "L": 7,
+        "base": 2600,
+        "recovers": false
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e4-two-dozens-x2",
+        "name": "E4 dozens 1 and 2, naive x2, 7 levels",
+        "game": "roulette",
+        "unit": 1300,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "reset",
+            "amounts": [1300, 2600, 5200, 10400, 20800, 41600, 83200]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "dozen:1",
+                "amount": {
+                  "prog": "q"
+                }
+              },
+              {
+                "bet": "dozen:2",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 1300
+            }
+          }
+        }
+      }
+    }
+  ]
+}
