@@ -1,0 +1,4 @@
+| e8-seed3 | flat-red | 3 | 10000 | -$344.60 | -$350 | 24.8 % | 0.0 % | 0 | $0 @ 0 | -2.76 % | CVaR5 −$1,496; cap rate n/a; rejected 0, adjusted 0; edge z = -1.21. Pred median -$350 → held |
+| e8-seed3 | b3-two-streets-l29 | 3 | 10000 | -$285.86 | $1,687 | 61.5 % | 0.0 % | 500 | $1,687 @ 500 | -3.03 % | CVaR5 −$4,490; cap rate 37.9 %; onCap stop; rejected 0, adjusted 0; edge z = -1.12. Pred median $1,698, P(win) .62 → held (median -0.6 %, P(win) within 0.005) |
+| e8-seed3 | c9-streets-to12-stack | 3 | 10000 | -$326.25 | $1,540 | 66.6 % | 0.0 % | 500 | $1,540 @ 500 | -3.12 % | CVaR5 −$4,819; cap rate 33.2 %; onCap stop; rejected 0, adjusted 0; edge z = -1.60. Pred median $1,540, P(win) .67 → held |
+| e8-seed3 | a1-streets-w27 | 3 | 10000 | -$351.14 | $1,492 | 54.7 % | 0.0 % | 500 | $1,492 @ 500 | -2.79 % | CVaR5 −$3,381; cap rate 45.2 %; onCap stop; rejected 0, adjusted 0; edge z = -0.50. Pred median $1,497, P(win) .55 → held (median -0.4 %, P(win) within 0.005) |
