@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import type { Plugin } from 'vite';
+import { isStaticSiteFile } from './static-pages.ts';
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -51,6 +52,8 @@ export function swPlugin(): Plugin {
           .filter((f) => f !== 'sw.js' && !f.endsWith('.map'))
           // gallery bundles are cached on open, not precached (the index is precached)
           .filter((f) => !f.startsWith('gallery/') || f === 'gallery/index.json')
+          // static crawler pages, sitemap and llms files are always fetched from the network
+          .filter((f) => !isStaticSiteFile(f))
           .sort();
         const precache = ['./', ...files.map((f) => './' + f)];
         const src = readFileSync(resolve(root, 'src/pwa/sw.ts'), 'utf8');

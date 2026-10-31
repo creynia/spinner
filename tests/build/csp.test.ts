@@ -57,9 +57,10 @@ describe.skipIf(!hasDist)('dist HTML entries', () => {
       expect(html.indexOf(meta![0])).toBeGreaterThan(html.indexOf('charset'));
       const before = html.slice(0, html.indexOf(meta![0]));
       expect(before).not.toMatch(/<script|<link|<style/);
-      const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].filter(
-        (m) => m[1]!.trim() !== '',
-      );
+      // JSON-LD is a data block (never executed, not subject to script-src), so it is allowed.
+      const inline = [
+        ...html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/g),
+      ].filter((m) => m[2]!.trim() !== '' && !/type="application\/ld\+json"/.test(m[1]!));
       expect(inline).toEqual([]);
     },
   );

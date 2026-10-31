@@ -6,7 +6,7 @@ Static web app for GitHub Pages; no backend, no accounts. Everything stays on yo
 
 ## Use it
 
-- **Open it:** <https://creynia.github.io/spinner/>
+- **Open it:** <https://creynia.com/spinner/>
 - **Add to Home screen (Android/Chrome):** open the link, tap the Chrome menu (three dots), then **Add to Home screen** (or **Install app**). On iPhone/iPad (Safari): tap **Share**, then **Add to Home Screen**. It launches full screen and works offline after the first load.
 
 | Home                                                                              | Define                                                              | Analyze                                                                                                   |
@@ -57,9 +57,16 @@ npm run research:sim scripts/research/specs/baseline.json   # headless runs for 
 
 The plan is in [PLAYBOOK.md](PLAYBOOK.md) and the design documents are in [`docs/design/`](docs/design/) (start with `decisions.md`, which wins over everything else). The game-agnostic core is [`src/core`](src/core/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.
 
+### Static pages for search engines
+
+`npm run build` also writes plain HTML pages with the gallery runs' real numbers at
+[`/spinner/strategies/`](https://creynia.com/spinner/strategies/), plus `sitemap.xml`, `llms.txt` and
+`llms-full.txt`. They are generated from the committed gallery bundles by the app's own analysis code;
+see [`docs/seo.md`](docs/seo.md).
+
 ### Deploying
 
-`main` deploys to GitHub Pages through `.github/workflows/pages.yml` (Pages source: GitHub Actions). If a deploy fails with "deployment in progress", re-run the failed job.
+`main` deploys to GitHub Pages through `.github/workflows/pages.yml` (Pages source: GitHub Actions). If a deploy fails with "deployment in progress", re-run the failed job. After a deploy the workflow pings IndexNow with the sitemap URLs (best effort).
 
 ## License
 

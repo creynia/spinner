@@ -57,7 +57,7 @@ export interface GalleryAnalyzer {
 }
 
 /** Even-money table maximum of the high-limit table (decisions #3), cents; roulette's outside max. */
-const TABLE_MAX = 500_000;
+export const TABLE_MAX = 500_000;
 
 export const realAnalyzer: GalleryAnalyzer = {
   async headline(bundle, _file, raw) {

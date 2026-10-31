@@ -32,7 +32,7 @@ for (const route of ROUTES) {
     await page.goto(`./?e2e${route}`);
     await expect(page.locator('h1')).toHaveCount(1);
     await expect(page.locator('h1')).toBeVisible();
-    await expect(page).toHaveTitle('spinner');
+    await expect(page).toHaveTitle(/\| spinner$/);
     await guard.check(route);
     await expectAxeClean(page, route);
   });

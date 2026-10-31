@@ -8,6 +8,7 @@
     "jsx": "react-jsx",
     "jsxImportSource": "preact"
   },
+  "files": ["src/core/ui/results/format.ts"],
   "include": [
     "*.config.ts",
     "build",

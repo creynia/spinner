@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 const root = new URL('../../', import.meta.url);
 const src = readFileSync(new URL('src/pwa/sw.ts', root), 'utf8');
 const hasDist = existsSync(new URL('dist/sw.js', root));
+/** Files written by build/static-pages.ts, which the service worker leaves to the network. */
+const STATIC = /^(strategies\/|sitemap\.xml$|llms\.txt$|llms-full\.txt$)/;
 
 describe('sw.ts source', () => {
   it('re-fetches precached files past the HTTP cache', () => {
@@ -64,11 +66,14 @@ describe('gallery fetch handling (sw.ts run against fakes)', () => {
       stored,
       setStatus: (n: number) => (status = n),
       failPut: () => (putFails = true),
-      async fetch(url: string) {
+      async fetch(url: string, mode?: 'navigate') {
         let p: Promise<Response> | undefined;
         const waits: Promise<unknown>[] = [];
+        // A real navigation request has mode 'navigate', which `new Request` cannot set.
+        const request = new Request(url);
+        if (mode) Object.defineProperty(request, 'mode', { value: mode });
         handlers.fetch!({
-          request: new Request(url),
+          request,
           respondWith: (r: Promise<Response>) => (p = r),
           waitUntil: (w: Promise<unknown>) => waits.push(w),
         });
@@ -101,6 +106,21 @@ describe('gallery fetch handling (sw.ts run against fakes)', () => {
     }
     expect(sw.stored).toEqual([]);
   });
+  it('leaves static pages, the sitemap and llms files to the network (no shell fallback)', async () => {
+    const sw = await load();
+    for (const url of [
+      'http://x/spinner/strategies/',
+      'http://x/spinner/strategies/martingale-red/',
+      'http://x/spinner/strategies/martingale-red/index.html',
+      'http://x/spinner/sitemap.xml',
+      'http://x/spinner/llms.txt',
+      'http://x/spinner/llms-full.txt',
+    ]) {
+      expect(await sw.fetch(url, 'navigate')).toBeUndefined();
+    }
+    // the app itself is still handled
+    expect(await sw.fetch('http://x/spinner/', 'navigate')).toBeDefined();
+  });
   it('treats gallery/index.json?x as the index, not a bundle', async () => {
     const sw = await load();
     await sw.fetch('http://x/spinner/gallery/index.json?x=1');
@@ -129,6 +149,11 @@ describe.skipIf(!hasDist)('dist/sw.js', () => {
     expect(precache).toContain('./gallery/index.json');
     expect(precache.some((p) => /^\.\/assets\/sim\.worker-.*\.js$/.test(p))).toBe(true);
   });
+  it('does not precache the static crawler pages, sitemap or llms files', () => {
+    expect(precache.some((p) => p.startsWith('./strategies/'))).toBe(false);
+    for (const f of ['sitemap.xml', 'llms.txt', 'llms-full.txt'])
+      expect(precache).not.toContain(`./${f}`);
+  });
   it('does not precache gallery bundles, source maps or itself', () => {
     expect(
       precache.filter((p) => p.startsWith('./gallery/') && p !== './gallery/index.json'),
@@ -142,7 +167,8 @@ describe.skipIf(!hasDist)('dist/sw.js', () => {
       );
     const built = walk(new URL('dist/', root))
       .filter((f) => f !== 'sw.js' && !f.endsWith('.map'))
-      .filter((f) => !f.startsWith('gallery/') || f === 'gallery/index.json');
+      .filter((f) => !f.startsWith('gallery/') || f === 'gallery/index.json')
+      .filter((f) => !STATIC.test(f));
     expect(precache.filter((p) => p !== './').sort()).toEqual(built.map((f) => `./${f}`).sort());
   });
   it('index.html links the manifest and apple-touch-icon', () => {
