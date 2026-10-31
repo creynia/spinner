@@ -272,7 +272,7 @@ the button.
 | Encode | `encodeShareLink(normalized)` from `@core` |
 | Navigate | `{ hash }` → `go(hash)` with `go` defaulting to `navigate` (deps pattern: `GalleryDeps.go`, `Gallery/index.tsx`) |
 | Too long | `{ tooLong }`: the block shows "This definition is too long for a link: export the definition file." (`SHARE_FALLBACK_NOTICE`, as Define does at `Define/index.tsx:320`) and a secondary button "Download definition file" that saves `exportDefinitionFile(normalized)` as `<candidate id>.definition.json` (the private `download()` pattern of `Settings/index.tsx:65`) |
-| Button | `Button variant="primary"`, text "Open in Define", `aria-label="Open <name> in Define"`; while encoding: disabled, text "Opening…" |
+| Button | `Button variant="primary"`, text "Open in Define", `aria-label="Open in Define: <name>"` (the visible text must be a prefix of the accessible name, axe `label-content-name-mismatch`); while encoding: disabled, text "Opening…" |
 | Copy under the buttons | "Opens an unsaved draft in Define with the $1-minimum table, a $5,000 bankroll, 500 spins, 10,000 sessions and seed 20261031. Press Run; on Analyze → Overview the typical session should match the number above, because the seed is the same." (numbers here are constants of `share.ts`, not results) |
 | Define shows | the notice "Loaded from a link. This is an unsaved draft." (`Define/index.tsx:479`), the strategy, Game & rules with the overrides, Session $5,000 / 500 spins, Run 10,000 sessions / seed 20261031 |
 | Risk notice | no disclaimer text on this screen (decisions #11); the last line of chapter 9 is a `link-tap` "Read the risk notice" to `#/settings?section=about` (§11 Q3) |
@@ -422,7 +422,7 @@ phone-360, phone 390 × 844, phone-landscape 844 × 390, desktop 1280 × 800; `p
 | Deep link | `#/research?chapter=curve`: the curve section's top is within 0–120 px of the viewport top; `?chapter=nope` opens at the top without errors |
 | Math | summary `aria-expanded`/`open` false → click → true; Enter on the focused summary closes it; reload → closed |
 | Calculator | preset "Red, doubling from $5" → "10" levels and "1,117"; coverage 40 → error text, results greyed |
-| Try it | button named `/Open Keeper c9 \+ cash-out/` → URL matches `/#\/define\?d=/`, text "Loaded from a link. This is an unsaved draft.", seed field 20261031, spins 500 (phone-360 and desktop only) |
+| Try it | button named `/^Open in Define: Keeper c9/` → URL matches `/#\/define\?d=/`, text "Loaded from a link. This is an unsaved draft.", seed field 20261031, spins 500 (phone-360 and desktop only) |
 | Dark | `localStorage['spinner:theme'] = 'dark'` before load: axe clean, screenshots `research-<project>-dark.png` (with `SHOTS_DIR`, as `shell.spec.ts`) |
 
 `shell.spec.ts` already has `#/research` in its route loop (I1, landed).
