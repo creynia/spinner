@@ -3,6 +3,7 @@ import { Card } from '@core/ui';
 import { href } from '../../router';
 
 const LINKS = [
+  { path: '/research', label: 'Research', hint: 'What progressions can and cannot do' },
   { path: '/gallery', label: 'Gallery', hint: 'Curated results to explore read-only' },
   { path: '/import', label: 'Import', hint: 'A results file, a strategy file or a shared link' },
   { path: '/settings', label: 'Settings', hint: 'Theme, money framing, storage, updates' },

@@ -9,13 +9,26 @@
     "jsxImportSource": "preact"
   },
   "files": ["src/core/ui/results/format.ts"],
-  "include": ["*.config.ts", "build", "scripts/**/*.ts", "tests/e2e", "tests/perf", "src/core"],
+  "include": [
+    "*.config.ts",
+    "build",
+    "scripts/**/*.ts",
+    "tests/e2e",
+    "tests/perf",
+    "src/core",
+    "src/game",
+    "src/app/screens/Research/ladderMath.ts"
+  ],
   "exclude": [
     "src/core/**/*.test.ts",
     "src/core/**/*.test.tsx",
     "src/core/**/__fixtures__",
     "src/core/**/*.fixture.ts",
     "src/core/ui",
-    "src/core/testing"
+    "src/core/testing",
+    "src/game/*/ui",
+    "src/game/**/*.test.ts",
+    "src/game/**/__fixtures__",
+    "src/game/*/testing"
   ]
 }

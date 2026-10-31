@@ -222,6 +222,7 @@ export default tseslint.config(
       'test-results/**',
       'public/icons/**',
       'node_modules/**',
+      '.claude/**',
     ],
   },
   js.configs.recommended,
@@ -245,7 +246,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['*.config.ts', 'build/**/*.ts'],
+    files: ['*.config.ts', 'build/**/*.ts', 'scripts/**/*.ts'],
     extends: [...tseslint.configs.recommended],
     languageOptions: { globals: { ...globals.node } },
   },

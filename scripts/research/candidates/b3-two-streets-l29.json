@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "id": "keeper-b3-two-streets-l29",
+  "name": "Keeper b3: two streets, 29 levels",
+  "game": "roulette",
+  "unit": 100,
+  "progressions": {
+    "q": {
+      "kind": "sequence",
+      "track": "round",
+      "onWin": "reset",
+      "onLoss": "advance",
+      "onCap": "stop",
+      "amounts": [
+        200, 300, 300, 400, 500, 600, 700, 800, 1000, 1200, 1400, 1700, 2100, 2500, 3000, 3600,
+        4300, 5200, 6200, 7400, 8900, 10700, 12800, 15400, 18500, 22200, 26600, 31900, 38300
+      ]
+    }
+  },
+  "stages": [
+    {
+      "id": "play",
+      "layout": [
+        {
+          "bet": "street:1-2-3",
+          "amount": {
+            "prog": "q"
+          }
+        },
+        {
+          "bet": "street:16-17-18",
+          "amount": {
+            "prog": "q"
+          }
+        }
+      ]
+    }
+  ],
+  "notes": "Table setup: needs a $1 outside minimum and a $1 inside minimum total (rules override limits.outside.min 100, limits.inside.minTotal 100, cents). EV is -2.70% of turnover; this is a skew trade, not an edge. Two streets (1-2-3, 16-17-18) on a 29-step ladder, reset on win, stops at the cap. No cash-out rule. Research ledger e6-full: median $1,679, mean -$321, CVaR5 -$4,491, P(win) 60.8% over 500 spins from $5,000."
+}

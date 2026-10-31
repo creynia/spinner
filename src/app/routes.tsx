@@ -11,6 +11,7 @@ import { Import } from './screens/Import';
 import { Library } from './screens/Library';
 import { More } from './screens/More';
 import { NotFound } from './screens/NotFound';
+import { Research } from './screens/Research';
 import { Run } from './screens/Run';
 import { Benchmark } from './screens/Settings/Benchmark';
 import { Settings } from './screens/Settings';
@@ -41,6 +42,7 @@ export const routes: readonly Route[] = [
   { pattern: '/settings', screen: Settings },
   { pattern: '/settings/benchmark', screen: Benchmark },
   { pattern: '/more', screen: More },
+  { pattern: '/research', screen: Research },
 ];
 
 export interface Resolved {

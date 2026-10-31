@@ -1,0 +1,502 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": { "bankroll": 500000, "maxRounds": 500 },
+    "run": { "sessions": 2000, "seed": 20261031 }
+  },
+  "experiments": [
+    { "id": "flat-red", "strategy": "preset:flat-red" },
+    {
+      "id": "c1-streets-to24-stack",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c1-streets-to24-stack",
+        "name": "c1 streets to24 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 300, 500, 1000, 2400, 7200, 21600]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 3, "p": 0.243, "B": 193.3, "q": 0.00642 }
+    },
+    {
+      "id": "c2-sixlines-to24-stack",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c2-sixlines-to24-stack",
+        "name": "c2 sixlines to24 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [300, 500, 1000, 2900, 8700, 26100, 78300]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "sixline:1-2-3-4-5-6", "amount": { "prog": "q" } },
+              {
+                "bet": "sixline:7-8-9-10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "sixline:13-14-15-16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "sixline:19-20-21-22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 6, "p": 0.3499, "B": 290.9, "q": 0.00443 }
+    },
+    {
+      "id": "c3-corners-to24-stack",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c3-corners-to24-stack",
+        "name": "c3 corners to24 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [200, 300, 400, 800, 1700, 5100, 15300, 45900]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "corner:1-2-4-5", "amount": { "prog": "q" } },
+              {
+                "bet": "corner:7-8-10-11",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "corner:13-14-16-17",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "corner:19-20-22-23",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "corner:25-26-28-29",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "corner:31-32-34-35",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 4, "p": 0.2831, "B": 236.5, "q": 0.00534 }
+    },
+    {
+      "id": "c4-dozen-streets-to24-stack",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c4-dozen-streets-to24-stack",
+        "name": "c4 dozen streets to24 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 400, 1000, 2900, 8700, 26100]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "dozen:1", "amount": { "times": [{ "prog": "q" }, 4] } },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 12, "p": 0.4124, "B": 331.9, "q": 0.00387 }
+    },
+    {
+      "id": "c5-dozen-to-two-dozens-stack",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c5-dozen-to-two-dozens-stack",
+        "name": "c5 dozen to two dozens stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [200, 600, 1800, 5400, 16200, 48600, 145800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "dozen:1", "amount": { "prog": "q" } },
+              {
+                "bet": "dozen:2",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 12, "p": 0.4896, "B": 1092.5, "q": 0.00127 }
+    },
+    {
+      "id": "c6-dozen-to-two-dozens-default",
+      "strategy": {
+        "schema": 1,
+        "id": "c6-dozen-to-two-dozens-default",
+        "name": "c6 dozen to two dozens default",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [2500, 7500, 22500, 67500]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "dozen:1", "amount": { "prog": "q" } },
+              {
+                "bet": "dozen:2",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 12, "p": 0.4862, "B": 39.5, "q": 0.02931 }
+    },
+    {
+      "id": "c7-streets-to18-stack",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c7-streets-to18-stack",
+        "name": "c7 streets to18 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 300, 500, 1000, 2000, 4000, 8000, 16000, 32000]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 3, "p": 0.2407, "B": 286.9, "q": 0.00429 }
+    },
+    {
+      "id": "c8-sixlines-to18-stack",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c8-sixlines-to18-stack",
+        "name": "c8 sixlines to18 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [200, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 76800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "sixline:1-2-3-4-5-6", "amount": { "prog": "q" } },
+              {
+                "bet": "sixline:7-8-9-10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "sixline:13-14-15-16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 6, "p": 0.3329, "B": 459.8, "q": 0.00274 }
+    },
+    {
+      "id": "c9-streets-to12-stack",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c9-streets-to12-stack",
+        "name": "c9 streets to12 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              100, 200, 200, 300, 500, 700, 1100, 1600, 2400, 3600, 5400, 8100, 12200, 18300, 27400,
+              41100
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 3, "p": 0.2227, "B": 338.8, "q": 0.00356 }
+    },
+    {
+      "id": "c10-sixlines-to12-stack",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c10-sixlines-to12-stack",
+        "name": "c10 sixlines to12 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              200, 300, 500, 700, 1100, 1600, 2400, 3600, 5400, 8100, 12200, 18300, 27400, 41100,
+              61700
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "sixline:1-2-3-4-5-6", "amount": { "prog": "q" } },
+              {
+                "bet": "sixline:7-8-9-10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 6, "p": 0.2789, "B": 349.2, "q": 0.00346 }
+    }
+  ]
+}

@@ -1,0 +1,118 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": { "bankroll": 511500, "maxRounds": 500 },
+    "run": { "sessions": 10000, "seed": 20261031 }
+  },
+  "experiments": [
+    {
+      "id": "e3a-L5",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 15500 },
+      "strategy": {
+        "schema": 1,
+        "id": "e3a-l5",
+        "name": "Martingale on red, $5 unit, 5 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 5, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3a-L6",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 31500 },
+      "strategy": {
+        "schema": 1,
+        "id": "e3a-l6",
+        "name": "Martingale on red, $5 unit, 6 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 6, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3a-L7",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 63500 },
+      "strategy": {
+        "schema": 1,
+        "id": "e3a-l7",
+        "name": "Martingale on red, $5 unit, 7 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 7, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3a-L8",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 127500 },
+      "strategy": {
+        "schema": 1,
+        "id": "e3a-l8",
+        "name": "Martingale on red, $5 unit, 8 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 8, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3a-L9",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 255500 },
+      "strategy": {
+        "schema": 1,
+        "id": "e3a-l9",
+        "name": "Martingale on red, $5 unit, 9 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 9, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3a-L10",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 511500 },
+      "strategy": {
+        "schema": 1,
+        "id": "e3a-l10",
+        "name": "Martingale on red, $5 unit, 10 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 10, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3a-flat-red",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 511500 },
+      "strategy": {
+        "schema": 1,
+        "id": "e3a-flat-red",
+        "name": "Flat $5 on red",
+        "game": "roulette",
+        "unit": 500,
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": 500 }] }]
+      }
+    }
+  ]
+}

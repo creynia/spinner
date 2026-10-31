@@ -473,7 +473,13 @@ describe('More and NotFound', () => {
     const hrefs = [...container.querySelectorAll('ul[aria-label="More destinations"] a')].map((a) =>
       a.getAttribute('href'),
     );
-    expect(hrefs).toEqual(['#/gallery', '#/import', '#/settings', '#/settings?section=about']);
+    expect(hrefs).toEqual([
+      '#/research',
+      '#/gallery',
+      '#/import',
+      '#/settings',
+      '#/settings?section=about',
+    ]);
   });
 });
 
@@ -493,6 +499,7 @@ describe('back navigation', () => {
     expect(parentOf('/settings')).toBe('/more');
     expect(parentOf('/gallery')).toBe('/more');
     expect(parentOf('/import')).toBe('/more');
+    expect(parentOf('/research')).toBe('/more');
     expect(parentOf('/run/r1')).toBe('/');
     expect(parentOf('/analyze/r1')).toBe('/');
     expect(parentOf('/define/abc')).toBe('/library');
