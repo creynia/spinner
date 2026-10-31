@@ -19,7 +19,7 @@ sessions for even N (decisions.md A1). They coincide only for odd N when values 
 - A CI is shown only when N ≥ 30; below that the UI shows the point value with "too few sessions for an interval". Probabilities always show their Wilson interval (it is valid for small N).
 - Display rounding: money to the cent (to the dollar when |v| ≥ $1,000), probabilities to 0.1 pp, z to 0.01.
 
-## 1 Quantiles: Hyndman–Fan type 7 (R default, NumPy `linear`)
+## 1 Quantiles: Hyndman–Fan type 7 [1] (R default, NumPy `linear`)
 
 For sorted values `s_0 ≤ … ≤ s_{N−1}` and `p ∈ [0,1]`: `h = (N − 1) · p`, `j = floor(h)`, `q(p) = s_j + (h − j) · (s_{j+1} − s_j)`, and `q(p) = s_{N−1}` when `j + 1 ≥ N`. Computed in exactly this order. Sorting is done on a copy (`Int32Array.prototype.sort` / `Float64Array.prototype.sort`, which are numeric).
 
@@ -37,7 +37,7 @@ Fixture `X = [−2500, −2500, 0, 2500, 7500, −10000, 5000, −5000, 2500, �
 - Skew (adjusted Fisher–Pearson) `G1 = N / ((N−1)(N−2)) · Σ ((x_i − mean)/s)³`; it is undefined when N < 3 or s = 0.
 - Fixture X: mean = −500, s = 5109.90323891863, SE = 1615.893285805443, G1 = −0.24982777265876538.
 
-## 3 Probabilities and the Wilson interval
+## 3 Probabilities and the Wilson interval [2]
 
 `p̂ = k/N`, `d = 1 + z²/N`, `center = (p̂ + z²/(2N)) / d`, `half = (z/d) · sqrt( p̂(1−p̂)/N + z²/(4N²) )`, `CI = [max(0, center − half), min(1, center + half)]`.
 
@@ -69,7 +69,7 @@ Vectors: (0, 10) → [0, 0.277533]; (5, 10) → [0.236593, 0.763407]; (10, 10) �
 - **Cost of play** = expected loss per hour = `ℓ · ρh`; this is the headline in the hours framing.
 - Realized loss per hour = `(Σ L_i / Σ R_i) · ρh` with `CI = (CI of e_r) × Σ W_i / Σ R_i × ρh`.
 
-## 6 Histogram (Freedman–Diaconis with snapping; zero is always an edge)
+## 6 Histogram (Freedman–Diaconis [5] with snapping; zero is always an edge)
 
 Input values `v_i` (net, maxDrawdown, maxExposure, roundsPlayed or z_i).
 
@@ -110,7 +110,7 @@ Rejected/deferred: totals by reason code, with the share of sessions with `rejec
 
 ## 11 Convergence
 
-- Running mean `m_n = (1/n) Σ_{i<n} x_i` and `s_n` (Welford in index order), evaluated at n ∈ the **convergence grid**: `n_j = ceil(N^(j/199))` for j = 0..199, deduplicated, with N always included. The `N^(j/199)` uses `Math.pow`; it is display only. The band is `m_n ± z·s_n/√n` (n ≥ 30).
+- Running mean `m_n = (1/n) Σ_{i<n} x_i` and `s_n` (Welford [6] in index order), evaluated at n ∈ the **convergence grid**: `n_j = ceil(N^(j/199))` for j = 0..199, deduplicated, with N always included. The `N^(j/199)` uses `Math.pow`; it is display only. The band is `m_n ± z·s_n/√n` (n ≥ 30).
 - Running P(bust) and P(ahead) with Wilson bands on the same grid.
 - **Suggested session count** for a target half-width:
   - Mean: `N* = ceil((z·s / h*)²)`. The default `h* = max(100, 0.1·|Ē|)` cents (10% of the expected loss, at least $1), user-adjustable. Vector: flat $25 red, 500 spins, single zero: `s ≈ 2500·√500·√(1 − (1/37)²)`, `Ē = 500·2500/37`, so N* = 1052.
@@ -153,8 +153,8 @@ A compare view takes 2–6 runs of the same game id. The **baseline** is the fir
 
 | Quantity | Paired | Unpaired |
 |---|---|---|
-| Mean net | `d_i = x^B_i − x^A_i`; `d̄ ± z·s_d/√n` | `x̄_B − x̄_A ± z·√(s_A²/N_A + s_B²/N_B)`; Welch–Satterthwaite df `ν = (a + b)² / (a²/(N_A−1) + b²/(N_B−1))` with `a = s_A²/N_A`, `b = s_B²/N_B` (shown; z is used since N ≥ 30) |
-| P(ahead), P(bust), P(stop-*) | indicator differences `δ_i = 1[B_i] − 1[A_i]`: `δ̄ ± z·s_δ/√n`, plus discordant counts `b, c`; a note when `b + c < 10` | Newcombe hybrid score: `lo = Δ − √((p_B − l_B)² + (u_A − p_A)²)`, `hi = Δ + √((u_B − p_B)² + (p_A − l_A)²)` (Wilson l, u). Vector: 56/70 vs 48/80 → Δ = 0.2, CI [0.052431, 0.333873] |
+| Mean net | `d_i = x^B_i − x^A_i`; `d̄ ± z·s_d/√n` | `x̄_B − x̄_A ± z·√(s_A²/N_A + s_B²/N_B)`; Welch–Satterthwaite [4] df `ν = (a + b)² / (a²/(N_A−1) + b²/(N_B−1))` with `a = s_A²/N_A`, `b = s_B²/N_B` (shown; z is used since N ≥ 30) |
+| P(ahead), P(bust), P(stop-*) | indicator differences `δ_i = 1[B_i] − 1[A_i]`: `δ̄ ± z·s_δ/√n`, plus discordant counts `b, c`; a note when `b + c < 10` | Newcombe hybrid score [3]: `lo = Δ − √((p_B − l_B)² + (u_A − p_A)²)`, `hi = Δ + √((u_B − p_B)² + (p_A − l_A)²)` (Wilson l, u). Vector: 56/70 vs 48/80 → Δ = 0.2, CI [0.052431, 0.333873] (reference values: `DescTools::BinomDiffCI(56, 70, 48, 80, method = "score")` [8]) |
 | Mean expected loss, mean wagered, mean R, mean maxDrawdown | as mean net | as mean net |
 | Realized edge | `Δe = e_B − e_A`, with SE from per-session paired residuals `u_i = (L^B_i − e_B W^B_i)/W̄_B − (L^A_i − e_A W^A_i)/W̄_A`: `SE = s_u/√n` | `√(SE_A² + SE_B²)` (section 5) |
 | Medians and quantiles | no difference CI; each run's own quantile CI side by side | same |
@@ -204,8 +204,18 @@ The Quick check is the first 200 sessions of the same seed, so its verdict is th
 
 ## 17 Analytic oracles (tests)
 
-- **Gambler's ruin** (flat even-money bet, win probability `p = 18/37`, `q = 1 − p`, `r = q/p`, start a units, stop at 0 or n units, no round cap): `P(ruin) = (r^a − r^n)/(1 − r^n)`. Vector: a = 40, n = 80 → 0.8968485629704275. Expected duration `D = a/(q−p) − (n/(q−p))·(1 − r^a)/(1 − r^n)`. The harness end-to-end test runs 20,000 sessions with `maxRounds` large enough (cap hits < 0.1%) and asserts P(bust) within its Wilson interval and mean R within 3 SE of D.
+- **Gambler's ruin** [7] (flat even-money bet, win probability `p = 18/37`, `q = 1 − p`, `r = q/p`, start a units, stop at 0 or n units, no round cap): `P(ruin) = (r^a − r^n)/(1 − r^n)`. Vector: a = 40, n = 80 → 0.8968485629704275. Expected duration `D = a/(q−p) − (n/(q−p))·(1 − r^a)/(1 − r^n)`. The harness end-to-end test runs 20,000 sessions with `maxRounds` large enough (cap hits < 0.1%) and asserts P(bust) within its Wilson interval and mean R within 3 SE of D.
 - **Flat betting**: net is a sum of `R` i.i.d. terms; with no stops `E[net] = −R·unit·(1/37)` and `Var = R·unit²·(1 − 1/37²)`. The test asserts mean and SD within 3 SE (SE of SD ≈ s/√(2N)), and checks the analytic `ΣV_i / N` equals `Var` exactly.
 
 ---
 
+## 18 References
+
+1. R. J. Hyndman and Y. Fan (1996), "Sample quantiles in statistical packages", _The American Statistician_ 50(4).
+2. E. B. Wilson (1927), "Probable inference, the law of succession, and statistical inference", _JASA_ 22.
+3. R. G. Newcombe (1998), "Interval estimation for the difference between independent proportions: comparison of eleven methods", _Statistics in Medicine_ 17:873-890.
+4. B. L. Welch (1947) and F. E. Satterthwaite (1946): the unequal-variance t test and its approximate degrees of freedom.
+5. D. Freedman and P. Diaconis (1981), "On the histogram as a density estimator: L2 theory".
+6. B. P. Welford (1962), "Note on a method for calculating corrected sums of squares and products", _Technometrics_ 4(3).
+7. W. Feller, _An Introduction to Probability Theory and Its Applications_, vol. 1 (gambler's ruin).
+8. R package DescTools, `BinomDiffCI` examples: https://search.r-project.org/CRAN/refmans/DescTools/html/BinomDiffCI.html
