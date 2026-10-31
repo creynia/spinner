@@ -1,0 +1,172 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": { "bankroll": 500000, "maxRounds": 500 },
+    "run": { "sessions": 10000 }
+  },
+  "experiments": [
+    { "id": "e8-am-flat-red", "strategy": "preset:flat-red", "rules": { "preset": "american" } },
+    {
+      "id": "e8-am-b3-two-streets-l29",
+      "rules": {
+        "preset": "american",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b3-two-streets-l29",
+        "name": "b3 two streets l29",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              200, 300, 300, 400, 500, 600, 700, 800, 1000, 1200, 1400, 1700, 2100, 2500, 3000,
+              3600, 4300, 5200, 6200, 7400, 8900, 10700, 12800, 15400, 18500, 22200, 26600, 31900,
+              38300
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              { "bet": "street:16-17-18", "amount": { "prog": "q" } }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 6, "p": 0.1622, "B": 196.7, "q": 0.00591 }
+    },
+    {
+      "id": "e8-am-c9-streets-to12-stack",
+      "rules": {
+        "preset": "american",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c9-streets-to12-stack",
+        "name": "c9 streets to12 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              100, 200, 200, 300, 500, 700, 1100, 1600, 2400, 3600, 5400, 8100, 12200, 18300, 27400,
+              41100
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 3, "p": 0.2227, "B": 338.8, "q": 0.00356 }
+    },
+    {
+      "id": "e8-am-a1-streets-w27",
+      "rules": {
+        "preset": "american",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a1-streets-w27",
+        "name": "a1 streets w27",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 300, 500, 1000, 2400, 7200, 28800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              },
+              {
+                "bet": "street:25-26-27",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 8] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 3, "p": 0.2433, "B": 258.1, "q": 0.00494 }
+    }
+  ]
+}
