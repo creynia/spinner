@@ -68,6 +68,7 @@ describe('unpaired comparison', () => {
     expect(pairDiff(a, makeRun(rows(B), { seed: 7, gameVersion: '2' })).method).toBe('welch');
   });
   it('rates use Newcombe: 56/70 vs 48/80', () => {
+    // Reference values: DescTools::BinomDiffCI(56, 70, 48, 80, method = "score")
     const ahead = (k: number, n: number) =>
       Array.from({ length: n }, (_, i) => (i < k ? 100 : -100));
     const a = makeRun(rows(ahead(48, 80)), { runId: 'A', seed: 1 });

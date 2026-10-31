@@ -1,3 +1,5 @@
+// SplitMix64: Guy L. Steele Jr., Doug Lea and Christine H. Flood (2014); public-domain reference
+// code by Sebastiano Vigna (https://prng.di.unimi.it/). The constants are the published ones.
 // SplitMix64 with 64-bit values held as [hi, lo] uint32 pairs; no BigInt in the hot path.
 // harness-data-analysis.md §1.2 (verified against a BigInt reference in the doc's review).
 
