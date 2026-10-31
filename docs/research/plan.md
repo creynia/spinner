@@ -462,3 +462,44 @@ placed after reconcile (clamped bets at the clamped amount; a bust round places 
 residual is therefore mean-zero under any stopping rule. Across all 57 committed rows recomputed,
 max |z| = 2.36, and same-seed rows count as one draw. Every realized edge in this file is
 consistent with −2.70 %.
+
+### 7.8 E6 full size and holdouts (`specs/e6-full.json`, 10,000 sessions × seeds 20261031 / 1 / 2)
+
+| id | median (rep / h1 / h2) | mean | CVaR 5 % | P(win) | cap rate | bust | residual z |
+| --- | --- | --- | --- | --- | --- | ---: | --- |
+| b3-two-streets-l29 | 1,679 / 1,698 / 1,698 | -321 / -247 / -246 | -4,491 / -4,487 / -4,483 | 60.8 / 62.1 / 62.1 % | 38.7 / 37.4 / 37.3 % | 0 | -2.43 / 0.26 / 0.29 |
+| b1-street-l53 | 1,675 / 1,703 / 1,701 | -309 / -197 / -219 | -4,815 / -4,814 / -4,799 | 61.9 / 63.6 / 63.2 % | 37.0 / 35.2 / 35.8 % | 0 | -2.93 / 0.91 / 0.16 |
+| c8-sixlines-to18-stack | 1,598 / 1,600 / 1,600 | -405 / -382 / -335 | -4,515 / -4,506 / -4,517 | 62.6 / 62.8 / 63.7 % | 37.3 / 37.0 / 36.1 % | 0 | -2.05 / -1.21 / 0.58 |
+| c9-streets-to12-stack | 1,540 / 1,542 / 1,537 | -295 / -297 / -321 | -4,820 / -4,827 / -4,826 | 67.1 / 67.2 / 66.7 % | 32.7 / 32.6 / 33.0 % | 0 | -0.47 / -0.57 / -1.46 |
+| a1-streets-w27 | 1,494 / 1,497 / 1,498 | -331 / -348 / -324 | -3,380 / -3,377 / -3,385 | 55.1 / 54.6 / 55.3 % | 44.9 / 45.3 / 44.6 % | 0 | 0.49 / -0.33 / 0.77 |
+| d-b1-trail-j36 | 1,582 / 1,601 / 1,619 | -303 / -192 / -211 | -4,815 / -4,814 / -4,799 | 63.3 / 65.2 / 64.6 % | 35.9 / 34.1 / 34.6 % | 0 | -2.87 / 1.01 / 0.32 |
+| d-b1-stopwin30 | 1,333 / 1,334 / 1,333 | -241 / -135 / -164 | -4,815 / -4,814 / -4,799 | 71.9 / 73.8 / 73.2 % | 28.1 / 26.2 / 26.8 % | 0 | -3.14 / 1.00 / -0.18 |
+| d-c8-stopwin20 | 200 / 200 / 200 | -61 / -42 / -58 | -4,515 / -4,506 / -4,517 | 94.5 / 94.8 / 94.5 % | 5.5 / 5.1 / 5.5 % | 0 | -0.95 / 0.89 / -0.62 |
+| flat-red | -350 / -350 / -350 | -338 / -336 / -336 | -1,480 / -1,506 / -1,483 | 25.5 / 26.2 / 25.7 % | — | 0 | -0.07 / 0.25 / 0.26 |
+
+(z here is the sd(net) form; §7.7 shows it runs slightly wide of the residual form.)
+
+- **Predictions held on both holdouts for every candidate.** Medians are within 3 % of the cycle model;
+  P(win) within ±0.02. On the reporting seed the four b-family rows (one street or two streets
+  stacked) share one unlucky spin stream (z −2.4 to −3.1). Pooled over three seeds, b1 gives z −1.07.
+  Combined with §7.7 (no mechanism), that is a draw, not a bug. b3's reporting-seed median ($1,679)
+  and P(win) (60.8 %) fall just outside their predicted values for the same reason.
+- **Rankings within pairs are ties.** b1 ≈ b3 (gap $4–$5) and c8 ≈ b1-trail (gap $2–$19) swap order
+  between seeds.
+- **H3 ceiling held everywhere**, and every mean is negative.
+- **Survivors for E7/E8**, one per family: **b3** (stacking; ties b1 on median, better CVaR),
+  **c9** (hybrid; best P(win) and mean of the hybrids), **a1** (widening; best CVaR of any
+  positive-median ladder).
+
+### 7.9 Predictions for E7 on the survivors (written before the runs)
+
+Stop-win at W mean cycle profits τ̄ (b3 $23, c9 $14, a1 $11.3; τ̄ = cap loss / B). Prediction
+P(win) = (1 − q)^W times P(the session reaches W cycles within 500 spins). The median equals the
+target while P(win) > ½, and the mean is −2.70 % of turnover, smaller in magnitude for small W.
+Half-ladder stop-loss: CVaR 5 % ≈ −½ cap loss; P(win) at W20 falls to (1 − q_half)^20.
+
+| survivor (q, cycles in 500 spins) | W5 | W10 | W20 | W50 | W100 | W20 + half-ladder SL |
+| --- | --- | --- | --- | --- | --- | --- |
+| b3 (.00591, 81) | .971 | .942 | .888 | .744 | target unreachable ⇒ ≈ no-stop row (.62, median ≈ $1,690) | ≈ .845, CVaR ≈ −$2,300 |
+| c9 (.00356, 111) | .982 | .965 | .931 | .837 | .700 × .89 ≈ .62 | ≈ .855, CVaR ≈ −$2,400 |
+| a1 (.00494, 122) | .976 | .952 | .906 | .781 | .610 | ≈ .69, CVaR ≈ −$1,700 |
