@@ -2,82 +2,15 @@ import { statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import raw from './data.json';
+import { CHAPTERS } from './content';
 import data, { candidate, path, row, rowsOf } from './data';
 import type { ResearchData } from './dataTypes';
 
 // The generated JSON must satisfy the app's types (a compile-time check through this assignment).
 const typed: ResearchData = raw as unknown as ResearchData;
 
-/** Chapter data keys of docs/research/app-plan.md §3. */
-const CHAPTER_ROWS: Record<string, string[]> = {
-  start: ['observations:flat-red', 'e7-c9:e7-c9-W20-SLhalf'],
-  edge: ['e1-spread:e1-red', 'e1-spread:e1-red12-dozen3-13', 'e1-spread:e1-straights25'],
-  martingale: [
-    'observations:flat-red',
-    'observations:martingale-red',
-    'observations:fibonacci-red',
-  ],
-  levels: [
-    ...['L5', 'L6', 'L7', 'L8', 'L9', 'L10'].map((l) => `e3a-levels:e3a-${l}`),
-    'observations:martingale-red-br10k',
-  ],
-  placement: [
-    'e4-corner:e4-corner-g',
-    'e4-corner:e4-corner-g-stop',
-    'e4-corner:e4-corner-x2',
-    'e4-dozen:e4-dozen-g',
-    'e4-dozen:e4-dozen-g-stop',
-    'e4-dozen:e4-dozen-x2',
-    'e4-dozen:e4-dozen-g-u5',
-    'e4-dozen:e4-dozen-g-u5-stop',
-    'e4-dozen:e4-dozen-x2-u5',
-    'e4-sixline:e4-sixline-g',
-    'e4-sixline:e4-sixline-g-stop',
-    'e4-sixline:e4-sixline-x2',
-    'e4-straights25:e4-straights25-g',
-    'e4-straights25:e4-straights25-g-stop',
-    'e4-straights25:e4-straights25-x2',
-    'e4-straights35:e4-straights35-g',
-    'e4-straights35:e4-straights35-g-stop',
-    'e4-straights35:e4-straights35-x2',
-    'e4-two-dozens:e4-two-dozens-g',
-    'e4-two-dozens:e4-two-dozens-g-stop',
-    'e4-two-dozens:e4-two-dozens-x2',
-  ],
-  shapes: [
-    ...['a1-streets-w27', 'b3-two-streets-l29', 'c9-streets-to12-stack'].flatMap((id) => [
-      `e6-full:${id}@20261031`,
-      `e6-full:${id}@1`,
-      `e6-full:${id}@2`,
-      `e8-seed3:${id}@3`,
-    ]),
-  ],
-  cashout: [
-    ...['W5', 'W10', 'W20', 'W50', 'W100', 'W20-SLhalf', 'nostop'].map((w) => `e7-c9:e7-c9-${w}`),
-    ...['W5', 'W10', 'W20', 'W50', 'W100'].flatMap((w) => [
-      `e7-mart:e7m-reset-${w}`,
-      `e7-mart:e7m-stop-${w}`,
-      `e7b-mart-L7stop:e7b-L7stop-${w}`,
-    ]),
-    'e7-mart:e7m-reset-W20-SLhalf',
-    'e7-mart:e7m-stop-W20-SLhalf',
-    'e7b-mart-L7stop:e7b-L8reset-W20',
-  ],
-  limits: [
-    ...['flat-red', 'b3-two-streets-l29', 'c9-streets-to12-stack', 'a1-streets-w27'].flatMap(
-      (id) => [
-        `e8-br10k:e8-br10k-${id}`,
-        `e8-partage:e8-lp-${id}`,
-        `e8-length:e8-S250-${id}`,
-        `e8-length:e8-S1000-${id}`,
-      ],
-    ),
-    'e8-american:e8-am-flat-red',
-    'e8-american:e8-am-b3-two-streets-l29',
-    'e8-american:e8-am-c9-streets-to12-stack',
-    'e8-american:e8-am-a1-streets-w27',
-  ],
-};
+/** Every row a chapter draws, from content.ts; a content change that needs new data fails here. */
+const CHAPTER_KEYS = [...new Set(CHAPTERS.flatMap((c) => c.dataKeys))];
 
 /** Rows a chart draws as a line band. */
 const CHAPTER_PATHS = [
@@ -159,9 +92,16 @@ describe('research data.json', () => {
   });
 
   it('resolves every chapter data key', () => {
-    for (const [chapter, keys] of Object.entries(CHAPTER_ROWS)) {
-      for (const key of keys) expect(row(key).sessions, `${chapter}: ${key}`).toBeGreaterThan(0);
-    }
+    expect(CHAPTER_KEYS.length).toBeGreaterThan(50);
+    for (const key of CHAPTER_KEYS) expect(row(key).sessions, key).toBeGreaterThan(0);
+    // The rows the plan lists for the new X1 files and the screen files.
+    expect(rowsOf('x1-a1-trailing')).toHaveLength(3);
+    expect(rowsOf('x1-c9-cashout-axes')).toHaveLength(4);
+    expect(rowsOf('e6-stack-screen').map((r) => r.id)).toEqual([
+      'b11-red-default-l7',
+      'b3-two-streets-l29',
+      'b4-sixline-l29',
+    ]);
     for (const key of CHAPTER_PATHS) expect(path(key).rounds.length, key).toBeGreaterThan(1);
     expect(data.curve.length).toBeGreaterThan(0);
     for (const id of CANDIDATE_IDS) expect(candidate(id).rows.length).toBeGreaterThan(0);

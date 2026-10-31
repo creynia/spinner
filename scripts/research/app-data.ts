@@ -112,7 +112,19 @@ export const ROW_FILES = [
   'e8-seed3',
   'e7-a1',
   'e7-b3',
+  'x1-a1-trailing',
+  'x1-c9-cashout-axes',
 ];
+
+/**
+ * Screen files of which only the referenced experiments are listed (no paths): the chapters
+ * quote them next to the full-size rows.
+ */
+export const SCREEN_ROWS: Record<string, string[]> = {
+  'e6-hybrid-screen': ['c6-dozen-to-two-dozens-default'],
+  'e6-stack-screen': ['b3-two-streets-l29', 'b4-sixline-l29', 'b11-red-default-l7'],
+  'e6-widen-screen': ['a7-dozens-sixline-street-w33', 'a9-dozen-streets-default'],
+};
 
 /** Result files whose reports also get an equity-path series. */
 export const PATH_FILES = [
@@ -125,6 +137,8 @@ export const PATH_FILES = [
   'e8-length',
   'e8-seed3',
   'e8-american',
+  'x1-a1-trailing',
+  'x1-c9-cashout-axes',
 ];
 
 /** Ledger rows of each candidate (app-plan §5, "all four seeds" for the no-stop ladders). */
@@ -343,7 +357,7 @@ export function findMeta(
   id: string,
 ): Record<string, number> | null {
   const bare = id.replace(/@[^@]*$/, '');
-  const order = [file, 'e6-full', ...Object.keys(specs).sort()];
+  const order = [file, file.replace(/-screen$/, ''), 'e6-full', ...Object.keys(specs).sort()];
   for (const name of order) {
     const hit = specs[name]?.find((e) => e.id === bare);
     if (hit?.meta) return numericMeta(hit.meta);
@@ -368,14 +382,20 @@ export interface Shape {
   quartiles: boolean;
   /** Keep paths of the e6-full rows on the holdout seeds (1 and 2). */
   extraSeeds: boolean;
+  /** Keep the paths of the x1-* files (their rows are always listed). */
+  x1Paths: boolean;
+  /** Point budget of the length experiments (e8-length), when leaner than `points`. */
+  lengthPoints?: number;
 }
 
 export const SHAPES: Shape[] = [
-  { points: MAX_POINTS, quartiles: true, extraSeeds: true },
-  { points: MAX_POINTS, quartiles: false, extraSeeds: true },
-  { points: 40, quartiles: false, extraSeeds: true },
-  { points: 40, quartiles: false, extraSeeds: false },
-  { points: 30, quartiles: false, extraSeeds: false },
+  { points: MAX_POINTS, quartiles: true, extraSeeds: true, x1Paths: true },
+  { points: MAX_POINTS, quartiles: false, extraSeeds: true, x1Paths: true },
+  { points: 40, quartiles: false, extraSeeds: true, x1Paths: true },
+  { points: 40, quartiles: false, extraSeeds: false, x1Paths: true },
+  { points: 40, quartiles: false, extraSeeds: false, x1Paths: false },
+  { points: 40, quartiles: false, extraSeeds: false, x1Paths: false, lengthPoints: 30 },
+  { points: 30, quartiles: false, extraSeeds: false, x1Paths: false, lengthPoints: 20 },
 ];
 
 /** An e6-full row on a holdout seed: its stats are listed, the chapters draw the reporting seed. */
@@ -385,14 +405,27 @@ const isExtraSeed = (key: string): boolean => /^e6-full:.*@(1|2)$/.test(key);
 export function build(inputs: Inputs, shape: Shape = SHAPES[0]!): ResearchData {
   const rows: Record<string, RowStats> = {};
   const paths: Record<string, PathSeries> = {};
-  for (const file of ROW_FILES) {
+  for (const file of [...ROW_FILES, ...Object.keys(SCREEN_ROWS)]) {
     const reports = inputs.results[file];
     if (!reports) throw new Error(`results file missing: ${file}.json`);
+    const only = SCREEN_ROWS[file];
+    for (const id of only ?? []) {
+      if (!reports.some((r) => r.id === id)) throw new Error(`${file}.json: no report "${id}"`);
+    }
     for (const r of reports) {
+      if (only && !only.includes(r.id)) continue;
       const key = `${file}:${r.id}`;
       rows[key] = toRowStats(file, r, findMeta(inputs.specs, file, r.id));
-      if (PATH_FILES.includes(file) && (shape.extraSeeds || !isExtraSeed(key))) {
-        paths[key] = toPathSeries(r, shape.points, shape.quartiles);
+      if (
+        PATH_FILES.includes(file) &&
+        (shape.extraSeeds || !isExtraSeed(key)) &&
+        (shape.x1Paths || !file.startsWith('x1-'))
+      ) {
+        paths[key] = toPathSeries(
+          r,
+          file === 'e8-length' ? (shape.lengthPoints ?? shape.points) : shape.points,
+          shape.quartiles,
+        );
       }
     }
   }
@@ -418,7 +451,7 @@ export function build(inputs: Inputs, shape: Shape = SHAPES[0]!): ResearchData {
       };
     });
   return {
-    generatedFrom: ROW_FILES.map((f) => `${f}.json`).sort(),
+    generatedFrom: [...ROW_FILES, ...Object.keys(SCREEN_ROWS)].map((f) => `${f}.json`).sort(),
     rows: sorted(rows),
     paths: sorted(paths),
     curve: parseCurve(inputs.e5),
@@ -444,7 +477,8 @@ export function buildWithinBudget(inputs: Inputs): { data: ResearchData; bytes: 
 
 function loadInputs(): Inputs {
   const results: Record<string, Report[]> = {};
-  for (const file of ROW_FILES) results[file] = readJson<Report[]>(join(RESULTS, `${file}.json`));
+  for (const file of [...ROW_FILES, ...Object.keys(SCREEN_ROWS)])
+    results[file] = readJson<Report[]>(join(RESULTS, `${file}.json`));
   const candidates: Inputs['candidates'] = {};
   for (const file of readdirSync(CANDIDATES).filter((f) => f.endsWith('.json'))) {
     candidates[file] = readJson<{ id: string; name: string }>(join(CANDIDATES, file));
