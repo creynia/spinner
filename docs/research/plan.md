@@ -404,3 +404,22 @@ H2 claims to test: (1) each correct-g ladder's never-capped crossing lands near 
 an `onCap: stop` twin on the same seed, per A3); (2) the ×2 control collapses the horizon wherever
 g ≠ 2; (3) with B ≈ 200 base stakes, no placement keeps a positive median to 500 spins. Only the
 $5 dozen (B 921) does, because base stakes, not placement, set the horizon.
+
+### 7.6 Predictions for E6 (written before the screening runs; from `briefs/E6.md`)
+
+Full per-candidate predictions (q, B, P(no cap@500), H3 median and an independent cycle-model Monte
+Carlo) are in the brief, which was committed before any E6 run (de5a8f4). All candidates use
+`onCap: stop`, so bust is 0 by design and the cap rate is reported instead. Most lower the table
+minimums to $1 (one default-table reference per family). H3 as sharpened by D6:
+P(no cap) = e^(−x·qB/(1 − q)) with qB/(1 − q) ≥ 1, so **e^(−x) is a ceiling** that no layout should
+beat. Wide-coverage levels push a ladder below it. Score 1 − cap rate against e^(−x), not P(ahead).
+
+| family | expected leaders (model median@500, P(no cap@500)) | default-table reference |
+| --- | --- | --- |
+| (a) widening | a1 streets 3→27 ($1,503, .547); a6 dozen+streets (−$620, .172) | a9: P(no cap) .001 |
+| (b) stacking | b3 two streets ($1,698, .617); b1 street ($1,684, .629); b2 corner ($1,665, .640) | b11 red L7: .099 |
+| (c) hybrid | c8 six-lines→18 then stack ($1,602, .633); c9 streets→12 then stack ($1,542, .671) | c6: .001 |
+| (d) cash-out / trailing | d-b1-trail-j36 (P(win) .65, median $1,575); d-b1-stopwin30 (.73, $1,333) | — |
+
+Expected verdict: stacking at moderate coverage ties Martingale-on-red-scaled ladders at equal B/u.
+Widening and widen-to-24 sit at or below the e^(−x) ceiling. Nothing has a positive mean.
