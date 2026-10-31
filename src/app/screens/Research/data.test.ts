@@ -193,6 +193,20 @@ describe('research data.json', () => {
     expect(row('e6-full:c9-streets-to12-stack@20261031').capRate).toBeCloseTo(0.3271, 4);
   });
 
+  it('carries the experiment meta, numeric only, B in cycle profits', () => {
+    expect(row('e7-c9:e7-c9-W20-SLhalf').meta?.q).toBeCloseTo(0.00356, 5);
+    expect(row('e8-seed3:c9-streets-to12-stack@3').meta?.B).toBeCloseTo(338.8, 1);
+    // E4 declares B in level-0 stakes (172.92 for the dozen, m = 2): 86.46 cycle profits; the
+    // E5 brief's 85.5 recomputes the cycle profit from the rounded amounts.
+    const dozen = row('e4-dozen:e4-dozen-g').meta;
+    expect(Math.abs(dozen!.B! - 85.5)).toBeLessThan(1.5);
+    expect(dozen!.g).toBe(1.5);
+    expect(row('observations:flat-red').meta).toBeNull();
+    for (const r of Object.values(typed.rows)) {
+      if (r.meta) for (const v of Object.values(r.meta)) expect(typeof v).toBe('number');
+    }
+  });
+
   it('carries the candidates the Try-it chapter opens', () => {
     const cash = candidate('keeper-c9-streets-to12-cashout');
     expect(cash.rows[0]).toBe('e7-c9:e7-c9-W20-SLhalf');

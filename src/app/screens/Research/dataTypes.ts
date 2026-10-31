@@ -24,6 +24,8 @@ export interface RowStats {
   roundsMean: number;
   medianAheadUntil: number | null;
   medianPeak: { round: number; net: number };
+  /** The experiment's numeric `meta` (c, p, q, B in cycle profits, g, ...); null when it has none. */
+  meta: Record<string, number> | null;
 }
 
 /** Equity-path quantiles of the net (cents) at `rounds`; p25 and p75 are dropped when the file is over budget. */

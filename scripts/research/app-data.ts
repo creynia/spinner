@@ -16,6 +16,7 @@ const ROOT = resolve(here, '../..');
 const RESULTS = join(ROOT, 'docs/research/results');
 const E5 = join(ROOT, 'docs/research/briefs/E5.md');
 const CANDIDATES = join(here, 'candidates');
+const SPECS = join(here, 'specs');
 const OUT = join(ROOT, 'src/app/screens/Research/data.json');
 
 /** Size budget of the generated file (app-plan §4), bytes. */
@@ -43,6 +44,8 @@ export interface RowStats {
   roundsMean: number;
   medianAheadUntil: number | null;
   medianPeak: { round: number; net: number };
+  /** The experiment's numeric `meta` (c, p, q, B in cycle profits, g, ...); null when it has none. */
+  meta: Record<string, number> | null;
 }
 
 export interface PathSeries {
@@ -167,7 +170,11 @@ const dec = (v: number, digits: number): number => {
 const clean = (v: number): number => (Object.is(v, -0) ? 0 : v);
 
 /** Row statistics of one report; money in integer cents, shares to four decimals. */
-export function toRowStats(file: string, r: Report): RowStats {
+export function toRowStats(
+  file: string,
+  r: Report,
+  meta: Record<string, number> | null = null,
+): RowStats {
   let capped = 0;
   for (const [key, n] of Object.entries(r.endedBy)) {
     if (key.startsWith('strategy:cap')) capped += n;
@@ -195,6 +202,7 @@ export function toRowStats(file: string, r: Report): RowStats {
     roundsMean: dec(r.rounds.mean, 1),
     medianAheadUntil: r.medianAheadUntil,
     medianPeak: { round: r.medianPeak.round, net: clean(int(r.medianPeak.net)) },
+    meta,
   };
 }
 
@@ -297,7 +305,55 @@ function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
 }
 
+/** One experiment of a spec file; only the id and the `meta` block matter here. */
+export interface SpecExperiment {
+  id: string;
+  meta?: Record<string, unknown>;
+}
+
+/**
+ * The numeric `meta` of an experiment. A `B` declared in level-0 stakes (`BUnits: 'stakes'`, E4)
+ * is converted to cycle profits as the aggregator does: B / ((36 − c)/c). Strings and booleans
+ * are dropped. Rounded to six decimals.
+ */
+export function numericMeta(
+  meta: Record<string, unknown> | undefined,
+): Record<string, number> | null {
+  if (!meta) return null;
+  const out: Record<string, number> = {};
+  for (const [key, v] of Object.entries(meta)) {
+    if (typeof v === 'number' && Number.isFinite(v)) out[key] = v;
+  }
+  if (meta.BUnits === 'stakes' && out.B !== undefined) {
+    const c = out.c;
+    if (c !== undefined && c > 0 && c < 36) out.B = out.B / ((36 - c) / c);
+    else delete out.B;
+  }
+  for (const key of Object.keys(out)) out[key] = dec(out[key]!, 6);
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * Find the `meta` of a report: the spec file of the same name first, then e6-full (the seed
+ * reruns in e8-seed3 reuse its ids), then any other spec. The `@seed` suffix of an id is dropped.
+ */
+export function findMeta(
+  specs: Record<string, SpecExperiment[]>,
+  file: string,
+  id: string,
+): Record<string, number> | null {
+  const bare = id.replace(/@[^@]*$/, '');
+  const order = [file, 'e6-full', ...Object.keys(specs).sort()];
+  for (const name of order) {
+    const hit = specs[name]?.find((e) => e.id === bare);
+    if (hit?.meta) return numericMeta(hit.meta);
+  }
+  return null;
+}
+
 export interface Inputs {
+  /** Spec file basename without `.json` -> its experiments. */
+  specs: Record<string, SpecExperiment[]>;
   /** File basename without `.json` -> its reports. */
   results: Record<string, Report[]>;
   e5: string;
@@ -334,7 +390,7 @@ export function build(inputs: Inputs, shape: Shape = SHAPES[0]!): ResearchData {
     if (!reports) throw new Error(`results file missing: ${file}.json`);
     for (const r of reports) {
       const key = `${file}:${r.id}`;
-      rows[key] = toRowStats(file, r);
+      rows[key] = toRowStats(file, r, findMeta(inputs.specs, file, r.id));
       if (PATH_FILES.includes(file) && (shape.extraSeeds || !isExtraSeed(key))) {
         paths[key] = toPathSeries(r, shape.points, shape.quartiles);
       }
@@ -393,7 +449,13 @@ function loadInputs(): Inputs {
   for (const file of readdirSync(CANDIDATES).filter((f) => f.endsWith('.json'))) {
     candidates[file] = readJson<{ id: string; name: string }>(join(CANDIDATES, file));
   }
-  return { results, e5: readFileSync(E5, 'utf8'), candidates };
+  const specs: Inputs['specs'] = {};
+  for (const f of readdirSync(SPECS).filter((n) => n.endsWith('.json'))) {
+    specs[basename(f, '.json')] = readJson<{ experiments: SpecExperiment[] }>(
+      join(SPECS, f),
+    ).experiments;
+  }
+  return { specs, results, e5: readFileSync(E5, 'utf8'), candidates };
 }
 
 export function main(args: string[]): void {

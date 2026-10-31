@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { downsample, parseCurve, toRowStats } from './app-data';
+import { downsample, findMeta, numericMeta, parseCurve, toRowStats } from './app-data';
 import type { PathPoint, Report } from './run';
 
 const point = (round: number): PathPoint => ({
@@ -93,5 +93,31 @@ describe('toRowStats', () => {
     expect(s.pWin).toBe(0.9028);
     expect(s.medianAheadUntil).toBeNull();
     expect(s.roundsMean).toBe(412.3);
+  });
+});
+
+describe('meta', () => {
+  it('keeps numbers, converts a stakes B to cycle profits and drops strings', () => {
+    expect(numericMeta({ c: 12, p: 0.5, B: 172.92, BUnits: 'stakes', recovers: true })).toEqual({
+      c: 12,
+      p: 0.5,
+      B: 86.46,
+    });
+    expect(numericMeta({ c: 3, B: 338.8, BUnits: 'profits' })).toEqual({ c: 3, B: 338.8 });
+    expect(numericMeta(undefined)).toBeNull();
+    expect(numericMeta({ note: 'x' })).toBeNull();
+  });
+
+  it('looks an id up in its own spec, then e6-full, then any spec, dropping @seed', () => {
+    const specs = {
+      'e8-seed3': [],
+      'e6-full': [{ id: 'c9', meta: { q: 0.1 } }],
+      'e7-c9': [{ id: 'e7-c9-W20', meta: { q: 0.2 } }, { id: 'flat' }],
+    };
+    expect(findMeta(specs, 'e8-seed3', 'c9@3')).toEqual({ q: 0.1 });
+    expect(findMeta(specs, 'e7-c9', 'e7-c9-W20')).toEqual({ q: 0.2 });
+    expect(findMeta(specs, 'e7-c9-holdout', 'e7-c9-W20@1')).toEqual({ q: 0.2 });
+    expect(findMeta(specs, 'e7-c9', 'flat')).toBeNull();
+    expect(findMeta(specs, 'e7-c9', 'nope')).toBeNull();
   });
 });
