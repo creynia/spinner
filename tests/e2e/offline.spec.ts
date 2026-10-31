@@ -26,7 +26,7 @@ test('the app loads and works offline after the first visit', async ({ page, con
   await context.setOffline(true);
   await page.reload();
   await expect(page.locator('h1')).toBeVisible();
-  await expect(page).toHaveTitle('spinner');
+  await expect(page).toHaveTitle(/\| spinner$/);
   // A real module worker still starts: the sim.worker chunk comes from the precache.
   expect(await pingWorker(page)).toBe('pong');
   await guard.check('offline reload');

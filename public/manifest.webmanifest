@@ -1,5 +1,6 @@
 {
-  "name": "spinner: roulette strategy lab",
+  "name": "Roulette Strategy Lab (spinner)",
+  "description": "Roulette strategy lab: simulate betting systems like Martingale and Fibonacci over thousands of sessions and see the real bust risk and house edge.",
   "short_name": "spinner",
   "id": "./",
   "start_url": "./",

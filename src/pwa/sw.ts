@@ -34,6 +34,12 @@ const galleryBase = new URL('./gallery/', sw.location.href).href;
 const galleryIndex = galleryBase + 'index.json';
 const urls = __PRECACHE__.map((p) => new URL(p, sw.location.href).href);
 const indexUrl = new URL('./index.html', sw.location.href).href;
+// Static pages for crawlers (build/static-pages.ts): never precached and never answered with the
+// app shell, so a navigation to ./strategies/<slug>/ always gets the real page from the network.
+const staticBase = new URL('./strategies/', sw.location.href).href;
+const staticFiles = ['sitemap.xml', 'llms.txt', 'llms-full.txt'].map(
+  (f) => new URL('./' + f, sw.location.href).href,
+);
 
 sw.addEventListener('install', (event) => {
   // Note: no automatic skipWaiting; the app shows "Update available" and posts SKIP_WAITING.
@@ -72,6 +78,8 @@ sw.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== new URL(sw.location.href).origin) return;
+  const bare = url.origin + url.pathname;
+  if (bare.startsWith(staticBase) || staticFiles.includes(bare)) return;
 
   if (url.href.startsWith(galleryBase) && url.origin + url.pathname !== galleryIndex) {
     event.respondWith(galleryBundle(req, event));

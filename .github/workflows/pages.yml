@@ -27,6 +27,9 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }
+      # The sitemap travels to the deploy job, which pings IndexNow once the site is live.
+      - uses: actions/upload-artifact@v4
+        with: { name: sitemap, path: dist/sitemap.xml, retention-days: 1 }
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -36,3 +39,16 @@ jobs:
     steps:
       - id: d
         uses: actions/deploy-pages@v4
+      # Tell search engines about the new pages (docs/seo.md). Best effort: never fails a deploy.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with: { sparse-checkout: scripts }
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: sitemap, path: sitemap }
+      - name: Ping IndexNow
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: node scripts/indexnow.mjs sitemap/sitemap.xml
