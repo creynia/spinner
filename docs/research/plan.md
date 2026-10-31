@@ -375,3 +375,32 @@ same seed). The A3 predictions were committed before the run (e8289e9).
 Confirmed on every row. The trailing stop swaps 6 points of P(win) at W20 for a CVaR 5 % that is
 $1,881 better and a mean $27 better, with zero bust. The median flips negative between W50 and
 W100: P(win) crosses ½ near qW = ln 2 with q_eff = (19/37)^7 = .0094, at W ≈ 74.
+
+### 7.5 Predictions for E4 (written before the runs; from `briefs/E4.md`)
+
+Base ≈ $25 total ($5 for the u5 pair), $5,000 bankroll (≈ 200 base stakes), onCap reset. "model" is
+D4's cycle simulation, run independently of the engine. Ranking correction: at equal B,
+n½ ≈ ln2·37·B/(36 − c), so the horizon *grows* with coverage. The ranking follows B/(m·p), not
+B/(u·p) as §4 says.
+
+| id | L (binds) | q | B | n½ | model median@500 | model P(ahead@500) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| dozen-g | 11 (bankroll) | .0134 | 173 | 159 | -$4,982 | .35 |
+| dozen-x2 | 7 (bankroll) | .0643 | 127 | 33 | -$5,000 | .25 |
+| dozen-g-u5 | 15 (bankroll) | .0028 | 921 | 765 | +$1,620 | .65 |
+| dozen-x2-u5 | 9 (bankroll) | .0294 | 511 | 73 | -$2,665 | .41 |
+| two-dozens-g | 5 (bankroll) | .0054 | 121 | 200 | -$1,542 | .47 |
+| two-dozens-x2 | 7, does not recover | — | 127 | — | -$182 | .43 |
+| sixline-g | 20 (bankroll) | .0291 | 188 | 147 | -$4,994 | .39 |
+| sixline-x2 | 7 ($3,000 bet max) | .290 | 127 | 15 | -$5,000 | .12 |
+| corner-g | 27 (bankroll) | .0455 | 188 | 141 | -$4,990 | .38 |
+| corner-x2 | 7 ($2,000 bet max) | .449 | 127 | 14 | -$5,000 | .09 |
+| straights25-g | 5 (bankroll) | .0036 | 198 | 286 | -$894 | .38 |
+| straights25-x2 | 7, does not recover | — | 127 | — | -$290 | .36 |
+| straights35-g | 2 ($500 straight max) | .0029 | 37 | 251 | -$825 | .24 |
+| straights35-x2 | 7, does not recover | ≈ 0 | 127 | — | -$480 | .003 |
+
+H2 claims to test: (1) each correct-g ladder's never-capped crossing lands near its n½ (measured with
+an `onCap: stop` twin on the same seed, per A3); (2) the ×2 control collapses the horizon wherever
+g ≠ 2; (3) with B ≈ 200 base stakes, no placement keeps a positive median to 500 spins. Only the
+$5 dozen (B 921) does, because base stakes, not placement, set the horizon.
