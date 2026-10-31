@@ -27,6 +27,9 @@ export interface Row {
   cvar5: number;
   bust: number;
   medianAheadUntil: number | null;
+  /** Rejected / adjusted rounds summed over sessions (null for reports written before the fields existed). */
+  rejected: number | null;
+  adjusted: number | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -52,6 +55,8 @@ export function toRow(file: string, r: Report): Row {
     cvar5: r.net.cvar5,
     bust: r.pBust,
     medianAheadUntil: r.medianAheadUntil,
+    rejected: num(r.rejectedRounds),
+    adjusted: num(r.adjustedRounds),
   };
 }
 
@@ -70,6 +75,8 @@ const COLS: [keyof Row, string][] = [
   ['cvar5', 'CVaR5%'],
   ['bust', 'bust'],
   ['medianAheadUntil', 'medAheadUntil'],
+  ['rejected', 'rejected'],
+  ['adjusted', 'adjusted'],
 ];
 
 const money = (c: number): string => {

@@ -80,6 +80,12 @@ export interface Report {
   /** P(net > 0) with its Wilson interval. */
   pWin: { p: number; lo: number; hi: number };
   pBust: number;
+  /** Reconcile outcomes summed over sessions: a non-zero count means the strategy did not run as drawn. */
+  rejectedRounds: number;
+  adjustedRounds: number;
+  sessionsWithRejected: number;
+  sessionsWithAdjusted: number;
+  rejectedByReason: Record<string, number>;
   endedBy: Record<string, number>;
   rounds: { mean: number; median: number };
   wagered: { mean: number; perRound: number };
@@ -158,6 +164,11 @@ export function runOne(def: NormalizedDefinition, id: string, every = 10): Repor
   const expLoss = new Float64Array(N);
   const rounds = new Float64Array(N);
   const dd = new Float64Array(N);
+  const rejByReason: Record<string, number> = {};
+  let rejectedRounds = 0;
+  let adjustedRounds = 0;
+  let sessionsWithRejected = 0;
+  let sessionsWithAdjusted = 0;
   const ended = new Map<string, number>();
   const ckpt = new Int32Array(N * K);
   const t0 = performance.now();
@@ -172,9 +183,16 @@ export function runOne(def: NormalizedDefinition, id: string, every = 10): Repor
       expLoss[g] = t.expectedLoss[i]!;
       rounds[g] = t.roundsPlayed[i]!;
       dd[g] = t.maxDrawdown[i]!;
+      rejectedRounds += t.rejected[i]!;
+      adjustedRounds += t.adjusted[i]!;
+      if (t.rejected[i]! > 0) sessionsWithRejected++;
+      if (t.adjusted[i]! > 0) sessionsWithAdjusted++;
       const label = endedLabel(t.endedBy[i]!, runner.labels.reasons);
       ended.set(label, (ended.get(label) ?? 0) + 1);
     }
+    for (const cs of out.chunks)
+      for (const [k, v] of Object.entries(cs.rejectedByReason))
+        rejByReason[k] = (rejByReason[k] ?? 0) + v;
     ckpt.set(out.checkpoints.subarray(0, out.count * K), out.firstSession * K);
   }
   const elapsedMs = performance.now() - t0;
@@ -268,6 +286,11 @@ export function runOne(def: NormalizedDefinition, id: string, every = 10): Repor
     },
     pWin: { p: wins / N, lo: w.lo, hi: w.hi },
     pBust: (ended.get('bust') ?? 0) / N,
+    rejectedRounds,
+    adjustedRounds,
+    sessionsWithRejected,
+    sessionsWithAdjusted,
+    rejectedByReason: rejByReason,
     endedBy: Object.fromEntries([...ended.entries()].sort((a, b) => b[1] - a[1])),
     rounds: { mean: rSum / N, median: quantile7(rSorted, 0.5) },
     wagered: { mean: wSum / N, perRound: rSum ? wSum / rSum : 0 },
@@ -311,6 +334,9 @@ export function formatLine(r: Report): string {
     `median>0 until ${r.medianAheadUntil ?? '-'}`.padEnd(20),
     `>50% ahead until ${r.aheadHorizon ?? '-'}`.padEnd(24),
     `peak ${$(r.medianPeak.net)}@${r.medianPeak.round}`,
+    ...(r.rejectedRounds || r.adjustedRounds
+      ? [`rej ${r.rejectedRounds} adj ${r.adjustedRounds}`]
+      : []),
   ].join(' ');
 }
 
