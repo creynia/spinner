@@ -1,0 +1,613 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": { "bankroll": 500000, "maxRounds": 500 },
+    "run": { "sessions": 2000, "seed": 20261031 }
+  },
+  "experiments": [
+    { "id": "flat-red", "strategy": "preset:flat-red" },
+    {
+      "id": "a1-streets-w27",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a1-streets-w27",
+        "name": "a1 streets w27",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 300, 500, 1000, 2400, 7200, 28800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              },
+              {
+                "bet": "street:25-26-27",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 8] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 3, "p": 0.2433, "B": 258.1, "q": 0.00494 }
+    },
+    {
+      "id": "a2-sixline-streets-w27",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a2-sixline-streets-w27",
+        "name": "a2 sixline streets w27",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 300, 500, 1000, 2300, 6900, 27600]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "sixline:1-2-3-4-5-6", "amount": { "times": [{ "prog": "q" }, 2] } },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "street:25-26-27",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 6, "p": 0.2958, "B": 236.4, "q": 0.00537 }
+    },
+    {
+      "id": "a3-splits-w22",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a3-splits-w22",
+        "name": "a3 splits w22",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 200, 300, 500, 800, 1400, 2800, 6300, 16200]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "split:1-4", "amount": { "prog": "q" } },
+              {
+                "bet": "split:2-5",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "split:3-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "split:7-10",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "split:8-11",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "split:9-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "split:13-16",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "split:14-17",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              },
+              {
+                "bet": "split:15-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 8] }
+              },
+              {
+                "bet": "split:19-22",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 9] }
+              },
+              {
+                "bet": "split:20-23",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 10] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 2, "p": 0.1956, "B": 129.2, "q": 0.00922 }
+    },
+    {
+      "id": "a4-straights-w17",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a4-straights-w17",
+        "name": "a4 straights w17",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 300, 400, 600, 900, 1400, 2300, 3900, 7000, 13300]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "straight:32", "amount": { "prog": "q" } },
+              { "bet": "straight:15", "amount": { "prog": "q" } },
+              { "bet": "straight:19", "amount": { "prog": "q" } },
+              { "bet": "straight:4", "amount": { "prog": "q" } },
+              { "bet": "straight:21", "amount": { "prog": "q" } },
+              { "bet": "straight:2", "amount": { "prog": "q" } },
+              {
+                "bet": "straight:25",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "straight:17",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "straight:34",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "straight:6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "straight:27",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "straight:13",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "straight:36",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              },
+              {
+                "bet": "straight:11",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 8] }
+              },
+              {
+                "bet": "straight:30",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 9] }
+              },
+              {
+                "bet": "straight:8",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 10] }
+              },
+              {
+                "bet": "straight:23",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 11] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 6, "p": 0.2306, "B": 113.3, "q": 0.01027 }
+    },
+    {
+      "id": "a5-corners-splits-w26",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a5-corners-splits-w26",
+        "name": "a5 corners splits w26",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 300, 500, 1100, 3300, 11800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "corner:1-2-4-5", "amount": { "times": [{ "prog": "q" }, 2] } },
+              {
+                "bet": "corner:7-8-10-11",
+                "amount": { "times": [{ "prog": "q" }, 2] },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "corner:13-14-16-17",
+                "amount": { "times": [{ "prog": "q" }, 2] },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "corner:19-20-22-23",
+                "amount": { "times": [{ "prog": "q" }, 2] },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "corner:25-26-28-29",
+                "amount": { "times": [{ "prog": "q" }, 2] },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "corner:31-32-34-35",
+                "amount": { "times": [{ "prog": "q" }, 2] },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "split:3-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 4, "p": 0.2822, "B": 94.1, "q": 0.01287 }
+    },
+    {
+      "id": "a6-dozen-streets-w27",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a6-dozen-streets-w27",
+        "name": "a6 dozen streets w27",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 400, 1000, 2900, 11600]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "dozen:1", "amount": { "times": [{ "prog": "q" }, 4] } },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:25-26-27",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 12, "p": 0.4124, "B": 146.9, "q": 0.00847 }
+    },
+    {
+      "id": "a7-dozens-sixline-street-w33",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a7-dozens-sixline-street-w33",
+        "name": "a7 dozens sixline street w33",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 300, 1800, 21600]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "dozen:1", "amount": { "times": [{ "prog": "q" }, 4] } },
+              {
+                "bet": "dozen:2",
+                "amount": { "times": [{ "prog": "q" }, 4] },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "sixline:25-26-27-28-29-30",
+                "amount": { "times": [{ "prog": "q" }, 2] },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:31-32-33",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 12, "p": 0.5082, "B": 323.0, "q": 0.00486 }
+    },
+    {
+      "id": "a8-streets-w24-x2",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a8-streets-w24-x2",
+        "name": "a8 streets w24 x2",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [200, 300, 400, 600, 1000, 2000, 4800, 14300]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 3, "p": 0.2411, "B": 63.7, "q": 0.01826 }
+    },
+    {
+      "id": "a9-dozen-streets-default",
+      "strategy": {
+        "schema": 1,
+        "id": "a9-dozen-streets-default",
+        "name": "a9 dozen streets default",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [700, 2500, 3500, 8400, 25200]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "dozen:1", "amount": { "times": [{ "prog": "q" }, 4] } },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": { "c": 12, "p": 0.4082, "B": 36.1, "q": 0.03135 }
+    }
+  ]
+}
