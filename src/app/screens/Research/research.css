@@ -1,5 +1,11 @@
 /* Research screen: chapter navigation (chip row on phones, sticky column from 768px), chapter
    cards and the collapsible math block. Colours come from tokens only. */
+/* The shell is a one-column grid whose track grows to the min-content width of its widest item:
+   the chip row and the data tables (scroll boxes still report their full width) would stretch the
+   whole page. Size containment makes the screen take the width it is given instead. */
+.research-page {
+  contain: inline-size;
+}
 .research-nav ol {
   list-style: none;
   margin: 0;

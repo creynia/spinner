@@ -89,7 +89,7 @@ function CandidateBlock({
       ) : (
         <Button
           variant="primary"
-          aria-label={`Open ${c.name} in Define`}
+          aria-label={`Open in Define: ${c.name}`}
           disabled={state.s === 'opening'}
           onClick={() => void open()}
         >

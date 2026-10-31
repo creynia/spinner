@@ -159,7 +159,7 @@ export function Research({ query }: ScreenProps) {
   }, [target]);
 
   return (
-    <>
+    <div class="research-page">
       <h1 id="research-top" tabIndex={-1}>
         Research
       </h1>
@@ -176,6 +176,6 @@ export function Research({ query }: ScreenProps) {
           ))}
         </div>
       </div>
-    </>
+    </div>
   );
 }

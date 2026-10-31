@@ -60,7 +60,7 @@ describe('TryIt', () => {
     const go = vi.fn();
     const c9 = data.candidates.find((c) => c.id === CANDIDATE_ORDER[0])!;
     const { getByRole } = render(<TryIt candidates={data.candidates} rows={data.rows} go={go} />);
-    fireEvent.click(getByRole('button', { name: `Open ${c9.name} in Define` }));
+    fireEvent.click(getByRole('button', { name: `Open in Define: ${c9.name}` }));
     await waitFor(() => expect(go).toHaveBeenCalledTimes(1));
     expect(go.mock.calls[0]![0]).toMatch(/^#\/define\?d=[A-Za-z0-9_-]+&h=[0-9a-f]{12}$/);
   });
@@ -76,7 +76,7 @@ describe('TryIt', () => {
     const { getByRole, container } = render(
       <TryIt candidates={[data.candidates[0]!]} rows={data.rows} go={go} />,
     );
-    fireEvent.click(getByRole('button', { name: /Open .* in Define/ }));
+    fireEvent.click(getByRole('button', { name: /Open in Define: / }));
     await waitFor(() => expect(container.textContent).toContain('too long for a link'));
     expect(container.textContent).toContain('9,123 characters');
     expect(getByRole('button', { name: 'Download definition file' })).toBeTruthy();
