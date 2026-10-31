@@ -1,0 +1,81 @@
+{
+  "defaults": {
+    "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 100 } } } },
+    "session": { "bankroll": 500000, "maxRounds": 500 },
+    "run": { "sessions": 10000, "seed": 20261031 }
+  },
+  "experiments": [
+    {
+      "id": "e1-red",
+      "strategy": {
+        "schema": 1,
+        "id": "e1-red",
+        "name": "Flat $25 on red",
+        "game": "roulette",
+        "unit": 100,
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": 2500 }] }]
+      }
+    },
+    {
+      "id": "e1-red12-dozen3-13",
+      "strategy": {
+        "schema": 1,
+        "id": "e1-red12-dozen3-13",
+        "name": "Flat red $12 + dozen 3 $13",
+        "game": "roulette",
+        "unit": 100,
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "red", "amount": 1200 },
+              { "bet": "dozen:3", "amount": 1300 }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "e1-straights25",
+      "strategy": {
+        "schema": 1,
+        "id": "e1-straights25",
+        "name": "Flat 25 straight-ups at $1",
+        "game": "roulette",
+        "unit": 100,
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "straight:1", "amount": 100 },
+              { "bet": "straight:2", "amount": 100 },
+              { "bet": "straight:3", "amount": 100 },
+              { "bet": "straight:4", "amount": 100 },
+              { "bet": "straight:5", "amount": 100 },
+              { "bet": "straight:6", "amount": 100 },
+              { "bet": "straight:7", "amount": 100 },
+              { "bet": "straight:8", "amount": 100 },
+              { "bet": "straight:9", "amount": 100 },
+              { "bet": "straight:10", "amount": 100 },
+              { "bet": "straight:11", "amount": 100 },
+              { "bet": "straight:12", "amount": 100 },
+              { "bet": "straight:13", "amount": 100 },
+              { "bet": "straight:14", "amount": 100 },
+              { "bet": "straight:15", "amount": 100 },
+              { "bet": "straight:16", "amount": 100 },
+              { "bet": "straight:17", "amount": 100 },
+              { "bet": "straight:18", "amount": 100 },
+              { "bet": "straight:19", "amount": 100 },
+              { "bet": "straight:20", "amount": 100 },
+              { "bet": "straight:21", "amount": 100 },
+              { "bet": "straight:22", "amount": 100 },
+              { "bet": "straight:23", "amount": 100 },
+              { "bet": "straight:24", "amount": 100 },
+              { "bet": "straight:25", "amount": 100 }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
