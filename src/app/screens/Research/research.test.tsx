@@ -38,7 +38,12 @@ describe('Research', () => {
       const label = s.getAttribute('aria-labelledby') ?? '';
       expect(s.querySelector(`h2#${label}`)).not.toBeNull();
       expect(s.querySelector('p.lead')).not.toBeNull();
-      expect(s.querySelector('.chart-slot')).not.toBeNull();
+      // A chart, stat tiles, a table or (until a chapter lands) the placeholder slot.
+      expect(
+        s.querySelector(
+          '.chart-slot, figure.sp-chart, .research-versus, .research-tablewrap, form',
+        ),
+      ).not.toBeNull();
       expect(s.querySelector('ul.takeaways li')).not.toBeNull();
       expect(s.querySelector('details.math > summary')?.textContent).toBe('The math');
     }
