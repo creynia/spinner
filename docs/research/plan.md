@@ -770,18 +770,62 @@ so turnover falls to ≈ $2,000 (W20) and ≈ $4,000 (no stop), giving ≈ −$5
 
 Edge: −2.70 % European, −5.26 % American on every row; |residual z| > 2.5 is a bug.
 
+### 7.17 X1 results (`specs/x1-c9-cashout-axes.json`, `specs/x1-a1-trailing.json`, 10,000 sessions, seed 20261031)
+
+Predictions are in §7.16. Bust 0 and rejected/adjusted 0 on every row. Edge is the realized value
+(analytic −2.70 % European, −5.26 % American); every residual |z| ≤ 1.04.
+
+| id | median | mean | CVaR 5 % | bust | P(win) | cap rate | edge (z) | prediction → result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| x1-c9-am (American, 500) | $286 | -$100.32 | -$3,220 | 0 % | 88.7 % | 0 % (stop-loss 11.3 %) | -4.75 % (1.04) | .886, $286, -$105, -$3,215 → held |
+| x1-c9-S250 (European, 250) | $286 | -$46.25 | -$3,210 | 0 % | 90.3 % | 0 % (stop-loss 9.7 %) | -2.36 % (0.68) | identical to the 500-spin row → held, session for session |
+| x1-c9-S1000 (European, 1,000) | $286 | -$46.25 | -$3,210 | 0 % | 90.3 % | 0 % (stop-loss 9.7 %) | -2.36 % (0.68) | identical → held |
+| x1-c9-am-S1000 (American, 1,000) | $286 | -$100.32 | -$3,220 | 0 % | 88.7 % | 0 % (stop-loss 11.3 %) | -4.75 % (1.04) | identical to x1-c9-am → held |
+| x1-a1-W20-ctrl (9 levels, W20) | $232 | -$63.55 | -$3,380 | 0 % | 91.7 % | 8.3 % | -2.76 % (-0.14) | reproduces `e7-a1-W20` exactly → held |
+| x1-a1-L8-W20 (8 levels, W20) | $230 | -$38.08 | -$841 | 0 % | 72.4 % | 27.6 % | -2.81 % (-0.34) | .726, $232, ≈ -$830, cap ≈ 27 % → held; mean ≈ -$55 → refuted |
+| x1-a1-L8-nostop (8 levels) | -$360 | -$124.31 | -$841 | 0 % | 30.6 % | 89.9 % | -2.81 % (-0.58) | .36, -$270, ≈ -$110, CVaR ≈ -$830 → P(win) and median refuted; mean and CVaR held |
+
+- **c9 cash-out on the American wheel.** The stop-loss rate rose from 9.7 % to 11.3 %, as
+  q_am = 1.181 × q_SL predicted: P(win) .887 against .886. The median is the target plus overshoot
+  ($286), the mean is -$100.32 (-4.75 % of a $2,113 wager, against my -$105), and CVaR 5 % moved by
+  $10. The wheel's extra cost is 1.6 points of P(win) and $54 of mean, much less than for the no-stop
+  ladders (§7.13: 3.8 points for c9), because the session ends after about 85 spins. Sessions run 85.0
+  rounds (86 predicted), median 87.
+- **Length changes nothing for the c9 cash-out.** All 10,000 sessions had stopped by round 250, so the
+  250- and 1,000-spin reports equal the 500-spin report to the cent, on both wheels. Where the no-stop
+  c9 ladder goes from +$777 (250 spins) to -$2,126.50 (1,000 spins), the cash-out version stays at $286.
+- **The a1 trailing stop works as the E7b analogue did.** Dropping the $2,592 level cuts the cap loss
+  from $3,444 to $852 and CVaR 5 % from -$3,380 to -$841 (the 5 % worst are caps in the first cycles, with
+  $11 banked). It costs 19 points of P(win) at W20 (91.7 % → 72.4 %, predicted .726) because
+  q' = q/(1 − 27/37) = .0183 is 3.7 times q. The median stays at the target ($230, predicted $232: this
+  stop-win overshoots by $4 instead of $6). The mean improves from -$63.55 to -$38.08.
+- **Two misses, both in my inputs.** (1) The mean: I assumed turnover fell from $2,303 to about $2,000,
+  but the dropped level is the heavy-wagering one: $1,354 (wager per spin $33.64 → $22.15). The edge on
+  that turnover is -2.81 %, in line. (2) The no-stop row: I fitted q' from the W-nominal rows
+  (q_eff = .0043, which already includes the 17/20 correction of §7.11) and then applied it to the real
+  122 cycles of a 500-spin session. With q' = .00494/.2703 = .0183, (1 − q')^64 = .31 and the median cap
+  cycle is ln 2/q' = 38 → 38 × $13.3 − $852 = -$348. Measured .306 and -$360, 89.9 % of sessions
+  capped (10.1 % ran the 500 spins; (1 − q')^122 = .10). That is a post-hoc fix, not a held prediction.
+  The rule for next time: use the nominal q with the corrected number of cycles, or q_eff with the
+  nominal count, never one of each.
+- **The trade.** Against the 9-level W20 row the shortened ladder gives up 19 points of P(win) and keeps
+  the median at the target for a CVaR 5 % that is $2,539 better and a mean $25 better. Against c9's
+  cash-out (90.3 %, CVaR -$3,210) it is a worse deal on P(win) and a much better one on the tail.
+  Without a stop-win the 8-level ladder is a loss-limiter, not a median-positive strategy: the median
+  is -$360 because the cap arrives at cycle 38.
+
 ## 8. Open questions
 
-- **A trailing stop for widening ladders.** a1's half-ladder stop-loss never fires: the last level
-  carries $2,592 of the $3,444 cap loss (§7.11). The E7b analogue, `maxSteps L−1, onCap stop`,
-  is untested on a1.
+- ~~**A trailing stop for widening ladders.**~~ Closed in §7.17: a1's half-ladder stop-loss never fires
+  (the last level carries $2,592 of the $3,444 cap loss, §7.11), and the E7b analogue (drop that level,
+  `onCap stop`) at W20 gives CVaR 5 % -$841, P(win) 72.4 %, median $230, mean -$38.08.
 - **The stop is checked after the round, so it overshoots.** b3: stop $2,287, CVaR 5 % −$2,720. c9:
   stop $2,459.50, CVaR 5 % −$3,210, worst −$3,275. A pre-bet guard is untested. It would skip a
   level whose loss would cross the limit.
 - **Resolved (not open): the c9 cash-out candidate's in-strategy stops.** The candidate file was run as
   is (rules override, seed 20261031, 10,000 sessions; commit 4939916). It reproduced e7-c9-W20-SLhalf
-  exactly (median $286, mean −$46.25, P(win) 90.3 %, CVaR 5 % −$3,210, rej/adj 0). Open remainder: no
-  E8 axis other than seed 3 ran on the cash-out version (American, 250/1,000 spins).
+  exactly (median $286, mean −$46.25, P(win) 90.3 %, CVaR 5 % −$3,210, rej/adj 0). The American and
+  250/1,000-spin axes ran as X1 (§7.17); seed 3 is in the ledger.
 - **The runner should report the never-capped share and the cap count directly.** Today they are
   read from `endedBy` `strategy:cap-*` or from `onCap: stop` twins (§7.3, §7.14).
 - **The aggregator's x for E4.** `meta.B` is in level-0 stakes, not cycle profits, so x is too large
@@ -795,8 +839,9 @@ Edge: −2.70 % European, −5.26 % American on every row; |residual z| > 2.5 is
   (a9, b11, c6) had P(no cap) .001–.099 (§7.6). A $25-base survivor needs 25× the bankroll for the
   same B, and that has not been simulated.
 - **Longer sessions and the cash-out on other axes.** No survivor keeps a positive median at 1,000
-  spins without a cash-out. E8 ran only the no-stop survivors. c9 cash-out (median session length
-  85 spins) has no American, 250/1,000-spin or seed-3 row.
+  spins without a cash-out. E8 ran only the no-stop survivors. The c9 cash-out (median session length
+  86 spins) on the American wheel and at 250/1,000 spins is closed in §7.17 (~~no American, 250/1,000-spin row~~);
+  b3 and a1 cash-outs have no American or length row.
 - **Reproducibility.** `results/e8-seed3.json` has no spec of its own (it reruns e6-full ids on seed
   3). Three batch-one ledger rows (flat-red-cashout-500, fibonacci-red, fibonacci-red-cashout-500)
   carry an interpretation, not a pre-run prediction. The e1/e3/e7-mart rows predate the "CVaR5
@@ -818,12 +863,15 @@ Strategy documents under `scripts/research/candidates/`, ordered by how well the
   P(win) of the no-stop ladders. b3 has the highest median and a 29-level stacked ladder on two
   streets.
 - **American wheel** (§7.13, no-stop versions only). c9: median $1,497, mean −$535.24, CVaR 5 %
-  −$4,836, bust 0, P(win) 63.3 %. b3: $1,594, −$520.74, −$4,510, 0, 58.0 %. The cash-out version
-  was not run.
+  −$4,836, bust 0, P(win) 63.3 %. b3: $1,594, −$520.74, −$4,510, 0, 58.0 %. The c9 cash-out
+  (X1, §7.17, `x1-c9-am`): median $286, mean −$100.32, CVaR 5 % −$3,220, bust 0, P(win) 88.7 %.
 - **Session length** (§7.15, no-stop). At 250 spins: c9 $777 (mean −$156.42, CVaR 5 % −$4,820,
   bust 0) and b3 $862 (−$166.99, −$4,491, 0). At 1,000 spins both medians are negative: c9
   −$2,126.50 (−$472.93, −$4,820, 0) and b3 −$1,947 (−$474.46, −$4,491, 0). c9 cash-out sessions end
-  at a median of about spin 85, so session length barely binds it (not run).
+  at a median of about spin 86, so session length does not bind it (X1, §7.17): 250 and 1,000 spins
+  reproduce the 500-spin row exactly (median $286, mean −$46.25, CVaR 5 % −$3,210, bust 0, P(win)
+  90.3 %), and 1,000 spins on the American wheel the American row (median $286, mean −$100.32, CVaR 5 %
+  −$3,220, bust 0, P(win) 88.7 %).
 - **Table requirement.** Every candidate needs a $1 outside minimum and a $1 inside minimum total
   (rules override `limits.outside.min 100`, `limits.inside.minTotal 100`, in cents). The default
   table's $25 minimums break all three. The strategy document does not carry table limits, so set
