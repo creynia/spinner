@@ -27,7 +27,11 @@ export default defineConfig({
         test: {
           name: 'node',
           environment: 'node',
-          include: ['src/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}'],
+          include: [
+            'src/**/*.test.{ts,tsx}',
+            'tests/**/*.test.{ts,tsx}',
+            'scripts/research/**/*.test.ts',
+          ],
           exclude: [...exclude, ...domGlobs],
         },
       },

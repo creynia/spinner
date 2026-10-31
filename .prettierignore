@@ -10,3 +10,5 @@ gallery/*.gz
 docs
 PLAYBOOK.md
 src/core/store/__fixtures__/runs/
+.claude
+src/app/screens/Research/data.json
