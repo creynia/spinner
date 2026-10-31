@@ -1,0 +1,146 @@
+/* Research screen: chapter navigation (chip row on phones, sticky column from 768px), chapter
+   cards and the collapsible math block. Colours come from tokens only. */
+.research-nav ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.research-nav-chips {
+  margin: 0 calc(var(--gutter) * -1) 12px;
+}
+.research-nav-chips ol {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 var(--gutter) 4px;
+}
+.research-nav-chips li {
+  flex: 0 0 auto;
+}
+.research-nav-chips .chip {
+  white-space: nowrap;
+}
+.research-nav-column {
+  display: none;
+}
+.research-nav-link {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 4px 12px;
+  border-left: 3px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+.research-nav-link:hover {
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+.research-chapters {
+  min-width: 0;
+}
+.research-chapter {
+  scroll-margin-top: 16px;
+}
+@media (min-width: 768px) {
+  .research-nav-chips {
+    display: none;
+  }
+  .research-layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .research-nav-column {
+    display: block;
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+}
+.research-chapter h2 {
+  font-size: 1.25rem;
+}
+.research-chapter .lead {
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.chart-slot {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  margin: 12px 0;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+}
+.takeaways {
+  margin: 12px 0;
+  padding-left: 1.25rem;
+}
+.takeaways li + li {
+  margin-top: 4px;
+}
+
+details.math {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+details.math > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 0 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text);
+}
+details.math > summary::-webkit-details-marker {
+  display: none;
+}
+details.math > summary::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+details.math[open] > summary::before {
+  transform: rotate(45deg);
+}
+details.math > summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+.math-body {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.math-body p {
+  margin: 8px 0;
+  color: var(--muted);
+}
+.math-body .formula {
+  display: block;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
