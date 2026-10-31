@@ -718,6 +718,58 @@ seed 3 −$350 / −$344.60 / −$1,496; American −$650 / −$653.14 / −$1,7
   against n½ = ln2/(q·p) from the specs' meta (723 / 874 / 577). That check was not registered
   before the run.
 
+### 7.16 Predictions for X1 (written before the runs)
+
+Two specs, 10,000 sessions each, seed 20261031: `specs/x1-c9-cashout-axes.json` (the c9 cash-out
+`e7-c9-W20-SLhalf`: stop-win $280, stop-loss $2,459.50, `onCap stop`, $1 minimums, copied unchanged) and
+`specs/x1-a1-trailing.json` (a1, stop-win $226 where stated). Reference row, European 500 spins:
+median $286, P(win) .9028, mean −$46.25, CVaR 5 % −$3,210, edge −2.36 % on $1,962 mean wager, 84
+rounds per session, ended by stop-win 9,028 and stop-loss 972.
+
+**c9 cash-out on the other axes.** q_eff from the European W5–W50 rows: 1 − P(win)^(1/W) = .00363 /
+.00356 / .00351 / .00350, so q_eff ≈ .0035. The stop-loss row fires on the loss of level 14 (15 levels
+lost, cumulative $3,275 against a $2,459.50 limit; level 13 ends at $2,179), so its per-cycle rate is
+q_SL = 1 − .9028^(1/20) = .00510 (theory Π(1 − c_k/37) over 15 levels: .00528). American: the ratio
+Π (1 − c_k/38)/(1 − c_k/37) over those 15 levels is 1.181, so q_am = .00510 × 1.181 = .00602 and
+P(win) = (1 − q_am)^20 = .886. Medians stay at the target plus one win's overshoot ($286) while
+P(win) > ½. Mean = −5.26 % × turnover; sessions run ≈ 3 % longer (86 rounds, wager ≈ $2,000), so the
+mean is ≈ −$105. CVaR 5 %: the worst 5 % are stop-loss sessions, whose loss is fixed by the ladder, so
+the tail is unchanged.
+
+For the length rows: c9 cash-out sessions end at a median of 86 rounds (mean 84) because 20 cycle
+profits take ≈ 20 × 4.5 spins; 250 spins is about 6 standard deviations out, so no session should be
+unfinished at spin 250, and 1,000 spins adds nothing a 500-spin session did not already have. A session
+is a function of its own spin stream only, so these rows should reproduce the 500-spin row session for
+session.
+
+| id | P(win) | median | mean | CVaR 5 % | reasoning |
+| --- | ---: | ---: | ---: | ---: | --- |
+| x1-c9-am (American, 500) | .886 | $286 | ≈ −$105 | ≈ −$3,215 | q_am = 1.181 × q_SL; edge −5.26 % |
+| x1-c9-S250 (European, 250) | .903 | $286 | −$46.25 | −$3,210 | identical to the 500-spin row: no session is still running at spin 250 (at most a handful) |
+| x1-c9-S1000 (European, 1,000) | .903 | $286 | −$46.25 | −$3,210 | identical to the 500-spin row |
+| x1-c9-am-S1000 (American, 1,000) | .886 | $286 | ≈ −$105 | ≈ −$3,215 | identical to x1-c9-am |
+
+**a1 with a trailing stop.** a1 has 9 levels, coverage 3, 6, …, 27, amounts 1, 2, 2, 3, 5, 10, 24, 72,
+288 dollars per street; the last level carries $2,592 of the $3,444 cap loss. Dropping it gives 8
+levels (`onCap stop`) with a cap loss of $852. q' = q/(1 − 27/37) = q/.2703. The measured P(win) at
+W5–W100 (.978 / .957 / .917 / .811) gives q_eff = .0043 per cycle (the nominal meta q = .00494 needs
+the W × 11.3/13.3 correction of §7.11), so q' = .0043/.2703 = .0159, and P(win at W20) = (1 − q')^20 = .726
+(the uncorrected form, q = .00494 and 17 effective cycles, gives .731; the uncorrected 20 cycles give
+.69). The median is the target plus overshoot ($232). A cap leaves banked profit − $852 and the worst 5 %
+are the earliest caps (cycle ≤ 3, ≈ $20 banked), so CVaR 5 % ≈ −$830. Without a stop-win the session
+runs to the cap or to 500 spins (122 cycles); equity ends above zero only if the cap comes after
+$852 / $13.3 ≈ 64 cycles, so P(win) ≈ (1 − q')^64 = .36 and the median is the median cap time
+ln 2/q' = 44 cycles → 44 × $13.3 − $852 ≈ −$270. Mean = −2.70 % × turnover; capped sessions end early,
+so turnover falls to ≈ $2,000 (W20) and ≈ $4,000 (no stop), giving ≈ −$55 and ≈ −$110.
+
+| id | P(win) | median | mean | CVaR 5 % | cap rate | reasoning |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| x1-a1-W20-ctrl (9 levels, W20) | .917 | $232 | −$63.55 | −$3,380 | 8.3 % | unchanged spec: reproduces `e7-a1-W20` exactly |
+| x1-a1-L8-W20 (8 levels, W20) | .726 | $232 | ≈ −$55 | ≈ −$830 | ≈ 27 % | (1 − q')^20, q' = q_eff/.2703; CVaR = shortened cap loss − early banked |
+| x1-a1-L8-nostop (8 levels) | ≈ .36 | ≈ −$270 | ≈ −$110 | ≈ −$830 | ≈ 86 % | positive only if the cap comes after ≈ 64 cycles |
+
+Edge: −2.70 % European, −5.26 % American on every row; |residual z| > 2.5 is a bug.
+
 ## 8. Open questions
 
 - **A trailing stop for widening ladders.** a1's half-ladder stop-loss never fires: the last level
