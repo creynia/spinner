@@ -222,6 +222,7 @@ export default tseslint.config(
       'test-results/**',
       'public/icons/**',
       'node_modules/**',
+      '.claude/**',
     ],
   },
   js.configs.recommended,
