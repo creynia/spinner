@@ -32,14 +32,23 @@ describe('aggregate toRow', () => {
       bust: 0.05,
       rejected: 3,
       adjusted: 7,
+      edgeZ: null,
     });
+  });
+
+  it('takes the residual edge z when the report has one', () => {
+    const r = toRow('f.json', {
+      ...report(),
+      edge: { residual: { mean: -10, sd: 1000, z: -1.25 } },
+    } as unknown as Report);
+    expect(r.edgeZ).toBe(-1.25);
   });
 
   it('leaves p, B, x blank without meta', () => {
     const r = toRow('f.json', report());
     expect([r.p, r.B, r.x, r.expNegX]).toEqual([null, null, null, null]);
     expect(formatCsv([r]).split('\n')[1]).toBe(
-      'f.json,martingale-red@1,1000,,,500,,0.31,,2500,-34000,-255000,0.05,295,3,7',
+      'f.json,martingale-red@1,1000,,,500,,0.31,,2500,-34000,-255000,0.05,295,3,7,',
     );
   });
 });

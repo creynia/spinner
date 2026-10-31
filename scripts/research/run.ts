@@ -89,8 +89,18 @@ export interface Report {
   endedBy: Record<string, number>;
   rounds: { mean: number; median: number };
   wagered: { mean: number; perRound: number };
-  /** Realized mean net per cent wagered, and the analytic value the engine attributes to the bets placed. */
-  edge: { realized: number; analytic: number; expectedLossMean: number };
+  /**
+   * Realized mean net per cent wagered, and the analytic value the engine attributes to the bets
+   * placed. `residual` tests realized against analytic with per-session residuals
+   * r_i = net_i + expectedLoss_i (zero-mean if the engine's accounting is right): mean, sd and
+   * z = mean / (sd / √N). |z| > 3 is a bug signal (plan §4 E1), not a result.
+   */
+  edge: {
+    realized: number;
+    analytic: number;
+    expectedLossMean: number;
+    residual: { mean: number; sd: number; z: number };
+  };
   maxDrawdown: { mean: number; median: number; p90: number };
   path: PathPoint[];
   /** Last round at which the median equity path is above the starting bankroll (null: never). */
@@ -220,6 +230,10 @@ export function runOne(def: NormalizedDefinition, id: string, every = 10): Repor
     rSum += rounds[i]!;
   }
   const w = wilson(wins, N);
+  const residual = new Float64Array(N);
+  for (let i = 0; i < N; i++) residual[i] = net[i]! + expLoss[i]!;
+  const res = meanSd(residual);
+  const resZ = res.sd > 0 ? res.mean / (res.sd / Math.sqrt(N)) : 0;
   const bankroll = def.session.bankroll;
 
   const path: PathPoint[] = [];
@@ -298,6 +312,7 @@ export function runOne(def: NormalizedDefinition, id: string, every = 10): Repor
       realized: wSum ? ms.mean / (wSum / N) : 0,
       analytic: wSum ? -eSum / wSum : 0,
       expectedLossMean: eSum / N,
+      residual: { mean: res.mean, sd: res.sd, z: resZ },
     },
     maxDrawdown: {
       mean: meanSd(dd).mean,
@@ -336,6 +351,9 @@ export function formatLine(r: Report): string {
     `peak ${$(r.medianPeak.net)}@${r.medianPeak.round}`,
     ...(r.rejectedRounds || r.adjustedRounds
       ? [`rej ${r.rejectedRounds} adj ${r.adjustedRounds}`]
+      : []),
+    ...(r.edge.residual && Math.abs(r.edge.residual.z) > 3
+      ? [`EDGE z=${r.edge.residual.z.toFixed(2)}`]
       : []),
   ].join(' ');
 }

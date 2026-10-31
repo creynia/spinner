@@ -30,6 +30,8 @@ export interface Row {
   /** Rejected / adjusted rounds summed over sessions (null for reports written before the fields existed). */
   rejected: number | null;
   adjusted: number | null;
+  /** Residual edge z (run.ts `edge.residual.z`; null for reports written before the field existed). */
+  edgeZ: number | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -57,6 +59,7 @@ export function toRow(file: string, r: Report): Row {
     medianAheadUntil: r.medianAheadUntil,
     rejected: num(r.rejectedRounds),
     adjusted: num(r.adjustedRounds),
+    edgeZ: num(r.edge?.residual?.z),
   };
 }
 
@@ -77,6 +80,7 @@ const COLS: [keyof Row, string][] = [
   ['medianAheadUntil', 'medAheadUntil'],
   ['rejected', 'rejected'],
   ['adjusted', 'adjusted'],
+  ['edgeZ', 'edge z'],
 ];
 
 const money = (c: number): string => {
@@ -88,6 +92,7 @@ const cell = (k: keyof Row, v: Row[keyof Row]): string => {
   if (typeof v === 'string') return v;
   if (k === 'median' || k === 'mean' || k === 'cvar5') return money(v);
   if (k === 'p' || k === 'x' || k === 'pAhead' || k === 'expNegX') return v.toFixed(4);
+  if (k === 'edgeZ') return v.toFixed(2);
   if (k === 'bust') return `${(100 * v).toFixed(1)}%`;
   return String(v);
 };
