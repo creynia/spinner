@@ -2,7 +2,7 @@
 
 **Status (2026-10-31): loop complete.** The answers to the three questions are in `plan.md` §7.0,
 the open questions in §8, and the candidate strategies with holdout numbers in §9 (files under
-`scripts/research/candidates/`). Ledger: 141 rows in `ledger.md`, each with a report in `results/`.
+`scripts/research/candidates/`). Ledger: 142 rows in `ledger.md`, each with a report in `results/`.
 
 **Read this file first.** It is the single entry point for the orchestrator that runs the
 research loop described in `docs/research/plan.md`. Everything else is linked from here.

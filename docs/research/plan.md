@@ -264,8 +264,8 @@ bust 16.4 %.
 
 **Q3. Can widening or stacking plus a cash-out report an above-break-even median?** Yes over 500
 spins, as a skew trade only. c9 (streets widened to 12, then stacked) with a $280 stop-win (W20) and
-a half-ladder stop-loss: median $286, P(win) 90.3 / 89.9 / 90.1 % on three seeds, mean −$46 / −$60 /
-−$54, CVaR 5 % −$3,210 / −$3,214 / −$3,212, bust 0 (§7.11, §9). Limits (E5 §7.14): P(no cap) ≤
+a half-ladder stop-loss: median $286, P(win) 90.3 / 89.9 / 90.1 / 89.8 % on four seeds, mean −$46 / −$60 /
+−$54 / −$61, CVaR 5 % −$3,210 / −$3,214 / −$3,212 / −$3,209, bust 0 (§7.11, §9). Limits (E5 §7.14): P(no cap) ≤
 e^(−x), a ceiling none of 53 ladders beat; layout is no lever beyond B; widening raises k (1.58 at
 33 numbers vs 1.14 for one street), and the widening survivor lost its median on the American wheel
 (§7.13). The mean is negative on every row.
