@@ -87,6 +87,7 @@ export function parentOf(path: string): string | null {
     case 'gallery':
       return path === '/gallery' ? '/more' : '/gallery';
     case 'import':
+    case 'research':
       return '/more';
     case 'define':
       return '/library';

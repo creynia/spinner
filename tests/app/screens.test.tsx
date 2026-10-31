@@ -31,6 +31,8 @@ const addresses: [hash: string, pattern: string][] = [
   ['#/settings', '/settings'],
   ['#/settings/benchmark', '/settings/benchmark'],
   ['#/more', '/more'],
+  ['#/research', '/research'],
+  ['#/research?chapter=cashout', '/research'],
 ];
 
 describe('routes', () => {

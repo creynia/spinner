@@ -1,0 +1,86 @@
+/* Chapters 4 to 6: the scatter, the board glyph and the survivors grid. Tokens only. */
+.sp-scatter .sp-scatter-point {
+  pointer-events: none;
+}
+
+.research-sub {
+  margin: 16px 0 8px;
+  font-size: 1rem;
+}
+.research-caption {
+  caption-side: top;
+  padding: 0 8px 6px;
+  text-align: left;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Board glyph. */
+.board-glyph {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.board-cell {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.board-cell-on {
+  fill: var(--accent);
+}
+.board-disc {
+  fill: var(--amber);
+  stroke: var(--surface);
+  stroke-width: 0.5;
+}
+.board-capped {
+  fill: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.board-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+.board-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Chapter 6 survivors: one row of glyphs per ladder, wrapping on a phone. */
+.shapes-survivor {
+  margin: 0 0 16px;
+}
+.shapes-name {
+  margin-bottom: 6px;
+}
+.shapes-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+.shapes-glyph {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.shapes-glyph figcaption {
+  display: grid;
+  max-width: 260px;
+  font-size: 0.875rem;
+}
+.shapes-glyph .muted,
+.shapes-name .muted {
+  color: var(--muted);
+}

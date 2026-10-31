@@ -1,0 +1,105 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": { "bankroll": 500000, "maxRounds": 500 },
+    "run": { "sessions": 10000, "seed": 20261031 }
+  },
+  "experiments": [
+    {
+      "id": "e3b-L8-S250",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 127500, "maxRounds": 250 },
+      "strategy": {
+        "schema": 1,
+        "id": "martingale-red-5-l8",
+        "name": "Martingale on red, $5 unit, 8 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 8, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3b-L8-S1000",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 127500, "maxRounds": 1000 },
+      "strategy": {
+        "schema": 1,
+        "id": "martingale-red-5-l8",
+        "name": "Martingale on red, $5 unit, 8 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 8, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3b-L8-S2000",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 127500, "maxRounds": 2000 },
+      "strategy": {
+        "schema": 1,
+        "id": "martingale-red-5-l8",
+        "name": "Martingale on red, $5 unit, 8 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 8, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3b-L10-S250",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 511500, "maxRounds": 250 },
+      "strategy": {
+        "schema": 1,
+        "id": "martingale-red-5-l10",
+        "name": "Martingale on red, $5 unit, 10 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 10, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3b-L10-S1000",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 511500, "maxRounds": 1000 },
+      "strategy": {
+        "schema": 1,
+        "id": "martingale-red-5-l10",
+        "name": "Martingale on red, $5 unit, 10 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 10, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "e3b-L10-S2000",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "session": { "bankroll": 511500, "maxRounds": 2000 },
+      "strategy": {
+        "schema": 1,
+        "id": "martingale-red-5-l10",
+        "name": "Martingale on red, $5 unit, 10 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 10, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    }
+  ]
+}

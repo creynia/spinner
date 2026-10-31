@@ -1,0 +1,78 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": { "bankroll": 500000, "maxRounds": 500 },
+    "run": { "sessions": 10000, "seed": 20261031 }
+  },
+  "experiments": [
+    { "id": "flat-red", "strategy": "preset:flat-red" },
+    {
+      "id": "flat-red-cashout-500",
+      "strategy": "preset:flat-red",
+      "session": { "stopWin": 50000 }
+    },
+    { "id": "martingale-red", "strategy": "preset:martingale-red" },
+    {
+      "id": "martingale-red-br10k",
+      "strategy": "preset:martingale-red",
+      "session": { "bankroll": 1000000 }
+    },
+    {
+      "id": "martingale-red-cashout-500",
+      "strategy": "preset:martingale-red",
+      "session": { "stopWin": 50000 }
+    },
+    {
+      "id": "martingale-red-unit5-L10",
+      "rules": { "preset": "european", "overrides": { "limits": { "outside": { "min": 500 } } } },
+      "strategy": {
+        "schema": 1,
+        "id": "martingale-red-5",
+        "name": "Martingale on red, $5 unit, 10 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "red", "maxSteps": 10, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "red", "amount": { "prog": "m" } }] }]
+      }
+    },
+    { "id": "fibonacci-red", "strategy": "preset:fibonacci-red" },
+    {
+      "id": "fibonacci-red-cashout-500",
+      "strategy": "preset:fibonacci-red",
+      "session": { "stopWin": 50000 }
+    },
+    { "id": "two-dozens-x3", "strategy": "preset:two-dozens-martingale" },
+    {
+      "id": "martingale-dozen",
+      "strategy": {
+        "schema": 1,
+        "id": "martingale-dozen",
+        "name": "Martingale on dozen 1",
+        "game": "roulette",
+        "unit": 2500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "dozen:1", "maxSteps": 8, "onCap": "reset" }
+        },
+        "stages": [{ "id": "play", "layout": [{ "bet": "dozen:1", "amount": { "prog": "m" } }] }]
+      }
+    },
+    {
+      "id": "martingale-straight",
+      "strategy": {
+        "schema": 1,
+        "id": "martingale-straight",
+        "name": "Martingale on 17",
+        "game": "roulette",
+        "unit": 2500,
+        "progressions": {
+          "m": { "kind": "martingale", "track": "straight:17", "maxSteps": 8, "onCap": "reset" }
+        },
+        "stages": [
+          { "id": "play", "layout": [{ "bet": "straight:17", "amount": { "prog": "m" } }] }
+        ]
+      }
+    }
+  ]
+}

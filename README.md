@@ -26,6 +26,7 @@ Static web app for GitHub Pages; no backend, no accounts. Everything stays on yo
 
 On a desktop the same screens go side by side ([Analyze](docs/screenshots/analyze-overview-1280-light.webp), [Watch](docs/screenshots/watch-1280-light.webp), [Gallery](docs/screenshots/gallery-1280-light.webp)); dark mode follows your system ([Analyze, dark](docs/screenshots/analyze-overview-390-dark.webp)). More screenshots are in [`docs/screenshots/`](docs/screenshots/).
 
+- **Research:** what the simulations found about progressions (the edge never moves, the typical session can, and a cash-out locks it in), as ten short chapters with charts from the results, collapsible math, a ladder calculator and one-tap **Open in Define** for the candidate strategies: **More**, then **Research**. The write-up is in [`docs/research/report.md`](docs/research/report.md).
 - **Gallery:** curated result bundles (flat, Martingale, Fibonacci, d'Alembert, Labouchere, James Bond; 10,000 sessions of 500 spins each) open read-only from **More**, then **Gallery**. A bundle you open is kept for offline use.
 - **Updates:** the installed app updates itself and shows "Update available · Reload" (or "Reload (run will resume)" while a run is active). If it doesn't, open **Settings**, then **Check for updates**, and tap **Reload** on the toast. If none shows, close the app completely and open it again.
 
@@ -51,6 +52,7 @@ npm run dev        # local dev server
 npm run check      # lint, typecheck, format check, gallery size check, unit tests
 npm run build      # dist/ (the PWA, service worker and gallery index)
 npm run test:e2e   # Playwright (builds first; see CONTRIBUTING.md)
+npm run research:sim scripts/research/specs/baseline.json   # headless runs for docs/research/plan.md
 ```
 
 The plan is in [PLAYBOOK.md](PLAYBOOK.md) and the design documents are in [`docs/design/`](docs/design/) (start with `decisions.md`, which wins over everything else). The game-agnostic core is [`src/core`](src/core/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.

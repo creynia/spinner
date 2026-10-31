@@ -1,0 +1,735 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": { "bankroll": 500000, "maxRounds": 500 },
+    "run": { "sessions": 2000, "seed": 20261031 }
+  },
+  "experiments": [
+    { "id": "flat-red", "strategy": "preset:flat-red" },
+    {
+      "id": "d-a1-stopwin20",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a1-streets-w27",
+        "name": "a1 streets w27",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 300, 500, 1000, 2400, 7200, 28800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              },
+              {
+                "bet": "street:25-26-27",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 8] }
+              }
+            ]
+          }
+        ]
+      },
+      "session": { "stopWin": 22000 },
+      "meta": { "c": 3, "p": 0.2433, "B": 258.1, "q": 0.00494 }
+    },
+    {
+      "id": "d-a1-stopwin80",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "a1-streets-w27",
+        "name": "a1 streets w27",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 300, 500, 1000, 2400, 7200, 28800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              },
+              {
+                "bet": "street:25-26-27",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 8] }
+              }
+            ]
+          }
+        ]
+      },
+      "session": { "stopWin": 88000 },
+      "meta": { "c": 3, "p": 0.2433, "B": 258.1, "q": 0.00494 }
+    },
+    {
+      "id": "d-a1-trail-j6",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "d-a1-trail-j6",
+        "name": "d a1 trail j6",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 300, 500, 1000, 2400, 7200, 28800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              },
+              {
+                "bet": "street:25-26-27",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 8] }
+              }
+            ],
+            "rules": [
+              {
+                "id": "arm",
+                "once": true,
+                "when": { "cmp": ["net", ">=", 54800] },
+                "then": [
+                  { "set": "armed", "to": 1 },
+                  { "set": "lock", "to": { "sub": ["net", 10800] } }
+                ]
+              },
+              {
+                "id": "raise",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": [{ "sub": ["net", 10800] }, ">", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "set": "lock", "to": { "sub": ["net", 10800] } }]
+              },
+              {
+                "id": "hit",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": ["net", "<=", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "stop": "trailing-stop" }]
+              }
+            ]
+          }
+        ],
+        "vars": { "armed": 0, "lock": 0 }
+      },
+      "meta": { "c": 3, "p": 0.2433, "B": 258.1, "q": 0.00494 }
+    },
+    {
+      "id": "d-a1-trail-j7",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "d-a1-trail-j7",
+        "name": "d a1 trail j7",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [100, 200, 200, 300, 500, 1000, 2400, 7200, 28800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "street:1-2-3", "amount": { "prog": "q" } },
+              {
+                "bet": "street:4-5-6",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 3] }
+              },
+              {
+                "bet": "street:13-14-15",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 4] }
+              },
+              {
+                "bet": "street:16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 5] }
+              },
+              {
+                "bet": "street:19-20-21",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 6] }
+              },
+              {
+                "bet": "street:22-23-24",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 7] }
+              },
+              {
+                "bet": "street:25-26-27",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 8] }
+              }
+            ],
+            "rules": [
+              {
+                "id": "arm",
+                "once": true,
+                "when": { "cmp": ["net", ">=", 71600] },
+                "then": [
+                  { "set": "armed", "to": 1 },
+                  { "set": "lock", "to": { "sub": ["net", 27600] } }
+                ]
+              },
+              {
+                "id": "raise",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": [{ "sub": ["net", 27600] }, ">", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "set": "lock", "to": { "sub": ["net", 27600] } }]
+              },
+              {
+                "id": "hit",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": ["net", "<=", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "stop": "trailing-stop" }]
+              }
+            ]
+          }
+        ],
+        "vars": { "armed": 0, "lock": 0 }
+      },
+      "meta": { "c": 3, "p": 0.2433, "B": 258.1, "q": 0.00494 }
+    },
+    {
+      "id": "d-b1-stopwin10",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b1-street-l53",
+        "name": "b1 street l53",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              400, 500, 500, 600, 600, 700, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600,
+              1800, 2000, 2100, 2300, 2500, 2800, 3000, 3300, 3600, 3900, 4300, 4700, 5100, 5600,
+              6100, 6600, 7200, 7900, 8600, 9400, 10200, 11200, 12200, 13300, 14500, 15800, 17200,
+              18800, 20500, 22400, 24400, 26600, 29100, 31700, 34600, 37700, 41200
+            ]
+          }
+        },
+        "stages": [
+          { "id": "play", "layout": [{ "bet": "street:1-2-3", "amount": { "prog": "q" } }] }
+        ]
+      },
+      "session": { "stopWin": 44000 },
+      "meta": { "c": 3, "p": 0.0811, "B": 99.6, "q": 0.01132 }
+    },
+    {
+      "id": "d-b1-stopwin30",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "b1-street-l53",
+        "name": "b1 street l53",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              400, 500, 500, 600, 600, 700, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600,
+              1800, 2000, 2100, 2300, 2500, 2800, 3000, 3300, 3600, 3900, 4300, 4700, 5100, 5600,
+              6100, 6600, 7200, 7900, 8600, 9400, 10200, 11200, 12200, 13300, 14500, 15800, 17200,
+              18800, 20500, 22400, 24400, 26600, 29100, 31700, 34600, 37700, 41200
+            ]
+          }
+        },
+        "stages": [
+          { "id": "play", "layout": [{ "bet": "street:1-2-3", "amount": { "prog": "q" } }] }
+        ]
+      },
+      "session": { "stopWin": 132000 },
+      "meta": { "c": 3, "p": 0.0811, "B": 99.6, "q": 0.01132 }
+    },
+    {
+      "id": "d-b1-trail-j24",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "d-b1-trail-j24",
+        "name": "d b1 trail j24",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              400, 500, 500, 600, 600, 700, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600,
+              1800, 2000, 2100, 2300, 2500, 2800, 3000, 3300, 3600, 3900, 4300, 4700, 5100, 5600,
+              6100, 6600, 7200, 7900, 8600, 9400, 10200, 11200, 12200, 13300, 14500, 15800, 17200,
+              18800, 20500, 22400, 24400, 26600, 29100, 31700, 34600, 37700, 41200
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [{ "bet": "street:1-2-3", "amount": { "prog": "q" } }],
+            "rules": [
+              {
+                "id": "arm",
+                "once": true,
+                "when": { "cmp": ["net", ">=", 78600] },
+                "then": [
+                  { "set": "armed", "to": 1 },
+                  { "set": "lock", "to": { "sub": ["net", 34600] } }
+                ]
+              },
+              {
+                "id": "raise",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": [{ "sub": ["net", 34600] }, ">", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "set": "lock", "to": { "sub": ["net", 34600] } }]
+              },
+              {
+                "id": "hit",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": ["net", "<=", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "stop": "trailing-stop" }]
+              }
+            ]
+          }
+        ],
+        "vars": { "armed": 0, "lock": 0 }
+      },
+      "meta": { "c": 3, "p": 0.0811, "B": 99.6, "q": 0.01132 }
+    },
+    {
+      "id": "d-b1-trail-j36",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "d-b1-trail-j36",
+        "name": "d b1 trail j36",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              400, 500, 500, 600, 600, 700, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600,
+              1800, 2000, 2100, 2300, 2500, 2800, 3000, 3300, 3600, 3900, 4300, 4700, 5100, 5600,
+              6100, 6600, 7200, 7900, 8600, 9400, 10200, 11200, 12200, 13300, 14500, 15800, 17200,
+              18800, 20500, 22400, 24400, 26600, 29100, 31700, 34600, 37700, 41200
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [{ "bet": "street:1-2-3", "amount": { "prog": "q" } }],
+            "rules": [
+              {
+                "id": "arm",
+                "once": true,
+                "when": { "cmp": ["net", ">=", 195600] },
+                "then": [
+                  { "set": "armed", "to": 1 },
+                  { "set": "lock", "to": { "sub": ["net", 107600] } }
+                ]
+              },
+              {
+                "id": "raise",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": [{ "sub": ["net", 107600] }, ">", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "set": "lock", "to": { "sub": ["net", 107600] } }]
+              },
+              {
+                "id": "hit",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": ["net", "<=", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "stop": "trailing-stop" }]
+              }
+            ]
+          }
+        ],
+        "vars": { "armed": 0, "lock": 0 }
+      },
+      "meta": { "c": 3, "p": 0.0811, "B": 99.6, "q": 0.01132 }
+    },
+    {
+      "id": "d-c8-stopwin20",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c8-sixlines-to18-stack",
+        "name": "c8 sixlines to18 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [200, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 76800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "sixline:1-2-3-4-5-6", "amount": { "prog": "q" } },
+              {
+                "bet": "sixline:7-8-9-10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "sixline:13-14-15-16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              }
+            ]
+          }
+        ]
+      },
+      "session": { "stopWin": 20000 },
+      "meta": { "c": 6, "p": 0.3329, "B": 459.8, "q": 0.00274 }
+    },
+    {
+      "id": "d-c8-stopwin80",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "c8-sixlines-to18-stack",
+        "name": "c8 sixlines to18 stack",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [200, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 76800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "sixline:1-2-3-4-5-6", "amount": { "prog": "q" } },
+              {
+                "bet": "sixline:7-8-9-10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "sixline:13-14-15-16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              }
+            ]
+          }
+        ]
+      },
+      "session": { "stopWin": 80000 },
+      "meta": { "c": 6, "p": 0.3329, "B": 459.8, "q": 0.00274 }
+    },
+    {
+      "id": "d-c8-trail-j5",
+      "rules": {
+        "preset": "european",
+        "overrides": { "limits": { "outside": { "min": 100 }, "inside": { "minTotal": 100 } } }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "d-c8-trail-j5",
+        "name": "d c8 trail j5",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [200, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 76800]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              { "bet": "sixline:1-2-3-4-5-6", "amount": { "prog": "q" } },
+              {
+                "bet": "sixline:7-8-9-10-11-12",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 1] }
+              },
+              {
+                "bet": "sixline:13-14-15-16-17-18",
+                "amount": { "prog": "q" },
+                "when": { "cmp": [{ "progStep": "q" }, ">=", 2] }
+              }
+            ],
+            "rules": [
+              {
+                "id": "arm",
+                "once": true,
+                "when": { "cmp": ["net", ">=", 53400] },
+                "then": [
+                  { "set": "armed", "to": 1 },
+                  { "set": "lock", "to": { "sub": ["net", 13400] } }
+                ]
+              },
+              {
+                "id": "raise",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": [{ "sub": ["net", 13400] }, ">", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "set": "lock", "to": { "sub": ["net", 13400] } }]
+              },
+              {
+                "id": "hit",
+                "when": {
+                  "all": [
+                    { "cmp": [{ "var": "armed" }, "==", 1] },
+                    { "cmp": ["net", "<=", { "var": "lock" }] }
+                  ]
+                },
+                "then": [{ "stop": "trailing-stop" }]
+              }
+            ]
+          }
+        ],
+        "vars": { "armed": 0, "lock": 0 }
+      },
+      "meta": { "c": 6, "p": 0.3329, "B": 459.8, "q": 0.00274 }
+    }
+  ]
+}

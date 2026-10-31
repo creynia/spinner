@@ -1,0 +1,23 @@
+/* Chapters 0 to 3: the flat-versus-cash-out stat columns, the note under them and the levels stats.
+   Tokens only. */
+.research-versus h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+.research-versus .stat + .stat {
+  border-top: 1px solid var(--border);
+}
+.research-note {
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.research-levels-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.research-levels-stats > * {
+  min-width: 0;
+}
