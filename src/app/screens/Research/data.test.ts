@@ -1,0 +1,159 @@
+import { statSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import raw from './data.json';
+import { CHAPTERS } from './content';
+import data, { candidate, path, row, rowsOf } from './data';
+import type { ResearchData } from './dataTypes';
+
+// The generated JSON must satisfy the app's types (a compile-time check through this assignment).
+const typed: ResearchData = raw as unknown as ResearchData;
+
+/** Every row a chapter draws, from content.ts; a content change that needs new data fails here. */
+const CHAPTER_KEYS = [...new Set(CHAPTERS.flatMap((c) => c.dataKeys))];
+
+/** Rows a chart draws as a line band. */
+const CHAPTER_PATHS = [
+  'observations:flat-red',
+  'observations:martingale-red',
+  'observations:fibonacci-red',
+  'e3a-levels:e3a-L5',
+  'e3a-levels:e3a-L10',
+  'e6-full:a1-streets-w27@20261031',
+  'e6-full:b3-two-streets-l29@20261031',
+  'e6-full:c9-streets-to12-stack@20261031',
+  'e7-c9:e7-c9-W20-SLhalf',
+  'e7-mart:e7m-reset-W20',
+  'e8-length:e8-S1000-c9-streets-to12-stack',
+  'e8-american:e8-am-flat-red',
+];
+
+const CANDIDATE_IDS = [
+  'keeper-b3-two-streets-l29',
+  'keeper-c9-streets-to12-cashout',
+  'keeper-c9-streets-to12-stack',
+];
+
+const isNumbers = (v: unknown): v is number[] =>
+  Array.isArray(v) && v.every((n) => typeof n === 'number' && Number.isFinite(n));
+
+describe('research data.json', () => {
+  it('is within the 150 KB budget', () => {
+    const bytes = statSync(join(process.cwd(), 'src/app/screens/Research/data.json')).size;
+    expect(bytes).toBeLessThanOrEqual(150 * 1024);
+  });
+
+  it('parses into the schema', () => {
+    expect(typed.generatedFrom.length).toBeGreaterThan(0);
+    for (const [key, r] of Object.entries(typed.rows)) {
+      expect(key).toBe(`${r.file}:${r.id}`);
+      for (const f of ['sessions', 'bankroll', 'maxRounds', 'mean', 'median', 'sd', 'p10', 'p90'])
+        expect(Number.isFinite(r[f as 'mean']), `${key}.${f}`).toBe(true);
+      for (const f of ['cvar5', 'pWin', 'pBust', 'capRate', 'wagerMean', 'roundsMean'])
+        expect(Number.isFinite(r[f as 'pWin']), `${key}.${f}`).toBe(true);
+      expect(r.meanCI).toHaveLength(2);
+      expect(r.medianCI).toHaveLength(2);
+      expect(r.pWin).toBeGreaterThanOrEqual(0);
+      expect(r.pWin).toBeLessThanOrEqual(1);
+      expect(r.capRate).toBeGreaterThanOrEqual(0);
+      expect(r.capRate).toBeLessThanOrEqual(1);
+      expect(r.medianAheadUntil === null || Number.isFinite(r.medianAheadUntil)).toBe(true);
+      expect(Number.isFinite(r.medianPeak.round)).toBe(true);
+      expect(Number.isFinite(r.medianPeak.net)).toBe(true);
+    }
+    for (const [key, p] of Object.entries(typed.paths)) {
+      expect(key in typed.rows, `${key} has a row`).toBe(true);
+      const n = p.rounds.length;
+      expect(n).toBeGreaterThan(1);
+      expect(n).toBeLessThanOrEqual(60);
+      expect(p.rounds[0]).toBe(0);
+      expect(p.rounds[n - 1]).toBe(typed.rows[key]!.maxRounds);
+      for (const series of [p.p10, p.p50, p.p90, p.mean, p.ahead, p.p25, p.p75]) {
+        if (series === undefined) continue;
+        expect(isNumbers(series)).toBe(true);
+        expect(series).toHaveLength(n);
+      }
+      expect([...p.rounds].sort((a, b) => a - b)).toEqual(p.rounds);
+    }
+    expect(typed.curve).toHaveLength(53);
+    for (const c of typed.curve) {
+      expect(c.id).not.toBe('');
+      expect(c.x).toBeGreaterThan(0);
+      expect(c.k).toBeGreaterThanOrEqual(1);
+      expect(c.neverCapped).toBeGreaterThanOrEqual(0);
+      expect(c.neverCapped).toBeLessThanOrEqual(1);
+    }
+    expect(typed.candidates.map((c) => c.id)).toEqual(CANDIDATE_IDS);
+    for (const c of typed.candidates) {
+      expect(c.rows.length).toBeGreaterThan(0);
+      for (const key of c.rows) expect(key in typed.rows).toBe(true);
+      expect(c.session).toEqual({ bankroll: 500000, maxRounds: 500 });
+    }
+  });
+
+  it('resolves every chapter data key', () => {
+    expect(CHAPTER_KEYS.length).toBeGreaterThan(50);
+    for (const key of CHAPTER_KEYS) expect(row(key).sessions, key).toBeGreaterThan(0);
+    // The rows the plan lists for the new X1 files and the screen files.
+    expect(rowsOf('x1-a1-trailing')).toHaveLength(3);
+    expect(rowsOf('x1-c9-cashout-axes')).toHaveLength(4);
+    expect(rowsOf('e6-stack-screen').map((r) => r.id)).toEqual([
+      'b11-red-default-l7',
+      'b3-two-streets-l29',
+      'b4-sixline-l29',
+    ]);
+    for (const key of CHAPTER_PATHS) expect(path(key).rounds.length, key).toBeGreaterThan(1);
+    expect(data.curve.length).toBeGreaterThan(0);
+    for (const id of CANDIDATE_IDS) expect(candidate(id).rows.length).toBeGreaterThan(0);
+  });
+
+  it('has the rows of every listed results file', () => {
+    expect(rowsOf('observations')).toHaveLength(11);
+    expect(rowsOf('e6-full')).toHaveLength(27);
+    expect(rowsOf('e7-c9-holdout')).toHaveLength(2);
+    expect(rowsOf('e7-c9-seed3')).toHaveLength(1);
+    expect(rowsOf('nope')).toEqual([]);
+  });
+
+  it('throws a clear error for a missing key', () => {
+    expect(() => row('observations:nope')).toThrow(/no row "observations:nope"/);
+    expect(() => path('e4-corner:e4-corner-g')).toThrow(/no path/);
+    expect(() => candidate('nope')).toThrow(/no candidate "nope"/);
+  });
+
+  it('keeps pinned values', () => {
+    const m = row('observations:martingale-red');
+    expect(m.median).toBe(-500000);
+    expect(m.medianAheadUntil).toBe(290);
+    const c9 = row('e7-c9:e7-c9-W20-SLhalf');
+    expect(c9.median).toBe(28600);
+    expect(Math.abs(c9.pWin - 0.903)).toBeLessThanOrEqual(0.0005);
+    expect(Math.abs(row('e1-spread:e1-red').mean - -33821)).toBeLessThanOrEqual(1);
+    // ended by strategy:cap-q: 3271 of 10000 sessions
+    expect(row('e6-full:c9-streets-to12-stack@20261031').capRate).toBeCloseTo(0.3271, 4);
+  });
+
+  it('carries the experiment meta, numeric only, B in cycle profits', () => {
+    expect(row('e7-c9:e7-c9-W20-SLhalf').meta?.q).toBeCloseTo(0.00356, 5);
+    expect(row('e8-seed3:c9-streets-to12-stack@3').meta?.B).toBeCloseTo(338.8, 1);
+    // E4 declares B in level-0 stakes (172.92 for the dozen, m = 2): 86.46 cycle profits; the
+    // E5 brief's 85.5 recomputes the cycle profit from the rounded amounts.
+    const dozen = row('e4-dozen:e4-dozen-g').meta;
+    expect(Math.abs(dozen!.B! - 85.5)).toBeLessThan(1.5);
+    expect(dozen!.g).toBe(1.5);
+    expect(row('observations:flat-red').meta).toBeNull();
+    for (const r of Object.values(typed.rows)) {
+      if (r.meta) for (const v of Object.values(r.meta)) expect(typeof v).toBe('number');
+    }
+  });
+
+  it('carries the candidates the Try-it chapter opens', () => {
+    const cash = candidate('keeper-c9-streets-to12-cashout');
+    expect(cash.rows[0]).toBe('e7-c9:e7-c9-W20-SLhalf');
+    expect(cash.rules).toEqual({
+      preset: 'european',
+      overrides: { limits: { outside: { min: 100 }, inside: { minTotal: 100 } } },
+    });
+    expect(candidate('keeper-b3-two-streets-l29').rows).toHaveLength(4);
+  });
+});
