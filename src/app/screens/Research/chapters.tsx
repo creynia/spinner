@@ -1,27 +1,30 @@
-// Chart slot per chapter. Wave-B implementers replace their own lines with real components (each
-// in its own file) and touch nothing else here. Every component receives its chapter.
+// Chart slot per chapter. Wave-B implementers replace the contents of their own Ch*.tsx files and
+// touch nothing here: one import line and one map line per chapter. Every component receives its
+// chapter.
 import type { ComponentType } from 'preact';
+import { ChCashout } from './ChCashout';
+import { ChCurve } from './ChCurve';
+import { ChEdge } from './ChEdge';
+import { ChLevels } from './ChLevels';
+import { ChLimits } from './ChLimits';
+import { ChMartingale } from './ChMartingale';
+import { ChPlacement } from './ChPlacement';
+import { ChShapes } from './ChShapes';
+import { ChStart } from './ChStart';
+import { ChTry } from './ChTry';
 import type { Chapter } from './content';
 
 export type ChapterChart = ComponentType<{ chapter: Chapter }>;
 
-function Placeholder({ chapter }: { chapter: Chapter }) {
-  return (
-    <div class="chart-slot" aria-hidden="true">
-      Chart: {chapter.id}
-    </div>
-  );
-}
-
 export const CHAPTER_CHARTS: Record<string, ChapterChart> = {
-  start: Placeholder,
-  edge: Placeholder,
-  martingale: Placeholder,
-  levels: Placeholder,
-  placement: Placeholder,
-  curve: Placeholder,
-  shapes: Placeholder,
-  cashout: Placeholder,
-  limits: Placeholder,
-  try: Placeholder,
+  start: ChStart,
+  edge: ChEdge,
+  martingale: ChMartingale,
+  levels: ChLevels,
+  placement: ChPlacement,
+  curve: ChCurve,
+  shapes: ChShapes,
+  cashout: ChCashout,
+  limits: ChLimits,
+  try: ChTry,
 };

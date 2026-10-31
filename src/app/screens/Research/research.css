@@ -40,7 +40,35 @@
   min-width: 0;
 }
 .research-chapter {
-  scroll-margin-top: 16px;
+  scroll-margin-top: 8px;
+  margin-bottom: 16px;
+}
+.research-chapter > p,
+.research-chapter > .takeaways {
+  max-width: 68ch;
+}
+.research-eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.research-nav-link[aria-current='location'],
+.research-nav-link[aria-current='location']:hover {
+  border-left-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.research-nav-chips .chip[aria-current='location'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.research-next {
+  display: inline-flex;
+  min-height: var(--tap);
+  margin-top: 8px;
+  font-weight: 600;
 }
 @media (min-width: 768px) {
   .research-nav-chips {
@@ -48,24 +76,35 @@
   }
   .research-layout {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 24px;
+    grid-template-columns: 184px minmax(0, 1fr);
+    gap: 16px;
     align-items: start;
   }
   .research-nav-column {
     display: block;
     position: sticky;
     top: 16px;
-    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 84px);
     overflow-y: auto;
   }
 }
+@media (min-width: 1200px) {
+  .research-layout {
+    grid-template-columns: 220px minmax(0, 880px);
+    gap: 24px;
+    justify-content: start;
+  }
+}
 .research-chapter h2 {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
+}
+@media (min-width: 768px) {
+  .research-chapter h2 {
+    font-size: 1.25rem;
+  }
 }
 .research-chapter .lead {
   color: var(--text);
-  font-size: 1.05rem;
   font-weight: 600;
 }
 .chart-slot {
@@ -134,13 +173,72 @@ details.math > summary:focus-visible {
 }
 .math-body .formula {
   display: block;
-  margin: 8px 0;
-  padding: 8px 10px;
+  margin: 6px 0;
+  padding: 6px 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--surface);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.9rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Visible tables (chapters 6 and 8): their own scroll box, like DataTable's .sp-chart__tablewrap. */
+.research-tablewrap {
+  max-width: 100%;
+  margin: 12px 0;
+  overflow-x: auto;
+}
+.research-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.research-table th,
+.research-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+.research-table th[scope='row'],
+.research-table thead th:first-child {
+  text-align: left;
+}
+.research-table .muted,
+.research-range {
+  color: var(--muted);
+}
+.research-range {
+  display: block;
+  font-size: 0.8rem;
+}
+
+/* Chapter 0: two columns of stats, side by side at every width, a 2 x 2 grid each from 1200px. */
+.research-versus {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.research-versus > * {
+  min-width: 0;
+}
+.research-versus-stats {
+  display: grid;
+  gap: 8px;
+}
+@media (min-width: 1200px) {
+  .research-versus-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Chapter 9: a candidate strategy that opens in Define. */
+.research-candidate {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
 }
