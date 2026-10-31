@@ -2,7 +2,7 @@
 // the Levels and Curve chapters (calculator.ts). Predictions, not a simulation; European wheel only.
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatMoney } from '@core';
-import { Chip, Field, Stat, moneyText, parseMoney, useId } from '@core/ui';
+import { Chip, Field, Stat, moneyText, parseMoney } from '@core/ui';
 import {
   CALC_DEFAULTS,
   CALC_PRESETS,
@@ -249,7 +249,6 @@ const sameInput = (a: CalcInput, b: CalcInput): boolean =>
   (Object.keys(a) as CalcField[]).every((k) => a[k] === b[k]);
 
 export function LadderCalculator({ initial = CALC_DEFAULTS }: { initial?: CalcInput }) {
-  const uid = useId('calc');
   const [input, setInput] = useState<CalcInput>(initial);
   const [bad, setBad] = useState<Set<CalcField>>(new Set());
   const errors = validate(input);
@@ -287,7 +286,7 @@ export function LadderCalculator({ initial = CALC_DEFAULTS }: { initial?: CalcIn
   const profitW = shown.r.ladder.profitPerCycle * input.w;
 
   return (
-    <div class="research-calc" id={uid}>
+    <form class="research-calc" aria-label="Ladder calculator" onSubmit={(e) => e.preventDefault()}>
       <div class="research-calc-presets" role="group" aria-label="Starting points">
         {CALC_PRESETS.map((p) => (
           <Chip
@@ -404,6 +403,6 @@ export function LadderCalculator({ initial = CALC_DEFAULTS }: { initial?: CalcIn
       <p class="visually-hidden" aria-live="polite">
         {live}
       </p>
-    </div>
+    </form>
   );
 }
