@@ -54,6 +54,90 @@
       }
     },
     {
+      "id": "e9-mart-u2-L11",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 200
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-mart-u2-l11",
+        "name": "Martingale red $2 L11",
+        "game": "roulette",
+        "unit": 200,
+        "progressions": {
+          "q": {
+            "kind": "martingale",
+            "track": "red",
+            "maxSteps": 11,
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-mart-u4-L10",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 400
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-mart-u4-l10",
+        "name": "Martingale red $4 L10",
+        "game": "roulette",
+        "unit": 400,
+        "progressions": {
+          "q": {
+            "kind": "martingale",
+            "track": "red",
+            "maxSteps": 10,
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
       "id": "e9-fib-u5-b2",
       "rules": {
         "preset": "european",
@@ -217,6 +301,73 @@
       }
     },
     {
+      "id": "e9-doz-r136-b4-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-doz-r136-b4",
+        "name": "Dozen 1 ×1.36 $5, 4 back per win, 19 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "dozen:1",
+            "onWin": "back",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              500, 700, 1000, 1300, 1800, 2400, 3200, 4400, 5900, 8000, 10900, 14800, 20100, 27300,
+              37100, 50400, 68500, 93200, 126700
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "dozen:1",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": [
+              {
+                "when": {
+                  "event": "bet-won"
+                },
+                "then": [
+                  {
+                    "prog": "q",
+                    "do": "back"
+                  },
+                  {
+                    "prog": "q",
+                    "do": "back"
+                  },
+                  {
+                    "prog": "q",
+                    "do": "back"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "id": "e9-doz-r136-b4",
       "rules": {
         "preset": "european",
@@ -255,6 +406,121 @@
                 "bet": "dozen:1",
                 "amount": {
                   "prog": "q"
+                }
+              }
+            ],
+            "rules": [
+              {
+                "when": {
+                  "event": "bet-won"
+                },
+                "then": [
+                  {
+                    "prog": "q",
+                    "do": "back"
+                  },
+                  {
+                    "prog": "q",
+                    "do": "back"
+                  },
+                  {
+                    "prog": "q",
+                    "do": "back"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-c9-r136-b4-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 100
+            },
+            "inside": {
+              "minTotal": 100
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-c9-r136-b4",
+        "name": "c9 streets to 12, ×1.36 $1, 4 back per win, 19 levels",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "back",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              100, 200, 200, 300, 400, 500, 700, 900, 1200, 1600, 2200, 3000, 4100, 5500, 7500,
+              10100, 13700, 18700, 25400
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "street:1-2-3",
+                "amount": {
+                  "prog": "q"
+                }
+              },
+              {
+                "bet": "street:4-5-6",
+                "amount": {
+                  "prog": "q"
+                },
+                "when": {
+                  "cmp": [
+                    {
+                      "progStep": "q"
+                    },
+                    ">=",
+                    1
+                  ]
+                }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": {
+                  "prog": "q"
+                },
+                "when": {
+                  "cmp": [
+                    {
+                      "progStep": "q"
+                    },
+                    ">=",
+                    2
+                  ]
+                }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": {
+                  "prog": "q"
+                },
+                "when": {
+                  "cmp": [
+                    {
+                      "progStep": "q"
+                    },
+                    ">=",
+                    3
+                  ]
                 }
               }
             ],
@@ -394,6 +660,100 @@
                 ]
               }
             ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-doz-onewin-u1",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 100
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-doz-onewin-u1",
+        "name": "Dozen 1 ×1.5 $1 one-win, 18 levels",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "dozen:1",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              100, 200, 300, 500, 800, 1200, 1800, 2700, 4100, 6200, 9300, 14000, 21000, 31500,
+              47300, 71000, 106500, 159800
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "dozen:1",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-doz-onewin-u3",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 300
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-doz-onewin-u3",
+        "name": "Dozen 1 ×1.5 $3 one-win, 16 levels",
+        "game": "roulette",
+        "unit": 300,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "dozen:1",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              300, 500, 800, 1200, 1800, 2700, 4100, 6200, 9300, 14000, 21000, 31500, 47300, 71000,
+              106500, 159800
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "dozen:1",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
           }
         ]
       }

@@ -388,6 +388,46 @@ const c9OneWin: E9Ladder = {
   recovers: true,
 };
 
+/**
+ * Added after the main runs (plan §7.18 addendum, predicted before its own run): one-win dozen
+ * ladders s(k+1) = ceil(1.5 s(k)) on the $1 chip at a $1 and $3 base, fitted to $5,000, to place
+ * the one-win frontier at the P(win) of the best slow ladders.
+ */
+function dozenFrontier(u: number): E9Ladder {
+  const a = [u];
+  while (a.length < 40) a.push(Math.ceil((a[a.length - 1]! * 1.5) / 100) * 100);
+  const st = fit(a, BANKROLL);
+  const id = `e9-doz-onewin-u${u / 100}`;
+  return {
+    id,
+    spec: 'x-e9-frontier',
+    family: 'one-win frontier (dozen)',
+    unit: u,
+    growth: '×1.5',
+    back: 'reset',
+    lad: singleBet(st, Infinity, DOZEN, 2),
+    tableMin: u,
+    rules: european(u),
+    strategy: (onCap) =>
+      doc(
+        id,
+        `Dozen 1 ×1.5 ${usd(u)} one-win, ${st.length} levels`,
+        u,
+        {
+          kind: 'sequence',
+          track: 'dozen:1',
+          onWin: 'reset',
+          onLoss: 'advance',
+          onCap,
+          amounts: st,
+        },
+        onDozen,
+      ),
+    variants: ['stop'],
+    recovers: true,
+  };
+}
+
 const dozenOneWin: E9Ladder = {
   id: 'e9-doz-onewin-u5',
   spec: 'x-e9-transplant',
@@ -506,6 +546,8 @@ export const LADDERS: E9Ladder[] = [
   c9Slow(1.36, 5, 'Fib-b3 analogue'),
   dozenOneWin,
   c9OneWin,
+  dozenFrontier(100),
+  dozenFrontier(300),
   cashout('e9-fib5b2-W10', 5000),
   cashout('e9-fib5b2-W20', 10000),
   cashout('e9-fib5b2-W10-SLhalf', 5000, FIB5_HALF),
@@ -523,10 +565,16 @@ export const HOLDOUT = [
   'e9-doz-r136-b4',
   'e9-c9-r136-b4',
   'e9-mart-u5-L10-stop',
-  'e9-mart-u2-L11-stop',
-  'e9-mart-u4-L10-stop',
+  // added after the first holdout batch: the stop twins of the transplants and the one-win
+  // frontier points, whose ids carry no `-stop` suffix (they only run with onCap stop)
+  'e9-doz-r136-b4-stop',
+  'e9-c9-r136-b4-stop',
+  'e9-mart-u2-L11',
+  'e9-mart-u4-L10',
   'e9-fib5b2-W20-SLhalf',
   'e9-fib5b2-W280-SLhalf',
+  'e9-doz-onewin-u1',
+  'e9-doz-onewin-u3',
 ];
 
 export interface E9Row {

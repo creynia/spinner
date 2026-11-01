@@ -3295,6 +3295,116 @@
   "recovers": true
  },
  {
+  "id": "e9-doz-onewin-u1",
+  "spec": "x-e9-frontier",
+  "family": "one-win frontier (dozen)",
+  "onCap": "stop",
+  "unit": 100,
+  "growth": "×1.5",
+  "back": "reset",
+  "levels": 18,
+  "ladderTotal": 478300,
+  "cycle": {
+   "q": 0.0008615671324425175,
+   "ET": 3.0806768346749682,
+   "ETdone": 3.0678117520651034,
+   "VarTdone": 6.143981728797911,
+   "ER": -84.33827692426826,
+   "tau": 328.03190402989264,
+   "VarRdone": 17701.356834487597,
+   "CovRTdone": 319.83880059441617,
+   "capLoss": 478300.00000000006,
+   "capLossMax": 478300.00000000006,
+   "wager": 3120.5162461979326,
+   "residual": 0
+  },
+  "pred": {
+   "pEff": 0.3243243243243244,
+   "B": 1458.0898812708592,
+   "x": 0.11121547734822972,
+   "k": 1.2573255882516017,
+   "lambda": 0.13983406547954558,
+   "pNoCap": 0.8695025039099319,
+   "nHalf": 2478.4632349165886,
+   "median": 53125.73788964366,
+   "edge": -0.027027027027026966
+  },
+  "exact": {
+   "pNoCap": 0.8728797536550996,
+   "crossing": -1
+  },
+  "session": {
+   "mean": -12654.063270894048,
+   "median": 52500,
+   "pWin": 0.868028102860078,
+   "cvar5": -468812.740276057,
+   "pBust": 0,
+   "pCap": 0.12712024634489474,
+   "pStopWin": 0,
+   "pStopLoss": 0,
+   "wager": 468200.3410226812,
+   "rounds": 468.474955399034,
+   "medianAheadUntil": 500,
+   "clamped": 0
+  },
+  "recovers": true
+ },
+ {
+  "id": "e9-doz-onewin-u3",
+  "spec": "x-e9-frontier",
+  "family": "one-win frontier (dozen)",
+  "onCap": "stop",
+  "unit": 300,
+  "growth": "×1.5",
+  "back": "reset",
+  "levels": 16,
+  "ladderTotal": 478000,
+  "cycle": {
+   "q": 0.0018871766469020907,
+   "ET": 3.0775145386720513,
+   "ETdone": 3.0530814162714965,
+   "VarTdone": 5.9386652596358065,
+   "ER": -170.81456177491748,
+   "tau": 732.6384937002146,
+   "VarRdone": 15825.449206553632,
+   "CovRTdone": 290.7965135321415,
+   "capLoss": 478000,
+   "capLossMax": 478000,
+   "wager": 6320.138785671952,
+   "residual": 0
+  },
+  "pred": {
+   "pEff": 0.3243243243243244,
+   "B": 652.4363708844255,
+   "x": 0.24854862389467872,
+   "k": 1.23359068625758,
+   "lambda": 0.30660726751861395,
+   "pNoCap": 0.7359395715335422,
+   "nHalf": 1130.3502134336472,
+   "median": 117197.37129610775,
+   "edge": -0.027027027027027004
+  },
+  "exact": {
+   "pNoCap": 0.740440046618154,
+   "crossing": -1
+  },
+  "session": {
+   "mean": -23827.109781327603,
+   "median": 115200,
+   "pWin": 0.7368230970996712,
+   "cvar5": -468513.29100895807,
+   "pBust": 0,
+   "pCap": 0.2595599533818082,
+   "pStopWin": 0,
+   "pStopLoss": 0,
+   "wager": 881603.061906814,
+   "rounds": 433.644497740325,
+   "medianAheadUntil": 500,
+   "clamped": 0
+  },
+  "recovers": true
+ },
+ {
   "id": "e9-fib5b2-W10",
   "spec": "x-e9-cashout",
   "family": "(e) cash-out on fib-u5-b2",
