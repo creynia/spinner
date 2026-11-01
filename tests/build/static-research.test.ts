@@ -78,8 +78,11 @@ describe('research chapter pages', () => {
       const parsed = parseHash(`#/research?chapter=${id}`);
       expect(parsed.path).toBe('/research');
       expect(parsed.query.get('chapter')).toBe(id);
-      // Charts become real tables, never image-only results.
-      expect(html).not.toMatch(/<img|<svg|<canvas/);
+      // Charts become real tables, never image-only results. (The page's GoatCounter count pixel
+      // sits after </main> and is not content.)
+      const main = html.slice(html.indexOf('<main>'), html.indexOf('</main>'));
+      expect(main).not.toMatch(/<img|<svg|<canvas/);
+      expect(html.match(/<img/g)?.length ?? 0).toBe(1);
       expect(html.match(/<table>/g)?.length ?? 0).toBeGreaterThan(0);
       expect(html).toMatch(/<caption>[^<]+<\/caption>/);
       expect(html).toContain('<th scope="col">');

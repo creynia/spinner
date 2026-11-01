@@ -3,6 +3,7 @@
 import { useEffect } from 'preact/hooks';
 import { ToastHost } from '@core/ui';
 import { UpdateToast } from '../pwa/UpdateToast';
+import { pagePath, trackPage } from './analytics';
 import { NavRail, TabBar } from './components/Nav';
 import { RouteBoundary } from './components/RouteBoundary';
 import { StorageBanner } from './components/StorageBanner';
@@ -14,10 +15,12 @@ import { loadSettings } from './services/settings';
 
 export function App() {
   const { path, query, hash } = useRoute();
-  const { screen: Screen, params } = resolveRoute(path);
+  const { screen: Screen, params, pattern } = resolveRoute(path);
   useEffect(() => {
     void getRepo().then(loadSettings);
   }, []);
+  // One anonymous page view per route pattern (docs/analytics.md): ids and queries never leave.
+  useEffect(() => trackPage(pagePath(location.pathname, pattern)), [pattern]);
   return (
     <div class="shell">
       <TopBar path={path} />

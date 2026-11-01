@@ -33,6 +33,7 @@ import {
 import { rouletteUi } from '@game/roulette/ui';
 import { EXTRA_TARGETS } from '@game/roulette';
 import { navigate } from '../../router';
+import { trackEvent } from '../../analytics';
 import { game } from '../../services/game';
 import { listLayoutEntries, saveLayout } from '../../services/layouts';
 import { quickCheck } from '../../services/quickCheck';
@@ -764,6 +765,7 @@ export function Define({ params, query }: ScreenProps) {
       await persist();
       // TODO(ui-results): switch to the keyed start in services/runs once it is on main.
       const runId = await startRun(analysis.normalized);
+      trackEvent('run-start');
       navigate(`/run/${runId}`);
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not start the run.', { tone: 'error' });

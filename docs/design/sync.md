@@ -448,8 +448,12 @@ TS 6 needs request bodies typed `Uint8Array<ArrayBuffer>` (`asBody`).
 default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client;
 connect-src 'self' https://www.googleapis.com https://accounts.google.com/gsi/ https://oauth2.googleapis.com;
 frame-src https://accounts.google.com/gsi/; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style;
-img-src 'self' data: blob:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
+img-src 'self' data: blob: https://creynia.goatcounter.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
 ```
+
+  - Besides Google, the only reachable host is the anonymous GoatCounter count beacon, as an image
+    in `img-src` only (no script, no connection; [`docs/analytics.md`](../analytics.md)). It never
+    carries sync data.
 
   - The redirect is a top-level navigation, so it needs no CSP directive.
   - `frame-ancestors` cannot be set in a meta tag.
@@ -1066,7 +1070,9 @@ Replace asks again before deleting.
 - **Scope:** only `drive.appdata` ("See, create, and delete its own configuration data in your
   Google Drive"). spinner cannot see any other Drive file. The folder is hidden, counts toward the
   user's storage, and can be deleted in Drive → Settings → Manage apps.
-- **No server:** data goes only between the browser and Google.
+- **No server:** sync data goes only between the browser and Google. The only other request is
+  the anonymous, cookieless GoatCounter page-view beacon (route patterns and fixed event names, no
+  library data or identifiers; [`docs/analytics.md`](../analytics.md)).
 - **Tokens:**
   - An access token lasts about 1 h and lives in localStorage with its expiry (D2). There is no
     refresh token.

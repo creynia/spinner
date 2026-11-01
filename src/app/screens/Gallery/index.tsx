@@ -10,6 +10,7 @@ import {
   type GalleryIndexV1,
   type Repo,
 } from '@core';
+import { trackEvent } from '../../analytics';
 import { Button, Card, EmptyState } from '@core/ui';
 import { href, navigate } from '../../router';
 import { importBytes, type ImportProblem } from '../Import/importFile';
@@ -78,7 +79,10 @@ export function GalleryView(props: ScreenProps & { deps?: GalleryDeps }) {
       }
       const out = await importBytes(bytes, await deps.getRepo(), 'gallery');
       if (!out.ok) setProblem(out.problem);
-      else if (out.kind === 'run') deps.go(`#/analyze/${out.runId}`);
+      else if (out.kind === 'run') {
+        trackEvent('gallery-open');
+        deps.go(`#/analyze/${out.runId}`);
+      }
     } catch (err) {
       setProblem({
         kind: 'invalid',

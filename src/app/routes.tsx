@@ -50,6 +50,8 @@ export const routes: readonly Route[] = [
 export interface Resolved {
   screen: ComponentType<ScreenProps>;
   params: Record<string, string>;
+  /** The matched pattern ('/run/:runId'), null for NotFound. Used for anonymous page counts. */
+  pattern: string | null;
   /** False for the NotFound fallback. */
   found: boolean;
 }
@@ -58,7 +60,7 @@ export interface Resolved {
 export function resolveRoute(path: string): Resolved {
   for (const r of routes) {
     const params = matchPath(r.pattern, path);
-    if (params) return { screen: r.screen, params, found: true };
+    if (params) return { screen: r.screen, params, pattern: r.pattern, found: true };
   }
-  return { screen: NotFound, params: {}, found: false };
+  return { screen: NotFound, params: {}, pattern: null, found: false };
 }

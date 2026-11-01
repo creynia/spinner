@@ -6,6 +6,8 @@ export const APP = 'spinner';
 export const APP_URL = `${ORIGIN}/${APP}/`;
 export const THEME = '#0d3b2e';
 export const OG_IMAGE = `${ORIGIN}/assets/og/${APP}.jpg`;
+/** GoatCounter page-view pixel (docs/analytics.md); same endpoint as src/app/analytics.ts. */
+export const COUNT_URL = 'https://creynia.goatcounter.com/count';
 export const PERSON_ID = `${ORIGIN}/#creynia`;
 export const WEBSITE_ID = `${ORIGIN}/#website`;
 export const OTHER_APPS = [
@@ -117,8 +119,14 @@ footer strong{color:var(--ink)}
   .trim()
   .replace(/\n/g, '');
 
-const CSP_STATIC =
-  "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'";
+/** The GoatCounter pixel is the only cross-origin request, and it is an image (img-src only). */
+export const CSP_STATIC =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https://creynia.goatcounter.com; base-uri 'none'; form-action 'none'";
+
+/** A JS-free, cookieless page-view count for a static page (path like '/spinner/strategies/'). */
+export function countPixel(path: string): string {
+  return `<img src="${COUNT_URL}?p=${encodeURIComponent(path)}" alt="" width="1" height="1" style="position:absolute;left:-9999px">`;
+}
 
 function breadcrumbLd(crumbs: Crumb[], id: string): Obj {
   return {
@@ -192,6 +200,7 @@ export function renderPage(p: PageInput): string {
 ${p.body}
 </main>
 ${footer()}
+${countPixel(p.path)}
 </body>
 </html>
 `;
