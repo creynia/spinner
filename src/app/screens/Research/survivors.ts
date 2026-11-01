@@ -1,7 +1,12 @@
 // The three ladders that passed every test (research report, chapter 6), written out by hand because
 // a1 is not a candidate and so its strategy is not in data.json. survivors.test.ts checks these against
 // scripts/research/specs/e6-full.json through `ladderFromStrategy`.
-import type { BoardBet } from './Board';
+/** One bet drawn on the board glyph (Board.tsx). */
+export interface BoardBet {
+  numbers: number[];
+  /** cents, per bet */
+  amount: number;
+}
 
 export interface SurvivorLadder {
   id: 'c9' | 'b3' | 'a1';

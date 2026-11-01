@@ -4,11 +4,9 @@
 import type { JSX } from 'preact';
 import './chapters-4-6.css';
 
-export interface BoardBet {
-  numbers: number[];
-  /** cents, per bet */
-  amount: number;
-}
+// BoardBet lives in survivors.ts (pure, also read by the static-page build); re-exported here.
+import type { BoardBet } from './survivors';
+export type { BoardBet } from './survivors';
 
 export interface BoardGlyphProps {
   bets: BoardBet[];

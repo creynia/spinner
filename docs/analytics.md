@@ -26,7 +26,7 @@ strings, no results. Sync data still goes only between your browser and Google
 
 The beacon is an image, so the only change to the Content-Security-Policy is
 `https://creynia.goatcounter.com` in `img-src`, both in the app (`build/vite-plugin-csp.ts`) and on
-the static pages (`CSP_STATIC` in `build/static-pages.ts`). `script-src` and `connect-src` are
+the static pages (`CSP_STATIC` in `build/static-shell.ts`). `script-src` and `connect-src` are
 unchanged. `tests/build/csp.test.ts` and `tests/build/static-pages.test.ts` pin this.
 
 ## When it is off
@@ -42,7 +42,7 @@ the page is served, which in practice is creynia.com.
 - **App:** one view per route change (`App.tsx`), counted as the matched route pattern from
   `src/app/routes.tsx` (`resolveRoute(...).pattern`), so `#/run/abc?x=1` counts as
   `/spinner/#/run/:runId`; unknown routes count as `/spinner/#/404`. Repeats are ignored.
-- **Static pages** (`build/static-pages.ts`): a JS-free 1×1 pixel (`countPixel`) with the page path.
+- **Static pages** (`build/static-shell.ts`, used by `build/static-pages.ts`): a JS-free 1×1 pixel (`countPixel`) with the page path.
 - **Events:**
   - `run-start`: the user starts a run from Define (Run).
   - `gallery-open`: a gallery bundle is opened and Analyze is shown.

@@ -17,7 +17,12 @@
     "tests/perf",
     "src/core",
     "src/game",
-    "src/app/screens/Research/ladderMath.ts"
+    "src/app/screens/Research/ladderMath.ts",
+    "src/app/screens/Research/content.ts",
+    "src/app/screens/Research/data.ts",
+    "src/app/screens/Research/dataTypes.ts",
+    "src/app/screens/Research/survivors.ts",
+    "src/app/sources.ts"
   ],
   "exclude": [
     "src/core/**/*.test.ts",

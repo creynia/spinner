@@ -3,12 +3,17 @@
 // screen shows. Source checks build the site in memory; the dist checks skip until `npm run build`.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { makeFramer } from '@core/ui/results/format';
+import { fmtMoney, fmtPct, makeFramer } from '@core/ui/results/format';
 import { verdictLine } from '@core/ui/results/AnalysisView';
+import { CHAPTERS } from '@app/screens/Research/content';
 
 // build/ belongs to the node tsconfig project, which this (app-project) test cannot reference, so
 // the module is loaded by a computed path (as gallery.test.ts does) and typed by the shapes used.
-interface Metrics {
+interface M {
+  net: { mean: { value: number } };
+  probabilities: { bust: { p: number } };
+}
+interface Metrics extends M {
   n: number;
   length: { mean: { value: number } };
 }
@@ -40,11 +45,14 @@ const htmlPages = [...site.files].filter(([f]) => f.endsWith('.html'));
 
 const one = (html: string, re: RegExp): string[] => [...html.matchAll(re)].map((m) => m[1]!);
 
-describe('static strategy pages', () => {
+describe('static pages', () => {
   it('has the index and one page per gallery bundle, in gallery order', () => {
     expect(htmlPages.map(([f]) => f)).toEqual([
       'strategies/index.html',
       ...slugs.map((s) => `strategies/${s}/index.html`),
+      'research/index.html',
+      ...CHAPTERS.map((c) => `research/${c.id}/index.html`),
+      'sources/index.html',
     ]);
   });
 
@@ -99,8 +107,29 @@ describe('static strategy pages', () => {
       const v = verdictLine(s.metrics as never, fr);
       expect(html).toContain(`<p class="verdict">${v}</p>`);
       expect(html).toContain(`href="../../#/gallery/${slug}"`);
+      // The first paragraph answers "does <system> work in roulette?" with this run's numbers.
+      const first = /<main>\s*<h1>[^<]*<\/h1>\s*<p>([^<]+)<\/p>/.exec(html)?.[1] ?? '';
+      expect(first).toMatch(/^Does .+ work in roulette\? Not against the house edge/);
+      expect(first).toContain(fmtMoney(s.metrics.net.mean.value, { sign: true }));
+      expect(first).toContain(fmtPct(s.metrics.probabilities.bust.p));
     },
   );
+
+  it('targets the search wording in titles and h1s', () => {
+    const title = (f: string) => one(site.files.get(f)!, /<title>([^<]+)<\/title>/g)[0]!;
+    const h1 = (f: string) => one(site.files.get(f)!, /<h1>([^<]+)<\/h1>/g)[0]!;
+    expect(title('strategies/index.html')).toMatch(/^Roulette Betting Systems That Work\? /);
+    expect(h1('strategies/index.html')).toMatch(/^Roulette betting systems that work\? /);
+    expect(title('strategies/martingale-red/index.html')).toMatch(/^Martingale Roulette Strategy/);
+    expect(title('research/martingale/index.html')).toMatch(
+      /^Does the Martingale Work in Roulette\?/,
+    );
+    expect(title('research/edge/index.html')).toMatch(/^Roulette House Edge: European vs American/);
+    const index = site.files.get('strategies/index.html')!;
+    const means = strategies.map((s) => (s.metrics as never as M).net.mean.value);
+    expect(index).toContain(fmtMoney(Math.max(...means), { sign: true }));
+    expect(index).toContain(fmtMoney(Math.min(...means), { sign: true }));
+  });
 
   it('explains the stake ladder from the definition (strategy.md §7.4)', () => {
     const mart = mod.stakePlan({
@@ -145,9 +174,9 @@ describe('sitemap and llms files', () => {
     for (const loc of locs) expect(llms).toContain(`](${loc})`);
   });
 
-  it('llms-full.txt carries the text of every strategy page', () => {
+  it('llms-full.txt carries the text of every page', () => {
     const full = site.files.get('llms-full.txt')!;
-    for (const s of strategies) expect(full).toContain(`/strategies/${s.slug}/`);
+    for (const loc of locs.slice(1)) expect(full).toContain(`URL: ${loc}\n`);
     expect(full).toContain('1-800-GAMBLER');
   });
 
@@ -166,7 +195,9 @@ describe.skipIf(!hasDist)('dist static site', () => {
         e.isDirectory() ? walk(new URL(`${e.name}/`, d)).map((f) => `${e.name}/${f}`) : [e.name],
       );
     const built = [
-      ...walk(new URL('dist/strategies/', root)).map((f) => `strategies/${f}`),
+      ...['strategies', 'research', 'sources'].flatMap((d) =>
+        walk(new URL(`dist/${d}/`, root)).map((f) => `${d}/${f}`),
+      ),
       ...['sitemap.xml', 'llms.txt', 'llms-full.txt'].filter((f) =>
         existsSync(new URL(`dist/${f}`, root)),
       ),
@@ -175,10 +206,12 @@ describe.skipIf(!hasDist)('dist static site', () => {
     for (const f of built)
       expect(readFileSync(new URL(`dist/${f}`, root), 'utf8')).toBe(site.files.get(f));
   });
-  it('the app shell has the canonical, JSON-LD and a noscript link to the strategies', () => {
+  it('the app shell has the canonical, JSON-LD and noscript links to the static pages', () => {
     const html = readFileSync(new URL('dist/index.html', root), 'utf8');
     expect(html).toContain('<link rel="canonical" href="https://creynia.com/spinner/"');
     expect(html).toContain('"@type": "WebApplication"');
-    expect(html).toMatch(/<noscript>[\s\S]*href="\.\/strategies\/"[\s\S]*<\/noscript>/);
+    const noscript = /<noscript>([\s\S]*?)<\/noscript>/.exec(html)?.[1] ?? '';
+    for (const href of ['./strategies/', './research/', './research/martingale/', './sources/'])
+      expect(noscript).toContain(`href="${href}"`);
   });
 });
