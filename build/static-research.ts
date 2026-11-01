@@ -11,6 +11,13 @@ import { data, path, row } from '../src/app/screens/Research/data.ts';
 import type { RowStats } from '../src/app/screens/Research/dataTypes.ts';
 import { ladder } from '../src/app/screens/Research/ladderMath.ts';
 import { SURVIVORS, capLoss } from '../src/app/screens/Research/survivors.ts';
+import {
+  C9_AMERICAN_ROW,
+  C9_SEED_ROWS,
+  LEVEL_HEAD,
+  PLAY_C9,
+  levelRows,
+} from '../src/app/screens/Research/playC9.ts';
 import { SOURCE_GROUPS } from '../src/app/sources.ts';
 import {
   APP,
@@ -631,6 +638,43 @@ function tryTables(): Table[] {
   ];
 }
 
+/** Chapter 10 (ChPlayC9): the level table and a session of the c9 cash-out on four seeds. */
+function playTables(): Table[] {
+  const seedNames = ['20261031', '1', '2', '3'];
+  const session = (label: string, r: RowStats): string[] => [
+    label,
+    money(r.median),
+    pct1(r.pWin),
+    pct1(1 - r.pWin),
+    money(r.mean),
+    money(r.cvar5),
+    r.roundsMean.toFixed(1),
+  ];
+  return [
+    {
+      caption: `The c9 ladder with ${dollars(PLAY_C9.chip)} chips; losses and nets count from the last hit`,
+      head: [...LEVEL_HEAD],
+      rows: levelRows(PLAY_C9, { money, dollars }),
+    },
+    {
+      caption: `A c9 session: stop at ${money(PLAY_C9.target)} or ${money(-PLAY_C9.lossLimit)}, ${dollars(row(C9_SEED_ROWS[0]!).bankroll)} bankroll`,
+      head: [
+        'Run',
+        'Typical session',
+        'Ends ahead',
+        'Leaves at the loss limit',
+        'Average',
+        'Worst 5 %',
+        'Spins (average)',
+      ],
+      rows: [
+        ...C9_SEED_ROWS.map((k, i) => session(`European, seed ${seedNames[i]}`, row(k))),
+        session('American wheel, seed 20261031', row(C9_AMERICAN_ROW)),
+      ],
+    },
+  ];
+}
+
 const CHAPTER_TABLES: Record<string, () => Table[]> = {
   start: startTables,
   edge: edgeTables,
@@ -642,6 +686,7 @@ const CHAPTER_TABLES: Record<string, () => Table[]> = {
   cashout: cashoutTables,
   limits: limitsTables,
   try: tryTables,
+  'play-c9': playTables,
 };
 
 /** Every table a chapter page shows (tests read these). */
@@ -724,6 +769,12 @@ const CHAPTER_SEO: Record<string, ChapterSeo> = {
     h1: 'Try it: three candidate ladders and a calculator',
     description: () =>
       'Pick one of three tested roulette ladders, play it with play money from $5,000 for 500 spins, and judge it by the typical session, average and worst 5 %.',
+  },
+  'play-c9': {
+    title: 'How to Play a Roulette Street Ladder at the Table',
+    h1: 'Play c9 at the table: a street ladder, level by level',
+    description: () =>
+      `A roulette street ladder step by step: what to bring, four rules, every level from ${dollars(PLAY_C9.levels[0]!.perStreet)} to ${dollars(PLAY_C9.levels.at(-1)!.perStreet)} a street, when to leave, and a printable card. Simulated.`,
   },
 };
 
@@ -935,7 +986,7 @@ function researchIndex(chapters: PageOut[]): PageOut {
   const allNegative = Object.values(data.rows).every((r) => r.mean < 0);
   const n = Object.keys(data.rows).length;
   const description =
-    'Roulette strategy research: what betting progressions can do for the typical session, what they cannot do for the average, simulated in ten chapters.';
+    'Roulette strategy research: what betting progressions can do for the typical session, what they cannot do for the average, simulated in eleven chapters.';
   const answer = `Can a roulette betting system beat the house? No. ${allNegative ? `Every one of the ${spins(n)} simulated setups in this research has a negative average result: the` : 'The'} edge is a fixed cost on every dollar wagered, and no progression changes it. What a progression can change is the shape of the results: a ladder with a cash-out can make the typical session a small win (${head.rows.at(-1)![1]} here, ending ahead ${head.rows.at(-1)![2]} of the time) while the average stays negative (${means.at(-1)}) and the worst sessions get worse.`;
   const cards = CHAPTERS.map(
     (c, i) =>

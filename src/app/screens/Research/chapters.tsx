@@ -9,6 +9,7 @@ import { ChLevels } from './ChLevels';
 import { ChLimits } from './ChLimits';
 import { ChMartingale } from './ChMartingale';
 import { ChPlacement } from './ChPlacement';
+import { ChPlayC9 } from './ChPlayC9';
 import { ChShapes } from './ChShapes';
 import { ChStart } from './ChStart';
 import { ChTry } from './ChTry';
@@ -27,4 +28,5 @@ export const CHAPTER_CHARTS: Record<string, ChapterChart> = {
   cashout: ChCashout,
   limits: ChLimits,
   try: ChTry,
+  'play-c9': ChPlayC9,
 };

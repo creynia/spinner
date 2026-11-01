@@ -22,6 +22,7 @@
     "src/app/screens/Research/data.ts",
     "src/app/screens/Research/dataTypes.ts",
     "src/app/screens/Research/survivors.ts",
+    "src/app/screens/Research/playC9.ts",
     "src/app/sources.ts"
   ],
   "exclude": [

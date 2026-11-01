@@ -1,4 +1,4 @@
-// The Research screen skeleton: one h1, ten chapters in order, each with a math block, a chart slot
+// The Research screen skeleton: one h1, eleven chapters in order, each with a math block, a chart slot
 // and takeaways; chapter navigation; ?chapter=<id> scrolls to the section.
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/preact';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -19,12 +19,13 @@ const ORDER = [
   'cashout',
   'limits',
   'try',
+  'play-c9',
 ];
 
 const view = (qs = '') => render(<Research params={{}} query={new URLSearchParams(qs)} />);
 
 describe('Research', () => {
-  it('has the ten chapters of app-plan section 3 in order', () => {
+  it('has the ten chapters of app-plan section 3 and the table how-to, in order', () => {
     expect(CHAPTERS.map((c) => c.id)).toEqual(ORDER);
     expect(Object.keys(CHAPTER_CHARTS).sort()).toEqual([...ORDER].sort());
   });
@@ -139,9 +140,11 @@ describe('Research chapter links', () => {
       ...ORDER.slice(1).map((id) => `#/research?chapter=${id}`),
       '#/research',
     ]);
-    expect(nexts[9]!.textContent).toBe('Back to the top');
+    const last = nexts[ORDER.length - 1]!;
+    expect(last.textContent).toBe('Back to the top');
     expect(nexts[0]!.textContent).toBe(`Next: ${CHAPTERS[1]!.title}`);
-    fireEvent.click(nexts[9]!);
+    expect(nexts[9]!.textContent).toBe('Next: Play c9 at the table');
+    fireEvent.click(last);
     expect(document.activeElement).toBe(container.querySelector('h1'));
   });
 
@@ -149,6 +152,9 @@ describe('Research chapter links', () => {
     const { container } = view();
     expect(container.querySelector('#chapter-start .research-eyebrow')?.textContent).toBe(
       'Chapter 0',
+    );
+    expect(container.querySelector('#chapter-play-c9 .research-eyebrow')?.textContent).toBe(
+      'Chapter 10',
     );
   });
 });

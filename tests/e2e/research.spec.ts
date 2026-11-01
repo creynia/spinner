@@ -1,6 +1,6 @@
 // Research screen (docs/design/research.md §10) at the four viewports: structure, chapter order,
 // chapter links without a remount, the math toggle, deep links, the ladder calculator, "Open in
-// Define", dark mode. Screenshots for the README: `SHOTS_DIR=<dir> npx playwright test research
+// Define", the c9 table how-to and its print card, dark mode. Screenshots for the README: `SHOTS_DIR=<dir> npx playwright test research
 // --project=phone --project=desktop` writes research-<size>-<scheme>.png (converted to webp by hand).
 import { mkdirSync } from 'node:fs';
 import { expect, screenCheck, test, type Page } from './helpers';
@@ -16,6 +16,7 @@ const CHAPTERS = [
   'cashout',
   'limits',
   'try',
+  'play-c9',
 ];
 const SHOTS = process.env.SHOTS_DIR;
 const URL = './?e2e#/research';
@@ -23,7 +24,7 @@ const URL = './?e2e#/research';
 /** The chapter nav the CSS currently shows (chips on phones, the sticky column from 768px). */
 const visibleNav = (page: Page) => page.locator('nav.research-nav:visible');
 
-test('structure: one h1, ten chapters in order, each with an h2 and "The math"', async ({
+test('structure: one h1, eleven chapters in order, each with an h2 and "The math"', async ({
   page,
   guard,
 }) => {
@@ -158,6 +159,46 @@ test('"Open in Define" for the first candidate lands on a share link', async ({ 
   await guard.check('define from share link');
 });
 
+test('play c9: a 16-level table and a pocket card that prints on its own', async ({
+  page,
+  guard,
+}) => {
+  await page.goto(`${URL}?chapter=play-c9`);
+  const chapter = page.locator('#chapter-play-c9');
+  await expect(chapter.locator('.research-eyebrow')).toHaveText('Chapter 10');
+  await expect(chapter.locator('h2')).toHaveText('Play c9 at the table');
+  await expect(chapter.locator('table.play-levels tbody tr')).toHaveCount(16);
+  await expect(chapter.locator('table.play-card-table tbody tr')).toHaveCount(16);
+  await expect(chapter.locator('.play-glyph svg')).toHaveCount(5);
+  await expect(
+    chapter.getByRole('button', { name: /^Open in Define: Keeper c9 \+ cash-out/ }),
+  ).toHaveCount(1);
+  const print = chapter.getByRole('button', { name: 'Print this card' });
+  await expect(print).toBeVisible();
+  // Stub the dialog; the click marks the page for the card-only print rules.
+  await page.evaluate(() => {
+    const w = window as unknown as { printed: number };
+    w.printed = 0;
+    window.print = () => {
+      w.printed += 1;
+    };
+  });
+  await print.click();
+  expect(await page.evaluate(() => (window as unknown as { printed: number }).printed)).toBe(1);
+  await expect(page.locator('html')).toHaveClass(/research-print-card/);
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.play-card')).toBeVisible();
+  await expect(page.locator('.play-card-table')).toBeVisible();
+  await expect(print).toBeHidden();
+  await expect(chapter.locator('h2')).toBeHidden();
+  await expect(page.locator('h1')).toBeHidden();
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  await expect(page.locator('html')).not.toHaveClass(/research-print-card/);
+  await expect(page.locator('h1')).toBeVisible();
+  await page.emulateMedia({ media: 'screen' });
+  await guard.check('play c9 print');
+});
+
 test('dark mode: axe clean, no overflow', async ({ page, guard }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto(URL);
@@ -178,7 +219,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await page.goto(URL);
     await expect(page.locator('h1')).toBeVisible();
     const phone = info.project.name === 'phone';
-    // The top of the page, not all ten chapters: a tall viewport instead of fullPage.
+    // The top of the page, not all eleven chapters: a tall viewport instead of fullPage.
     const width = page.viewportSize()!.width;
     await page.setViewportSize({ width, height: phone ? 1900 : 1000 });
     await page.waitForTimeout(500);

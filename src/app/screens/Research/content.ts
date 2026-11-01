@@ -385,4 +385,42 @@ export const CHAPTERS: readonly Chapter[] = [
       'e8-seed3:b3-two-streets-l29@3',
     ],
   },
+  {
+    // The level amounts, totals and nets quoted here are derived in playC9.ts from the candidate
+    // document; playC9.test.ts checks every one of them against this text.
+    id: 'play-c9',
+    title: 'Play c9 at the table',
+    lead: 'To play the c9 cash-out at a real table you need $1 chips, a $1 inside minimum, a single-zero wheel and four rules, two of which tell you when to leave.',
+    body: [
+      'This is the first candidate of chapter 9 written out for the felt. You bet on streets: 1-2-3 always, adding 4-5-6, 7-8-9 and 10-11-12 after the first three misses in a row, while the chips on each street climb from $1 to $411 over 16 levels. Every hit wins back the misses before it and leaves you at least $11 up.',
+      'The table gives every level; the card at the end prints it small enough for a pocket. Sessions are short and nine in ten end at the target. The tenth ends at the loss limit, about $3,000 down.',
+    ],
+    takeaways: [
+      'Four rules: a hit takes you back to level 0, a miss moves you up one level, and you leave at +$280 or at −$2,459.50.',
+      'Nine sessions in ten leave with the +$280 target (90.3 %); the rest leave $2,996 to $3,275 down at the loss limit.',
+      'Every dollar you bet costs 2.7 cents on average, no matter how you bet it: the average session here is −$46.25.',
+    ],
+    math: {
+      text: [
+        'Recovery recursion. Let a_k be the stake per street at level k, n_k the streets on the table (1, 2, 3, then 4) and D(k) the loss carried into level k, with D(0) = 0. A street pays 11 to 1, so a hit at level k nets (12 − n_k)·a_k − D(k) and a miss carries D(k + 1) = D(k) + n_k·a_k. The amounts keep every hit at $11 or more; D(16) = $4,919 is the cap loss.',
+        'A run starts between $0 and +$279, so a miss at level 13 leaves you at most $2,179 down and a miss at level 14 at least $2,996 down: the limit always trips at level 14, and level 15 is never played. Fifteen misses in a row have probability q = 0.00528.',
+        'A hit nets $14.52 on average, so +$280 takes about 19.3 runs: P(win) ≈ (1 − q)^(19.3) = 0.903, measured 90.3 % (89.8 % to 90.3 % on four seeds). A run lasts 4.47 spins on average, so a session about 86 (measured 84.1). The mean is −2.7 % of the $1,961.68 a session wagers.',
+      ],
+      formulas: [
+        'hit at level k: (12 − n_k)·a_k − D(k) ≥ $11',
+        'D(k + 1) = D(k) + n_k·a_k;  D(16) = $4,919',
+        'q = Π_(k=0…14) (1 − 3n_k/37) = 0.00528;  P(win) ≈ (1 − q)^(280/14.52) = 0.903',
+      ],
+    },
+    dataKeys: [
+      'e7-c9:e7-c9-W20-SLhalf',
+      'e7-c9-holdout:e7-c9-W20-SLhalf@1',
+      'e7-c9-holdout:e7-c9-W20-SLhalf@2',
+      'e7-c9-seed3:e7-c9-W20-SLhalf@3',
+      'x1-c9-cashout-axes:x1-c9-am',
+      'e6-widen-screen:a9-dozen-streets-default',
+      'e6-stack-screen:b11-red-default-l7',
+      'e6-hybrid-screen:c6-dozen-to-two-dozens-default',
+    ],
+  },
 ];

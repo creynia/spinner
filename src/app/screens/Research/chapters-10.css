@@ -1,0 +1,142 @@
+/* Chapter 10, "Play c9 at the table": checklist, rules, glyph row, level table, session stats and
+   the pocket card, which prints on its own. Tokens only on screen; in print the card uses the
+   system colours of a light scheme (black on white paper in both themes). */
+.play-list {
+  margin: 0 0 12px;
+  padding-left: 1.25rem;
+  max-width: 68ch;
+}
+.play-list li + li {
+  margin-top: 6px;
+}
+.play-rules li::marker {
+  font-weight: 700;
+}
+
+/* Board glyphs: two to a row on a phone, five in a row from about 700px. */
+.play-glyphs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 12px 16px;
+  margin: 0 0 8px;
+}
+.play-glyph {
+  margin: 0;
+  min-width: 0;
+}
+.play-glyph .board-glyph {
+  width: 100%;
+  height: auto;
+}
+.play-glyph figcaption {
+  display: grid;
+  font-size: 0.8rem;
+}
+.play-glyph .muted {
+  color: var(--muted);
+}
+
+.play-levels td,
+.play-card-table td {
+  font-variant-numeric: tabular-nums;
+}
+.play-level-trip th,
+.play-level-trip td {
+  font-weight: 600;
+}
+
+.play-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 0 0 12px;
+}
+.play-stats > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (min-width: 1200px) {
+  .play-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.play-c9 > p {
+  max-width: 68ch;
+}
+
+/* The pocket card: a framed compact table on screen. */
+.play-card {
+  max-width: 30rem;
+  margin: 16px 0 0;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.play-card .research-sub {
+  margin-top: 0;
+}
+.play-card-line {
+  margin: 0 0 6px;
+  font-size: 0.875rem;
+}
+.play-card-table {
+  font-size: 0.8rem;
+}
+.play-card-table th,
+.play-card-table td {
+  padding: 3px 6px;
+}
+
+/* "Print this card": printCard() puts PRINT_CLASS on <html> for the length of the print dialog.
+   Everything that neither holds the card nor sits in it is dropped; the card's ancestors lose their
+   boxes so it starts at the top of the page. Without :has() the whole page prints, which is fine. */
+@media print {
+  html.research-print-card body *:not(:has(.play-card)):not(.play-card):not(.play-card *) {
+    display: none !important;
+  }
+  html.research-print-card body *:has(.play-card) {
+    display: block !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: none !important;
+    contain: none !important;
+    max-width: none !important;
+  }
+  html.research-print-card,
+  html.research-print-card body {
+    background: none !important;
+  }
+  html.research-print-card .play-card {
+    color-scheme: light;
+    max-width: 11cm;
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid CanvasText;
+    border-radius: 0;
+    background: Canvas;
+    color: CanvasText;
+    break-inside: avoid;
+  }
+  html.research-print-card .play-card * {
+    color: CanvasText !important;
+  }
+  html.research-print-card .play-card .research-tablewrap {
+    overflow: visible;
+  }
+  html.research-print-card .play-card-table th,
+  html.research-print-card .play-card-table td {
+    padding: 1px 4px;
+    border-bottom: 1px solid CanvasText;
+    font-size: 8.5pt;
+  }
+  html.research-print-card .play-card-line {
+    font-size: 8.5pt;
+  }
+  html.research-print-card .play-card-print {
+    display: none !important;
+  }
+}
