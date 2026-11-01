@@ -1,0 +1,347 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": {
+      "bankroll": 500000,
+      "maxRounds": 500
+    },
+    "run": {
+      "sessions": 10000,
+      "seed": 20261031
+    }
+  },
+  "experiments": [
+    {
+      "id": "e9-fib5b2-W10",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "session": {
+        "stopWin": 5000
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-fib5b2-w10",
+        "name": "Fibonacci red $5 back 2, 14 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "fibonacci",
+            "track": "red",
+            "maxSteps": 14,
+            "back": 2,
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-fib5b2-W20",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "session": {
+        "stopWin": 10000
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-fib5b2-w20",
+        "name": "Fibonacci red $5 back 2, 14 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "fibonacci",
+            "track": "red",
+            "maxSteps": 14,
+            "back": 2,
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-fib5b2-W10-SLhalf",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "session": {
+        "stopWin": 5000,
+        "stopLoss": 246500
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-fib5b2-w10-slhalf",
+        "name": "Fibonacci red $5 back 2, 14 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "fibonacci",
+            "track": "red",
+            "maxSteps": 14,
+            "back": 2,
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-fib5b2-W20-SLhalf",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "session": {
+        "stopWin": 10000,
+        "stopLoss": 246500
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-fib5b2-w20-slhalf",
+        "name": "Fibonacci red $5 back 2, 14 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "fibonacci",
+            "track": "red",
+            "maxSteps": 14,
+            "back": 2,
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-fib5b2-W280-SLhalf",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "session": {
+        "stopWin": 28000,
+        "stopLoss": 246500
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-fib5b2-w280-slhalf",
+        "name": "Fibonacci red $5 back 2, 14 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "fibonacci",
+            "track": "red",
+            "maxSteps": 14,
+            "back": 2,
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-c9-cashout-ctrl",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 100
+            },
+            "inside": {
+              "minTotal": 100
+            }
+          }
+        }
+      },
+      "session": {
+        "stopWin": 28000,
+        "stopLoss": 245950
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-c9-cashout-ctrl",
+        "name": "c9 streets to 12, one-win (the §9 candidate)",
+        "game": "roulette",
+        "unit": 100,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "round",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              100, 200, 200, 300, 500, 700, 1100, 1600, 2400, 3600, 5400, 8100, 12200, 18300, 27400,
+              41100
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "street:1-2-3",
+                "amount": {
+                  "prog": "q"
+                }
+              },
+              {
+                "bet": "street:4-5-6",
+                "amount": {
+                  "prog": "q"
+                },
+                "when": {
+                  "cmp": [
+                    {
+                      "progStep": "q"
+                    },
+                    ">=",
+                    1
+                  ]
+                }
+              },
+              {
+                "bet": "street:7-8-9",
+                "amount": {
+                  "prog": "q"
+                },
+                "when": {
+                  "cmp": [
+                    {
+                      "progStep": "q"
+                    },
+                    ">=",
+                    2
+                  ]
+                }
+              },
+              {
+                "bet": "street:10-11-12",
+                "amount": {
+                  "prog": "q"
+                },
+                "when": {
+                  "cmp": [
+                    {
+                      "progStep": "q"
+                    },
+                    ">=",
+                    3
+                  ]
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    }
+  ]
+}

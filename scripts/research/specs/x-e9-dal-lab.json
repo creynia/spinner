@@ -1,0 +1,353 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": {
+      "bankroll": 500000,
+      "maxRounds": 500
+    },
+    "run": {
+      "sessions": 10000,
+      "seed": 20261031
+    }
+  },
+  "experiments": [
+    {
+      "id": "e9-dal-u5",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-dal-u5",
+        "name": "d'Alembert red $5 step $5, 44 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "dalembert",
+            "track": "red",
+            "maxSteps": 44,
+            "step": {
+              "units": 1
+            },
+            "onCap": "reset"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-dal-u5-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-dal-u5",
+        "name": "d'Alembert red $5 step $5, 44 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "dalembert",
+            "track": "red",
+            "maxSteps": 44,
+            "step": {
+              "units": 1
+            },
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-dal-u25",
+      "rules": "european",
+      "strategy": {
+        "schema": 1,
+        "id": "e9-dal-u25",
+        "name": "d'Alembert red $25 step $25, 19 levels",
+        "game": "roulette",
+        "unit": 2500,
+        "progressions": {
+          "q": {
+            "kind": "dalembert",
+            "track": "red",
+            "maxSteps": 19,
+            "step": {
+              "units": 1
+            },
+            "onCap": "reset"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-dal-u25-stop",
+      "rules": "european",
+      "strategy": {
+        "schema": 1,
+        "id": "e9-dal-u25",
+        "name": "d'Alembert red $25 step $25, 19 levels",
+        "game": "roulette",
+        "unit": 2500,
+        "progressions": {
+          "q": {
+            "kind": "dalembert",
+            "track": "red",
+            "maxSteps": 19,
+            "step": {
+              "units": 1
+            },
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-lab-1",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-lab-1",
+        "name": "Labouchere red $5 [1], maxLength 16, max $1,000",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "labouchere",
+            "track": "red",
+            "line": [1],
+            "maxLength": 16,
+            "maxAmount": 100000,
+            "onCap": "reset"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-lab-1-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-lab-1",
+        "name": "Labouchere red $5 [1], maxLength 16, max $1,000",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "labouchere",
+            "track": "red",
+            "line": [1],
+            "maxLength": 16,
+            "maxAmount": 100000,
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-lab-123",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-lab-123",
+        "name": "Labouchere red $5 [1,2,3], maxLength 16, max $1,000",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "labouchere",
+            "track": "red",
+            "line": [1, 2, 3],
+            "maxLength": 16,
+            "maxAmount": 100000,
+            "onCap": "reset"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-lab-123-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-lab-123",
+        "name": "Labouchere red $5 [1,2,3], maxLength 16, max $1,000",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "labouchere",
+            "track": "red",
+            "line": [1, 2, 3],
+            "maxLength": 16,
+            "maxAmount": 100000,
+            "onCap": "stop"
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    }
+  ]
+}

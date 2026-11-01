@@ -1,0 +1,473 @@
+{
+  "defaults": {
+    "rules": "european",
+    "session": {
+      "bankroll": 500000,
+      "maxRounds": 500
+    },
+    "run": {
+      "sessions": 10000,
+      "seed": 20261031
+    }
+  },
+  "experiments": [
+    {
+      "id": "e9-geo-r12-reset",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r12-reset",
+        "name": "Geometric ×1.2 red $5, onWin reset, 29 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "reset",
+            "amounts": [
+              500, 600, 800, 900, 1100, 1300, 1500, 1800, 2200, 2600, 3100, 3800, 4500, 5400, 6500,
+              7800, 9300, 11100, 13400, 16000, 19200, 23100, 27700, 33200, 39800, 47700, 57300,
+              68700, 82500
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-geo-r12-reset-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r12-reset",
+        "name": "Geometric ×1.2 red $5, onWin reset, 29 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              500, 600, 800, 900, 1100, 1300, 1500, 1800, 2200, 2600, 3100, 3800, 4500, 5400, 6500,
+              7800, 9300, 11100, 13400, 16000, 19200, 23100, 27700, 33200, 39800, 47700, 57300,
+              68700, 82500
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-geo-r14-reset",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r14-reset",
+        "name": "Geometric ×1.4 red $5, onWin reset, 17 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "reset",
+            "amounts": [
+              500, 700, 1000, 1400, 2000, 2700, 3800, 5300, 7400, 10400, 14500, 20300, 28400, 39700,
+              55600, 77800, 108900
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-geo-r14-reset-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r14-reset",
+        "name": "Geometric ×1.4 red $5, onWin reset, 17 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              500, 700, 1000, 1400, 2000, 2700, 3800, 5300, 7400, 10400, 14500, 20300, 28400, 39700,
+              55600, 77800, 108900
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-geo-r16-reset",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r16-reset",
+        "name": "Geometric ×1.6 red $5, onWin reset, 13 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "reset",
+            "amounts": [
+              500, 800, 1300, 2100, 3300, 5300, 8400, 13500, 21500, 34400, 55000, 88000, 140800
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-geo-r16-reset-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r16-reset",
+        "name": "Geometric ×1.6 red $5, onWin reset, 13 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [
+              500, 800, 1300, 2100, 3300, 5300, 8400, 13500, 21500, 34400, 55000, 88000, 140800
+            ]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-geo-r18-reset",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r18-reset",
+        "name": "Geometric ×1.8 red $5, onWin reset, 11 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "reset",
+            "amounts": [500, 900, 1700, 3000, 5300, 9500, 17100, 30700, 55100, 99200, 178600]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-geo-r18-reset-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r18-reset",
+        "name": "Geometric ×1.8 red $5, onWin reset, 11 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [500, 900, 1700, 3000, 5300, 9500, 17100, 30700, 55100, 99200, 178600]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-geo-r20-reset",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r20-reset",
+        "name": "Geometric ×2 red $5, onWin reset, 9 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "reset",
+            "amounts": [500, 1000, 2000, 4000, 8000, 16000, 32000, 64000, 128000]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "e9-geo-r20-reset-stop",
+      "rules": {
+        "preset": "european",
+        "overrides": {
+          "limits": {
+            "outside": {
+              "min": 500
+            }
+          }
+        }
+      },
+      "strategy": {
+        "schema": 1,
+        "id": "e9-geo-r20-reset",
+        "name": "Geometric ×2 red $5, onWin reset, 9 levels",
+        "game": "roulette",
+        "unit": 500,
+        "progressions": {
+          "q": {
+            "kind": "sequence",
+            "track": "red",
+            "onWin": "reset",
+            "onLoss": "advance",
+            "onCap": "stop",
+            "amounts": [500, 1000, 2000, 4000, 8000, 16000, 32000, 64000, 128000]
+          }
+        },
+        "stages": [
+          {
+            "id": "play",
+            "layout": [
+              {
+                "bet": "red",
+                "amount": {
+                  "prog": "q"
+                }
+              }
+            ],
+            "rules": []
+          }
+        ]
+      }
+    }
+  ]
+}
