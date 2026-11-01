@@ -391,6 +391,19 @@ would conflict on rebase).
 | `ladderMath.ts` | T2, landed | `ladder`, `LadderInput`, `LadderResult` |
 | `tests/e2e/research.spec.ts` | Q1 | — |
 
+**Chapter 10 `play-c9` (added after wave B).** "Play c9 at the table", the c9 cash-out candidate as a
+step-by-step how-to, placed after `try` (the chapter list, the chips, the next links and the static
+pages all follow `CHAPTERS`). New files: `playC9.ts` (pure: the level table, the loss limit's trip
+level and the cycle-model numbers, derived from the candidate document in `data.json`; also read by
+`build/static-research.ts`, so it is in `tsconfig.node.json`), `playC9.test.ts`, `ChPlayC9.tsx`
+(checklist, rules, `BoardGlyph` at levels 0–3 and 14, the 16-row level table in `TableWrap`, `Stat`
+tiles from `e7-c9:e7-c9-W20-SLhalf`, `TryIt` for the one candidate, and a pocket card whose "Print this
+card" button calls `window.print()`), `ChPlayC9.test.tsx` and `chapters-10.css` (the `@media print`
+rules apply only while `printCard()` has put `research-print-card` on `<html>`; in print the card
+uses the light scheme's `Canvas`/`CanvasText`, no literal colours). Edited: `content.ts`,
+`chapters.tsx`, `content.test.ts`, `research.test.tsx`, `tests/e2e/research.spec.ts`,
+`build/static-research.ts` (chapter tables and title), `tsconfig.node.json`.
+
 Placeholders: each `ChXxx.tsx` from I1b returns the landed placeholder markup
 (`<div class="chart-slot" aria-hidden="true">`) and has the final export name and signature. Optional CSS
 files are imported by the owner's `Ch*.tsx` files.

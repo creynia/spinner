@@ -25,7 +25,7 @@ and stop there. Money is rounded to the dollar except averages, which keep their
 it stops), then off even money with the right raise (4), then the layouts that are more fun to play,
 towers of chips, shapes on the board and favourite numbers (5–6), always sized by the bankroll
 counted in cycle profits and protected by a cash-out (7). Chapter 8 lists what breaks it, chapter 9
-how to try it.
+how to try it, and chapter 10 how to play the c9 cash-out at a real table, level by level.
 
 ---
 
@@ -532,6 +532,110 @@ stop-loss lowers it to 90.3 %, 89.9 %, 90.1 % and 89.8 % on four seeds, with mea
 L = levels that fit the table maximum and the bankroll
 B = Σ g^k (k = 0 … L − 1)
 n½ = ln 2 / (q·p);  P(win) ≈ (1 − q)^W
+```
+
+---
+
+## 10. Play c9 at the table (`play-c9`)
+
+**To play the c9 cash-out at a real table you need $1 chips, a $1 inside minimum, a single-zero wheel and four rules, two of which tell you when to leave.**
+
+This is the first candidate of chapter 9 written out for the felt. You bet on streets: 1-2-3
+always, adding 4-5-6, 7-8-9 and 10-11-12 after the first three misses in a row, while the chips on
+each street climb from $1 to $411 over 16 levels. Every hit wins back the misses before it and
+leaves you at least $11 up.
+
+The table gives every level; the card at the end of the chapter in the app prints it small enough
+for a pocket. Sessions are short and nine in ten end at the target. The tenth ends at the loss
+limit, about $3,000 down.
+
+**Before you sit down.**
+
+- A single-zero wheel. On a double-zero wheel it still ends ahead 88.7 % of the time, but the
+  average session falls to −$100.32 (`x1-c9-cashout-axes:x1-c9-am`).
+- A table that takes $1 on the inside (the inside minimum counts all your inside bets together),
+  $1 chips, and a maximum of at least $274 on a street, the biggest bet you will place.
+- Not a $25-minimum table. It does not work there: the ladder starts with $1 on one street, scaled
+  up 25 times it costs $122,975, and the reference ladders of chapter 8 run at $25 minimums ran out
+  in 90.3 % to 100 % of sessions.
+- A $5,000 bankroll. The whole ladder costs $4,919; with the loss limit no session loses more than
+  $3,275, but every number here was simulated from $5,000.
+- A target of +$280 and a loss limit of −$2,459.50, and the decision, made before the first spin,
+  to stop at either. Your net is the chips in front of you minus what you sat down with.
+
+**The rules.**
+
+1. Hit (the ball lands on one of your streets) → back to level 0.
+2. Miss → next level.
+3. Up $280 or more → leave.
+4. Down $2,459.50 or more, or level 15 lost → leave.
+
+You start every run of misses between $0 and +$279, so a miss at level 14 always takes you past
+the loss limit ($2,996 to $3,275 down) and level 15 never comes up.
+
+**The ladder.** $1 chips; "down if it misses" and "a hit nets" count from your last hit. Derived
+from `scripts/research/candidates/c9-streets-to12-stack-cashout.json` by
+`src/app/screens/Research/playC9.ts` (pinned in `playC9.test.ts`).
+
+| Level | Streets | Chips per street | On the table | Down if it misses | A hit nets |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 0 | 1 (1–3) | 1 | $1 | −$1 | +$11 |
+| 1 | 2 (1–6) | 2 | $4 | −$5 | +$19 |
+| 2 | 3 (1–9) | 2 | $6 | −$11 | +$13 |
+| 3 | 4 (1–12) | 3 | $12 | −$23 | +$13 |
+| 4 | 4 (1–12) | 5 | $20 | −$43 | +$17 |
+| 5 | 4 (1–12) | 7 | $28 | −$71 | +$13 |
+| 6 | 4 (1–12) | 11 | $44 | −$115 | +$17 |
+| 7 | 4 (1–12) | 16 | $64 | −$179 | +$13 |
+| 8 | 4 (1–12) | 24 | $96 | −$275 | +$13 |
+| 9 | 4 (1–12) | 36 | $144 | −$419 | +$13 |
+| 10 | 4 (1–12) | 54 | $216 | −$635 | +$13 |
+| 11 | 4 (1–12) | 81 | $324 | −$959 | +$13 |
+| 12 | 4 (1–12) | 122 | $488 | −$1,447 | +$17 |
+| 13 | 4 (1–12) | 183 | $732 | −$2,179 | +$17 |
+| 14 (loss limit: leave if it misses) | 4 (1–12) | 274 | $1,096 | −$3,275 | +$13 |
+| 15 (not reached) | 4 (1–12) | 411 | $1,644 | −$4,919 | +$13 |
+
+**What a session feels like.** Seeds 20261031 / 1 / 2 / 3 (`e7-c9:e7-c9-W20-SLhalf`,
+`e7-c9-holdout`, `e7-c9-seed3`); American wheel `x1-c9-cashout-axes:x1-c9-am`.
+
+| run | typical | chance ahead | leaves at the loss limit | average | worst 5 % | spins (average) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| European, seeds 20261031 / 1 / 2 / 3 | $286 / $286 / $286 / $286 | 90.3 / 89.9 / 90.1 / 89.8 % | 9.7 / 10.1 / 9.9 / 10.2 % | −$46.25 / −$60.12 / −$53.65 / −$60.90 | −$3,210 / −$3,214 / −$3,212 / −$3,209 | 84.1 |
+| American wheel | $286 | 88.7 % | 11.3 % | −$100.32 | −$3,220 | 85.0 |
+
+Most sessions are a string of small wins: a hit every few spins, each worth +$11 to +$19, until you
+are +$280 up; the typical session lasts about 86 spins and every one had ended by spin 250. The bad
+tenth are the ones where the ball misses your streets 15 times in a row: you watch the stake climb
+to $274 a street and leave $2,996 to $3,275 down. The average is negative because every dollar you
+bet costs 2.7 cents, and a session bets $1,961.68 on average.
+
+In the app the chapter ends with a one-tap **Open in Define** for this candidate and a pocket card
+(the compact level table) with a **Print this card** button.
+
+- Four rules: a hit takes you back to level 0, a miss moves you up one level, and you leave at +$280 or at −$2,459.50.
+- Nine sessions in ten leave with the +$280 target (90.3 %); the rest leave $2,996 to $3,275 down at the loss limit.
+- Every dollar you bet costs 2.7 cents on average, no matter how you bet it: the average session here is −$46.25.
+
+### The math
+
+Recovery recursion. Let a_k be the stake per street at level k, n_k the streets on the table (1, 2,
+3, then 4) and D(k) the loss carried into level k, with D(0) = 0. A street pays 11 to 1, so a hit at
+level k nets (12 − n_k)·a_k − D(k) and a miss carries D(k + 1) = D(k) + n_k·a_k. The amounts keep
+every hit at $11 or more; D(16) = $4,919 is the cap loss.
+
+A run starts between $0 and +$279, so a miss at level 13 leaves you at most $2,179 down and a miss
+at level 14 at least $2,996 down: the limit always trips at level 14, and level 15 is never played.
+Fifteen misses in a row have probability q = 0.00528.
+
+A hit nets $14.52 on average, so +$280 takes about 19.3 runs: P(win) ≈ (1 − q)^19.3 = 0.903,
+measured 90.3 % (89.8 % to 90.3 % on four seeds). A run lasts 4.47 spins on average, so a session
+about 86 (measured 84.1). The mean is −2.7 % of the $1,961.68 a session wagers.
+
+```
+hit at level k: (12 − n_k)·a_k − D(k) ≥ $11
+D(k + 1) = D(k) + n_k·a_k;  D(16) = $4,919
+q = Π_(k=0…14) (1 − 3n_k/37) = 0.00528;  P(win) ≈ (1 − q)^(280/14.52) = 0.903
 ```
 
 ---
