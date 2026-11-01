@@ -985,6 +985,40 @@ Prediction (session DP, `onCap stop`): it dominates the best slow ladders at the
 | e9-doz-onewin-u1 | 18 | 0.00086 | 3.08 | $3.28 | 1458 | 0.111 | 1.26 | 0.870 | 0.873 | 2478 | $531 | $525 | 86.8 % | −$127 | −$4,688 | 12.7 / 0.0 % | Fibonacci $5 back 2: $415, 85.9 %, −$269, −$4,862 |
 | e9-doz-onewin-u3 | 16 | 0.00189 | 3.08 | $7.33 | 652 | 0.249 | 1.23 | 0.736 | 0.740 | 1130 | $1,172 | $1,152 | 73.7 % | −$238 | −$4,685 | 26.0 / 0.0 % | dozen ×1.36 back 4: $925, 75.4 %, −$300, −$4,677 |
 
+### 7.19 E9 results (`specs/x-e9-*.json`, `briefs/E9.md`; 10,000 sessions, seed 20261031, holdouts 1 and 2)
+
+69 experiments on the reporting seed and 30 holdout rows; full table, curve check and Research-screen notes
+in `briefs/E9.md`. Predictions §7.18 (session DP for everything but Labouchere).
+
+| ladder (`onCap stop`, $5,000, 500 spins) | median | P(win) | mean | CVaR 5 % | cap rate | n½ | k |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| slow: Fibonacci red $5 back 2 (14 levels) | $415 | 85.9 % | −$269 | −$4,862 | 13.3 % | 2,358 | 1.65 |
+| slow: dozen ×1.36 back 4 (19 levels) | $925 | 75.4 % | −$300 | −$4,677 | 23.9 % | 1,210 | 1.36 |
+| slow: c9 streets ×1.36 back 4 (19 levels) | $915 | 69.9 % | −$301 | −$3,769 | 29.5 % | 974 | 1.33 |
+| one-win: dozen ×1.5 $1 (18 levels) | $524 | 86.4 % | −$147 | −$4,692 | 13.2 % | 2,478 | 1.26 |
+| one-win: Martingale red $2 (11 levels) | $478 | 85.0 % | −$152 | −$4,011 | 14.5 % | 2,175 | 1.34 |
+| one-win: dozen ×1.5 $3 (16 levels) | $1,151 | 73.7 % | −$236 | −$4,684 | 25.9 % | 1,130 | 1.23 |
+| one-win: Martingale red $5 (10 levels, control) | $1,185 | 73.4 % | −$307 | −$4,981 | 26.2 % | 1,116 | 1.31 |
+
+- **Q1: no.** A slow ladder's longer horizon is a lower profit rate. At the same bankroll and P(win) its
+  median is 11–93 % lower than the one-win ladder's on the same numbers, because a slow cycle turns over more
+  per dollar of profit (k 1.33–4.27 vs 1.21–1.38). Fibonacci $5 back 2 is beaten on median, P(win), mean and
+  CVaR by the $1 one-win dozen on all three seeds; its tail is the whole ladder, as for every one-win ladder.
+- **Back-1 ladders never work on red** (geometric `onWin: back`, Fibonacci back 1, d'Alembert): the level
+  drifts up ((1 − p) − back·p = +1/37), q .030–.070 per cycle, median < 0 on all nine. A slow ladder needs
+  back ≥ 2 on even money, ≥ 3 on a dozen.
+- **Fibonacci's batch-one lead over Martingale** is an unfunded 12-level ladder ($9,400 on $5,000, 39.1 %
+  bust). Fitted to $5,000 at $25 it caps as often as Martingale-L8 (q .00482 vs .00484) and ends at −$1,150.
+- **Q2: yes for the never-capped share.** No fitting ladder is above e^(−x); the exact level chain predicts
+  every layout (28 ladders, RMS z 0.73). Two amendments: the recovery rule moves k as much as the widest
+  layout did, always upward; and P(ahead) falls below never-capped when a win does not clear the deficit
+  (Fibonacci back 3: 95.7 % vs 65.3 %), so E5's sign rule holds for one-win ladders only.
+- **Cash-out:** Fibonacci $5 back 2 at c9's target ($280, half-ladder stop): 86.8 / 86.3 / 86.0 %, mean −$143 /
+  −$158 / −$168, CVaR 5 % −$2,999, against c9's 90.3 / 89.9 / 90.1 %, −$46 / −$60 / −$54, −$3,210. c9 stays.
+- **Model:** the session DP held on all 95 rows it predicted (P(win) within 2.2 SE, medians inside their
+  CI). The closed forms missed where cycles are long (Poisson step: d'Alembert $5 .614 vs .783) and where
+  survivors are mid-cycle (closed-form median +$1,258 vs −$220). Edge −2.36 % to −3.30 %, |z| ≤ 1.89.
+
 ## 8. Open questions
 
 - ~~**A trailing stop for widening ladders.**~~ Closed in §7.17: a1's half-ladder stop-loss never fires
@@ -1001,8 +1035,21 @@ Prediction (session DP, `onCap stop`): it dominates the best slow ladders at the
   read from `endedBy` `strategy:cap-*` or from `onCap: stop` twins (§7.3, §7.14).
 - **The aggregator's x for E4.** `meta.B` is in level-0 stakes, not cycle profits, so x is too large
   by m (§7.14). Fix the meta or the aggregator.
-- **Put the exact run-length DP into `ladder.ts`.** The Poisson form misses long ladders (L 20–53,
-  |z| > 2) that the DP closes (§7.14).
+- ~~**Put the exact run-length DP into `ladder.ts`.**~~ Done outside it: `scripts/research/slowLadder.ts`
+  has the exact level chain (`noCapExact`) and a session DP over (level, equity) with the harness's rules,
+  which held on 95 E9 rows (§7.19). `ladderMath.ts` (the Research screen's calculator) still uses
+  q = (1 − p)^L and the Poisson form, which is wrong for any ladder that does not reset on a win.
+- **Slow ladders on the Research screen's calculator.** A "steps back per win" input would need the level
+  chain; slowLadder.ts is pure and could be imported. Until then the calculator should say it covers
+  one-win ladders only (briefs/E9.md §6).
+- **Labouchere has no exact chain.** Its state is the line; the exact chain is exponential in maxLength
+  (18 s at 8). E9 used 10⁶ sampled cycles and missed the never-capped share by +.012 / +.029. A session DP
+  over (line, equity) is open.
+- **Drift prediction off even money, untested.** Fibonacci's back 2 on a dozen has level drift +1/37; the DP
+  says ×1.36 back 2 on a dozen keeps 2.7 % of sessions uncapped at 500 spins. Not run.
+- **Is any recovery rule below the one-win k?** Every slow rule raised k (§7.19). Over-recovery (press after a
+  win) and partial reset were not tried; by the edge identity k ≥ 1, and one-win stacks already sit at
+  1.14–1.21.
 - **The reporting seed's b-family stream.** b1, b3 and d-b1 run at z −2.4 to −3.1 on 20261031
   (§7.8), and b3's reporting median ($1,679) sits below its three holdouts ($1,687–$1,698). Quote
   the holdout medians as the estimate.
