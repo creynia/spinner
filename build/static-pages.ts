@@ -16,19 +16,36 @@ import {
   type GalleryEntry,
   type GalleryOptions,
 } from './vite-plugin-gallery.ts';
+import {
+  APP,
+  APP_URL,
+  ORIGIN,
+  OG_IMAGE,
+  OTHER_APPS,
+  PERSON_ID,
+  WEBSITE_ID,
+  esc,
+  relatedHtml,
+  renderPage,
+  sitemapXml,
+  toText,
+  type Crumb,
+  type Obj,
+  type PageOut,
+  type RelatedLink,
+} from './static-shell.ts';
+import {
+  RESEARCH_PATH,
+  SOURCES_PATH,
+  buildResearchSite,
+  chapterUrl,
+  chaptersForStrategy,
+  type ResearchSite,
+  type StrategyRef,
+} from './static-research.ts';
+import { PRESET_SOURCES, sourceById } from '../src/app/sources.ts';
 
-export const ORIGIN = 'https://creynia.com';
-export const APP = 'spinner';
-export const APP_URL = `${ORIGIN}/${APP}/`;
-export const THEME = '#0d3b2e';
-const OG_IMAGE = `${ORIGIN}/assets/og/${APP}.jpg`;
-const PERSON_ID = `${ORIGIN}/#creynia`;
-const WEBSITE_ID = `${ORIGIN}/#website`;
-const OTHER_APPS = [
-  { id: 'crappy', game: 'Craps' },
-  { id: 'baccaratton', game: 'Baccarat' },
-  { id: 'holdumb', game: "Ultimate Texas Hold'em" },
-];
+export { APP, APP_URL, ORIGIN, THEME, renderPage, sitemapXml } from './static-shell.ts';
 
 /**
  * True for a dist file written by this module. The service worker must not precache these (they
@@ -38,44 +55,18 @@ const OTHER_APPS = [
 export function isStaticSiteFile(file: string): boolean {
   return (
     file.startsWith('strategies/') ||
+    file.startsWith('research/') ||
+    file.startsWith('sources/') ||
     file === 'sitemap.xml' ||
     file === 'llms.txt' ||
     file === 'llms-full.txt'
   );
 }
 
-// ---------------------------------------------------------------- text helpers
-
-const esc = (s: string): string =>
-  s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
-
-/** Strips the tags of a small HTML fragment for llms-full.txt (the fragments here are simple). */
-function toText(html: string): string {
-  return html
-    .replace(/<li>/g, '- ')
-    .replace(/<h2>/g, '### ')
-    .replace(/<\/(p|li|h2|h3|tr|ul|ol|table|dl|div)>/g, '\n')
-    .replace(/<(td|th|dd)[^>]*>/g, ' | ')
-    .replace(/<[^>]+>/g, '')
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'")
-    .replaceAll('&amp;', '&')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 const plural = (n: number, w: string): string => `${fmtInt(n)} ${w}${n === 1 ? '' : 's'}`;
 
 // ---------------------------------------------------------------- the definition, in words
 
-type Obj = Record<string, unknown>;
 const isObj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !Array.isArray(x);
 
 const WHEELS: Record<string, { name: string; detail: string }> = {
@@ -469,149 +460,6 @@ function setupLine(p: StrategyPage): string {
   return `${fmtInt(p.metrics.n)} sessions of up to ${fmtInt(d.session.maxRounds)} spins, ${fmtMoney(d.session.bankroll)} bankroll, ${fmtMoney(d.strategy.unit)} unit, ${wheel} wheel`;
 }
 
-// ---------------------------------------------------------------- page shell
-
-interface Crumb {
-  name: string;
-  url: string;
-}
-
-interface PageInput {
-  path: string; // '/spinner/strategies/x/' relative to the origin
-  title: string;
-  description: string;
-  h1: string;
-  body: string;
-  crumbs: Crumb[];
-  graph: Obj[];
-  /** Relative prefix from this page to the app root ('../' or '../../'). */
-  up: string;
-}
-
-const STYLE = `
-:root{color-scheme:dark;--felt:${THEME};--bg:#082419;--ink:#eef3ee;--muted:#a9c2b4;--gold:#e0bb4a;--line:#2c5a49;--card:#0f4434}
-*{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-a{color:var(--gold)}
-header,nav.crumbs,main,footer{max-width:72ch;margin:0 auto;padding-left:16px;padding-right:16px}
-header{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;justify-content:space-between;padding-top:16px;padding-bottom:12px;border-bottom:1px solid var(--line);max-width:none;background:var(--felt)}
-header .brand{color:var(--muted);text-decoration:none;font-size:.9rem}
-header .app{color:var(--ink);font-weight:700;text-decoration:none;font-size:1.1rem}
-nav.crumbs{font-size:.85rem;color:var(--muted);padding-top:12px}
-nav.crumbs ol{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px}
-nav.crumbs li+li::before{content:"›";margin-right:4px;color:var(--muted)}
-h1{font-size:1.75rem;line-height:1.25;margin:.6em 0 .3em}
-h2{font-size:1.3rem;margin:1.6em 0 .4em}
-h3{font-size:1.05rem;margin:1.2em 0 .3em}
-.lead{color:var(--muted);font-size:1.05rem}
-.verdict{font-weight:600;background:var(--card);border-left:4px solid var(--gold);padding:10px 14px;border-radius:6px}
-.cta{display:inline-block;background:var(--gold);color:#1b1503;font-weight:700;text-decoration:none;padding:12px 18px;border-radius:8px;margin:8px 8px 8px 0}
-.cta.secondary{background:transparent;color:var(--gold);border:2px solid var(--gold)}
-.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px 0}
-table{border-collapse:collapse;width:100%;font-size:.95rem}
-caption{text-align:left;color:var(--muted);font-size:.85rem;padding-bottom:4px}
-th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
-td{white-space:nowrap;font-variant-numeric:tabular-nums}
-thead th{color:var(--muted);font-weight:600;font-size:.85rem}
-.note{display:block;color:var(--muted);font-weight:400;font-size:.82rem}
-dl.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:4px 16px;margin:8px 0}
-dl.facts div{border-bottom:1px solid var(--line);padding:4px 0}
-dt{color:var(--muted);font-size:.85rem}dd{margin:0;font-weight:600}
-.ladder{font-variant-numeric:tabular-nums}
-ul.cards{list-style:none;padding:0;display:grid;gap:12px}
-ul.cards li{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
-ul.cards h3{margin:0 0 4px}
-.pager{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin:24px 0;padding-top:12px;border-top:1px solid var(--line)}
-footer{color:var(--muted);font-size:.85rem;line-height:1.6;padding-top:24px;padding-bottom:32px;border-top:1px solid var(--line);margin-top:32px}
-footer strong{color:var(--ink)}
-.ci-narrow{display:none}
-@media (max-width:640px){table.keys .ci{display:none}table.keys .ci-narrow{display:block;color:var(--muted);font-weight:400;font-size:.8rem;white-space:normal}table.keys th[scope=row]{width:58%}}
-@media (max-width:420px){body{font-size:16px}h1{font-size:1.45rem}th,td{padding:6px 4px}}
-`
-  .trim()
-  .replace(/\n/g, '');
-
-const CSP_STATIC =
-  "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'";
-
-function breadcrumbLd(crumbs: Crumb[], id: string): Obj {
-  return {
-    '@type': 'BreadcrumbList',
-    '@id': `${id}#breadcrumb`,
-    itemListElement: crumbs.map((c, i) => ({
-      '@type': 'ListItem',
-      position: i + 1,
-      name: c.name,
-      item: c.url,
-    })),
-  };
-}
-
-function footer(): string {
-  const others = OTHER_APPS.map(
-    (a) => `<a href="${ORIGIN}/${a.id}/">${esc(a.game)} (${a.id})</a>`,
-  ).join(' · ');
-  return `<footer>
-<p><strong>For education only, with play money only.</strong> The house always has an edge, and no betting system changes that. These apps show how big the edge is, not how to beat it.</p>
-<p>If gambling is hurting you or someone you know, call or text <strong>1-800-GAMBLER</strong> (US), or contact your national problem-gambling helpline.</p>
-<p>More from Know the Odds: ${others} · <a href="${ORIGIN}/">creynia.com</a></p>
-</footer>`;
-}
-
-export function renderPage(p: PageInput): string {
-  const url = ORIGIN + p.path;
-  const graph = [...p.graph, breadcrumbLd(p.crumbs, url)];
-  const ld = JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }).replaceAll(
-    '<',
-    '\\u003c',
-  );
-  const crumbs = p.crumbs
-    .map((c, i) =>
-      i === p.crumbs.length - 1
-        ? `<li aria-current="page">${esc(c.name)}</li>`
-        : `<li><a href="${c.url}">${esc(c.name)}</a></li>`,
-    )
-    .join('');
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="${CSP_STATIC}">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(p.title)}</title>
-<meta name="description" content="${esc(p.description)}">
-<link rel="canonical" href="${url}">
-<meta name="theme-color" content="${THEME}">
-<link rel="icon" type="image/svg+xml" href="${p.up}icon.svg">
-<meta property="og:type" content="article">
-<meta property="og:site_name" content="Know the Odds">
-<meta property="og:title" content="${esc(p.title)}">
-<meta property="og:description" content="${esc(p.description)}">
-<meta property="og:url" content="${url}">
-<meta property="og:image" content="${OG_IMAGE}">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="${esc(p.title)}">
-<meta name="twitter:description" content="${esc(p.description)}">
-<meta name="twitter:image" content="${OG_IMAGE}">
-<script type="application/ld+json">${ld}</script>
-<style>${STYLE}</style>
-</head>
-<body>
-<header><a class="brand" href="${ORIGIN}/">Know the Odds</a><a class="app" href="${p.up}">spinner · Roulette strategy lab</a></header>
-<nav class="crumbs" aria-label="Breadcrumb"><ol>${crumbs}</ol></nav>
-<main>
-<h1>${esc(p.h1)}</h1>
-${p.body}
-</main>
-${footer()}
-</body>
-</html>
-`;
-}
-
 // ---------------------------------------------------------------- the pages
 
 const STRATEGIES_PATH = `/${APP}/strategies/`;
@@ -716,6 +564,57 @@ function strategyDescription(p: StrategyPage): string {
   return `${p.entry.title}: ${fmtInt(m.n)} simulated roulette sessions. Mean ${fmtMoney(m.net.mean.value, { sign: true })} a session, ${fmtPct(m.probabilities.ahead.p)} ahead, ${fmtPct(m.probabilities.bust.p)} bust.`;
 }
 
+/** "Martingale" from "Martingale on red"; flat betting reads as such. */
+function systemName(p: StrategyPage): string {
+  const name = p.entry.title.replace(/ on red$/, '');
+  return name === 'Flat' ? 'Flat betting' : name;
+}
+
+/** "the Martingale", "the Fibonacci system", "flat betting", "the James Bond strategy". */
+function systemPhrase(p: StrategyPage): string {
+  const name = systemName(p);
+  if (name === 'Flat betting') return 'flat betting';
+  if (name === 'Martingale') return 'the Martingale';
+  return p.entry.title.endsWith(' on red') ? `the ${name} system` : `the ${name} strategy`;
+}
+
+/** The first paragraph: a quotable answer to "does <system> work in roulette?", from the run. */
+export function strategyAnswer(p: StrategyPage): string {
+  const m = p.metrics;
+  const phrase = systemPhrase(p);
+  return `Does ${phrase} work in roulette? Not against the house edge, which no staking plan changes. Over ${fmtInt(m.n)} simulated sessions of ${p.entry.title}${wheelOn(p)}, the average result was ${fmtMoney(m.net.mean.value, { sign: true })} a session, against an exact expected loss of ${fmtMoney(m.expected.meanExpectedLoss)}; ${fmtPct(m.probabilities.ahead.p)} of sessions finished ahead and ${fmtPct(m.probabilities.bust.p)} went bust.`;
+}
+
+/** "<System> Roulette Strategy Tested: 10,000 Sessions | spinner", shortened to fit 62 chars. */
+function strategyTitle(p: StrategyPage): string {
+  const name = systemName(p).replace(/ betting$/, ' Betting');
+  const n = fmtInt(p.metrics.n);
+  const options = [
+    `${name} Roulette Strategy Tested: ${n} Sessions | spinner`,
+    `${name} Roulette Strategy: ${n} Sessions | spinner`,
+    `${name} Roulette Strategy Tested | spinner`,
+  ];
+  return options.find((t) => t.length <= 62) ?? options.at(-1)!;
+}
+
+/** Related links of a strategy page: its research chapters, its source, the research index. */
+export function strategyRelated(p: StrategyPage, all: StrategyRef[]): RelatedLink[] {
+  const chapters = chaptersForStrategy(p.slug, all).map((c) => ({
+    href: chapterUrl(c.id),
+    title: c.title,
+    note: 'research chapter',
+  }));
+  const src = PRESET_SOURCES[p.slug] ? sourceById(PRESET_SOURCES[p.slug]!) : undefined;
+  return [
+    ...chapters,
+    ...(src
+      ? [{ href: `${ORIGIN}${SOURCES_PATH}#${src.id}`, title: src.title, note: 'source' }]
+      : []),
+    { href: ORIGIN + RESEARCH_PATH, title: 'Roulette strategy research: all chapters' },
+    { href: ORIGIN + STRATEGIES_PATH, title: 'All systems side by side' },
+  ];
+}
+
 function strategyPage(p: StrategyPage, i: number, all: StrategyPage[]): PageOut {
   const path = `${STRATEGIES_PATH}${p.slug}/`;
   const url = ORIGIN + path;
@@ -730,7 +629,9 @@ function strategyPage(p: StrategyPage, i: number, all: StrategyPage[]): PageOut 
   const tags = p.entry.tags.length
     ? ` <span class="note">Tags: ${esc(p.entry.tags.join(', '))}</span>`
     : '';
-  const body = `<p class="lead">${esc(d.notes ?? '')}${tags}</p>
+  const refs = all.map((x) => ({ slug: x.slug, title: x.entry.title }));
+  const body = `<p>${esc(strategyAnswer(p))}</p>
+<p class="lead">${esc(d.notes ?? '')}${tags}</p>
 <p class="verdict">${esc(verdict(p.metrics))}</p>
 <p>The numbers on this page come from a real run of ${esc(setupLine(p))}, saved in the spinner gallery. They are exactly what spinner’s Analyze screen shows for it, with 95% intervals.</p>
 <p><a class="cta" href="../../#/gallery/${encodeURIComponent(p.slug)}">Open this run in spinner: charts and every session</a><a class="cta secondary" href="../../#/define">Test your own system</a></p>
@@ -748,12 +649,13 @@ ${baselineHtml(p, all)}
 ${table(`${p.entry.title}: drawdown, exposure and session length`, riskRows(p))}
 ${houseEdgeHtml(all, p)}
 <p><a class="cta" href="../../#/gallery/${encodeURIComponent(p.slug)}">See the fan chart, survival curve and sessions in spinner</a></p>
-<nav class="pager" aria-label="More strategies">${prev ? `<a href="../${prev.slug}/" rel="prev">← ${esc(prev.entry.title)}</a>` : '<span></span>'}<a href="../">All strategies</a>${next ? `<a href="../${next.slug}/" rel="next">${esc(next.entry.title)} →</a>` : '<span></span>'}</nav>`;
+<nav class="pager" aria-label="More strategies">${prev ? `<a href="../${prev.slug}/" rel="prev">← ${esc(prev.entry.title)}</a>` : '<span></span>'}<a href="../">All strategies</a>${next ? `<a href="../${next.slug}/" rel="next">${esc(next.entry.title)} →</a>` : '<span></span>'}</nav>
+${relatedHtml(strategyRelated(p, refs))}`;
   const html = renderPage({
     path,
-    title: `${p.entry.title}: Roulette Simulation Results | spinner`,
+    title: strategyTitle(p),
     description,
-    h1: `${p.entry.title}: ${fmtInt(p.metrics.n)} simulated roulette sessions`,
+    h1: `${systemName(p)} roulette strategy tested: ${fmtInt(p.metrics.n)} simulated sessions${p.entry.title.endsWith(' on red') ? ' on red' : ''}`,
     body,
     crumbs: [...ROOT_CRUMBS, { name: p.entry.title, url }],
     graph: [ldStrategyArticle(p, url, description)],
@@ -767,15 +669,6 @@ ${houseEdgeHtml(all, p)}
     description,
     text: llmsText(p, plan, all),
   };
-}
-
-interface PageOut {
-  file: string;
-  path: string;
-  html: string;
-  title: string;
-  description: string;
-  text: string;
 }
 
 function compareTable(pages: StrategyPage[], link: (p: StrategyPage) => string): string {
@@ -811,6 +704,39 @@ function listNames(pages: StrategyPage[]): string {
     : (names[0] ?? '');
 }
 
+const COUNT_WORDS = [
+  'no',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+];
+function countWord(n: number, cap = false): string {
+  const w = COUNT_WORDS[n] ?? fmtInt(n);
+  return cap ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+}
+
+/** The first paragraph of the strategies index: none of the systems beats the edge, from the runs. */
+export function indexAnswer(pages: StrategyPage[]): string {
+  const byMean = [...pages].sort((a, b) => b.metrics.net.mean.value - a.metrics.net.mean.value);
+  const best = byMean[0]!;
+  const worst = byMean.at(-1)!;
+  const allLose = pages.every((p) => p.metrics.net.mean.value < 0);
+  const n = pages.every((p) => p.metrics.n === pages[0]!.metrics.n)
+    ? fmtInt(pages[0]!.metrics.n)
+    : 'thousands of';
+  const range = `from ${fmtMoney(best.metrics.net.mean.value, { sign: true })} (${best.entry.title}) to ${fmtMoney(worst.metrics.net.mean.value, { sign: true })} (${worst.entry.title}) a session`;
+  return `Are there roulette betting systems that work? None of the ${countWord(pages.length)} tested here beats the house edge. ${allLose ? `Over ${n} simulated sessions each, every system lost money on average, ${range}.` : `Over ${n} simulated sessions each, the average results ran ${range}, and the exact expected loss of every system is positive.`} The edge is a fixed cost on every dollar wagered, so a system can only change how much you bet and how the results are spread, never the cost.`;
+}
+
 function indexPage(pages: StrategyPage[]): PageOut {
   const path = STRATEGIES_PATH;
   const url = ORIGIN + path;
@@ -829,7 +755,9 @@ function indexPage(pages: StrategyPage[]): PageOut {
         `<li><h3><a href="${p.slug}/">${esc(p.entry.title)}</a></h3><p>${esc(p.data.definition.strategy.notes ?? '')}</p><p class="note">${esc(verdict(p.metrics))}</p></li>`,
     )
     .join('\n');
-  const body = `<p class="lead">Roulette betting systems promise to turn a house edge into a profit. spinner tests them the honest way: it plays each one for thousands of seeded sessions and counts what happens. Here are the saved runs from the spinner gallery, with the numbers the app computes from them.</p>
+  const answer = indexAnswer(pages);
+  const body = `<p>${esc(answer)}</p>
+<p class="lead">Roulette betting systems promise to turn a house edge into a profit. spinner tests them the honest way: it plays each one for thousands of seeded sessions and counts what happens. Here are the saved runs from the spinner gallery, with the numbers the app computes from them.</p>
 <p><a class="cta" href="../#/gallery">Open the gallery in spinner</a><a class="cta secondary" href="../#/define">Test your own system</a></p>
 <h2>The systems side by side</h2>
 ${same && pages[0] ? `<p>Every run uses the same setup: ${esc(setupLine(pages[0]))}, and the same seed, so the systems face the same spins.</p>` : ''}
@@ -840,12 +768,19 @@ ${cards}
 </ul>
 ${houseEdgeHtml(pages)}
 <h2>About these numbers</h2>
-<p>Each figure is computed by spinner’s own analysis code from the saved run file, and is the same number its Analyze screen shows. Percentages carry 95% intervals on the individual pages. To run longer sessions, a different bankroll or your own rules, open spinner and build the experiment yourself; it runs in your browser, with play money, and nothing is uploaded.</p>`;
+<p>Each figure is computed by spinner’s own analysis code from the saved run file, and is the same number its Analyze screen shows. Percentages carry 95% intervals on the individual pages. To run longer sessions, a different bankroll or your own rules, open spinner and build the experiment yourself; it runs in your browser, with play money, and nothing is uploaded.</p>
+<p>Why do recovery systems feel like they work? The <a href="${ORIGIN}${RESEARCH_PATH}">roulette strategy research</a> takes them apart chapter by chapter, from <a href="${chapterUrl('martingale')}">why doubling feels like it works</a> to <a href="${chapterUrl('cashout')}">cash-out targets</a>.</p>
+${relatedHtml([
+  { href: ORIGIN + RESEARCH_PATH, title: 'Roulette strategy research: all chapters' },
+  { href: chapterUrl('martingale'), title: 'Does the Martingale work in roulette?' },
+  { href: chapterUrl('edge'), title: 'Roulette house edge, European vs American' },
+  { href: ORIGIN + SOURCES_PATH, title: 'Sources and references' },
+])}`;
   const html = renderPage({
     path,
-    title: 'Roulette Betting Systems Tested: Simulated Results | spinner',
+    title: `Roulette Betting Systems That Work? ${countWord(pages.length, true)} Tested | spinner`,
     description,
-    h1: 'Roulette betting systems, tested by simulation',
+    h1: `Roulette betting systems that work? ${countWord(pages.length, true)} systems tested by simulation`,
     body,
     crumbs: ROOT_CRUMBS,
     graph: [
@@ -872,6 +807,7 @@ ${houseEdgeHtml(pages)}
     up: '../',
   });
   const text = [
+    answer,
     `Roulette betting systems promise to turn a house edge into a profit. spinner tests them by simulation. Setup: ${pages[0] ? setupLine(pages[0]) : ''}.`,
     compareMarkdown(pages, url),
     toText(houseEdgeHtml(pages)),
@@ -896,6 +832,7 @@ function llmsText(p: StrategyPage, plan: StakePlan, all: StrategyPage[]): string
       )
       .join('\n');
   return [
+    strategyAnswer(p),
     d.notes ?? '',
     `Verdict: ${verdict(p.metrics)}`,
     '### How the stakes move',
@@ -923,12 +860,7 @@ function llmsText(p: StrategyPage, plan: StakePlan, all: StrategyPage[]): string
 const SPA_SUMMARY =
   'spinner is a free roulette strategy lab that runs in the browser: define a betting system (flat, Martingale, Fibonacci, d’Alembert, Labouchere, James Bond or your own rules), simulate it over thousands of seeded sessions, and see the real distribution of results: average loss, bust risk, drawdowns and how the stakes behaved. Play money only, nothing is uploaded. Part of Know the Odds by creynia.';
 
-export function sitemapXml(paths: string[]): string {
-  const urls = paths.map((p) => `  <url><loc>${ORIGIN}${p}</loc></url>`).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
-}
-
-function llmsTxt(index: PageOut, pages: PageOut[]): string {
+function llmsTxt(index: PageOut, pages: PageOut[], research?: ResearchSite): string {
   return `# spinner — Roulette (betting-system strategy lab)
 
 > ${SPA_SUMMARY}
@@ -942,7 +874,20 @@ function llmsTxt(index: PageOut, pages: PageOut[]): string {
 
 - [${index.title}](${ORIGIN}${index.path}): ${index.description}
 ${pages.map((p) => `- [${p.title}](${ORIGIN}${p.path}): ${p.description}`).join('\n')}
+${
+  research
+    ? `
+## Research (what betting progressions can and cannot do)
 
+- [${research.index.title}](${ORIGIN}${research.index.path}): ${research.index.description}
+${research.chapters.map((p) => `- [${p.title}](${ORIGIN}${p.path}): ${p.description}`).join('\n')}
+
+## Sources
+
+- [${research.sources.title}](${ORIGIN}${research.sources.path}): ${research.sources.description}
+`
+    : ''
+}
 ## Know the Odds
 
 - [Know the Odds](${ORIGIN}/): creynia's casino lab, the home of all four apps
@@ -950,12 +895,12 @@ ${OTHER_APPS.map((a) => `- [${a.id}](${ORIGIN}/${a.id}/): ${a.game}`).join('\n')
 
 ## Optional
 
-- [Full text of every page](${APP_URL}llms-full.txt): the strategy pages as plain text
+- [Full text of every page](${APP_URL}llms-full.txt): the strategy, research and sources pages as plain text
 - [Source code](https://github.com/creynia/spinner): MIT licensed
 `;
 }
 
-function llmsFull(index: PageOut, pages: PageOut[]): string {
+function llmsFull(index: PageOut, pages: PageOut[], research?: ResearchSite): string {
   const part = (p: PageOut) => `## ${p.title}\n\nURL: ${ORIGIN}${p.path}\n\n${p.text}\n`;
   return `# spinner — Roulette (betting-system strategy lab)
 
@@ -963,7 +908,7 @@ function llmsFull(index: PageOut, pages: PageOut[]): string {
 
 For education only, with play money only. The house always has an edge, and no betting system changes that. If gambling is hurting you or someone you know, call or text 1-800-GAMBLER (US), or contact your national problem-gambling helpline.
 
-${[index, ...pages].map(part).join('\n')}`;
+${[index, ...pages, ...(research ? [research.index, ...research.chapters, research.sources] : [])].map(part).join('\n')}`;
 }
 
 export interface StaticSite {
@@ -980,12 +925,15 @@ export async function buildStaticSite(opts: GalleryOptions = {}): Promise<Static
   if (strategies.length > 0) {
     const index = indexPage(strategies);
     const pages = strategies.map((p, i) => strategyPage(p, i, strategies));
-    for (const p of [index, ...pages]) {
+    const research = buildResearchSite(
+      strategies.map((p) => ({ slug: p.slug, title: p.entry.title })),
+    );
+    for (const p of [index, ...pages, research.index, ...research.chapters, research.sources]) {
       files.set(p.file, p.html);
       paths.push(p.path);
     }
-    files.set('llms.txt', llmsTxt(index, pages));
-    files.set('llms-full.txt', llmsFull(index, pages));
+    files.set('llms.txt', llmsTxt(index, pages, research));
+    files.set('llms-full.txt', llmsFull(index, pages, research));
   }
   files.set('sitemap.xml', sitemapXml(paths));
   return { files, paths };

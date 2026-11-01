@@ -7,7 +7,7 @@ const root = new URL('../../', import.meta.url);
 const src = readFileSync(new URL('src/pwa/sw.ts', root), 'utf8');
 const hasDist = existsSync(new URL('dist/sw.js', root));
 /** Files written by build/static-pages.ts, which the service worker leaves to the network. */
-const STATIC = /^(strategies\/|sitemap\.xml$|llms\.txt$|llms-full\.txt$)/;
+const STATIC = /^(strategies\/|research\/|sources\/|sitemap\.xml$|llms\.txt$|llms-full\.txt$)/;
 
 describe('sw.ts source', () => {
   it('re-fetches precached files past the HTTP cache', () => {
@@ -112,6 +112,11 @@ describe('gallery fetch handling (sw.ts run against fakes)', () => {
       'http://x/spinner/strategies/',
       'http://x/spinner/strategies/martingale-red/',
       'http://x/spinner/strategies/martingale-red/index.html',
+      'http://x/spinner/research/',
+      'http://x/spinner/research/martingale/',
+      'http://x/spinner/research/edge/index.html',
+      'http://x/spinner/sources/',
+      'http://x/spinner/sources/index.html',
       'http://x/spinner/sitemap.xml',
       'http://x/spinner/llms.txt',
       'http://x/spinner/llms-full.txt',
@@ -150,7 +155,8 @@ describe.skipIf(!hasDist)('dist/sw.js', () => {
     expect(precache.some((p) => /^\.\/assets\/sim\.worker-.*\.js$/.test(p))).toBe(true);
   });
   it('does not precache the static crawler pages, sitemap or llms files', () => {
-    expect(precache.some((p) => p.startsWith('./strategies/'))).toBe(false);
+    for (const dir of ['./strategies/', './research/', './sources/'])
+      expect(precache.some((p) => p.startsWith(dir))).toBe(false);
     for (const f of ['sitemap.xml', 'llms.txt', 'llms-full.txt'])
       expect(precache).not.toContain(`./${f}`);
   });
