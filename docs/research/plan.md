@@ -974,6 +974,17 @@ the table). Selected columns, $ rounded; "(reset)" marks an `onCap: reset` row:
 | e9-fib5b2-W280-SLhalf | 14 | 0.00082 | 2.77 | $2.43 | 2025 | 0.089 | 1.65 | 0.863 | 0.868 | 2358 | $428 | $280 | 86.4 % | −$153 | −$2,999 | 0.0 / 0.0 % |
 | e9-c9-cashout-ctrl | 16 | 0.00356 | 4.47 | $14.52 | 339 | 0.329 | 1.21 | 0.671 | 0.676 | 870 | $1,574 | $286 | 90.1 % | −$53 | −$3,213 | 0.0 / 0.0 % |
 
+**Addendum (written after the main runs, before its own run).** The Martingale frontier on red is a
+staircase (P(no cap) is fixed by L), so it cannot be matched to an arbitrary P(win). A one-win dozen
+ladder (s(k+1) = ⌈1.5·s(k)⌉ on the $1 chip, fitted to $5,000) can. `specs/x-e9-frontier.json` runs it at
+a $1 and a $3 base, on the reporting seed and on holdouts 1 and 2 (added to `x-e9-holdout.json`).
+Prediction (session DP, `onCap stop`): it dominates the best slow ladders at the same bankroll.
+
+| id | L | q | E[T] | τ̄ | B | x | k | e^(−λ) | exact | n½ | median cf | DP median | DP P(win) | DP mean | DP CVaR 5 % | DP cap / bust | against |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| e9-doz-onewin-u1 | 18 | 0.00086 | 3.08 | $3.28 | 1458 | 0.111 | 1.26 | 0.870 | 0.873 | 2478 | $531 | $525 | 86.8 % | −$127 | −$4,688 | 12.7 / 0.0 % | Fibonacci $5 back 2: $415, 85.9 %, −$269, −$4,862 |
+| e9-doz-onewin-u3 | 16 | 0.00189 | 3.08 | $7.33 | 652 | 0.249 | 1.23 | 0.736 | 0.740 | 1130 | $1,172 | $1,152 | 73.7 % | −$238 | −$4,685 | 26.0 / 0.0 % | dozen ×1.36 back 4: $925, 75.4 %, −$300, −$4,677 |
+
 ## 8. Open questions
 
 - ~~**A trailing stop for widening ladders.**~~ Closed in §7.17: a1's half-ladder stop-loss never fires
