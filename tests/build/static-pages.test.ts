@@ -77,6 +77,13 @@ describe('static strategy pages', () => {
       html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, ''),
     ).not.toMatch(/<script/);
     expect(html).not.toContain('github.io');
+    // One cookieless GoatCounter pixel for the page's own path, allowed by the CSP as an image only.
+    expect(one(html, /(creynia\.goatcounter\.com\/count)/g)).toHaveLength(1);
+    expect(html).toContain(`count?p=${encodeURIComponent(path)}" alt="" width="1" height="1"`);
+    const csp = one(html, /<meta http-equiv="Content-Security-Policy" content="([^"]+)">/g);
+    expect(csp).toEqual([
+      "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https://creynia.goatcounter.com; base-uri 'none'; form-action 'none'",
+    ]);
   });
 
   it.each(strategies.map((s) => [s.slug, s] as const))(

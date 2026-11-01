@@ -28,6 +28,16 @@ describe('CSP policy text', () => {
       'https://oauth2.googleapis.com',
     ]);
   });
+  it('allows the GoatCounter count beacon as an image only (docs/analytics.md)', () => {
+    expect(directives['img-src']).toEqual([
+      "'self'",
+      'data:',
+      'blob:',
+      'https://creynia.goatcounter.com',
+    ]);
+    for (const d of ['script-src', 'connect-src', 'frame-src', 'style-src', 'default-src'])
+      expect(directives[d]!.join(' ')).not.toContain('goatcounter');
+  });
   it('locks everything else down', () => {
     expect(directives['default-src']).toEqual(["'self'"]);
     expect(directives['object-src']).toEqual(["'none'"]);

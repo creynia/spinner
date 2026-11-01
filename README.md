@@ -42,6 +42,8 @@ Sync is optional. Everything stays in your browser unless you sign in with Googl
 
 The data is not end-to-end encrypted: it is readable by you and by Google. Signing out keeps your local data. The design is in [`docs/design/sync.md`](docs/design/sync.md) (§10).
 
+The site counts anonymous, cookieless page views with GoatCounter (route patterns only, never your runs, strategies or any identifier; no tracking across sites; off with Do Not Track or Global Privacy Control); see [`docs/analytics.md`](docs/analytics.md).
+
 ## Develop
 
 Requires Node >= 22.12 (see `.nvmrc`).

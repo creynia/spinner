@@ -1,9 +1,10 @@
 import type { Plugin } from 'vite';
 
 /**
- * The production Content-Security-Policy (docs/design/sync.md §5.5). Only Google Identity
- * Services and the Drive/OAuth endpoints are reachable besides 'self'. `frame-ancestors` cannot be
- * set in a meta tag, so it is not here.
+ * The production Content-Security-Policy (docs/design/sync.md §5.5). Scripts, frames and
+ * connections reach only 'self', Google Identity Services and the Drive/OAuth endpoints. The one
+ * other host is the GoatCounter count beacon, an image request allowed in `img-src` only
+ * (docs/analytics.md). `frame-ancestors` cannot be set in a meta tag, so it is not here.
  */
 export const CSP = [
   "default-src 'self'",
@@ -11,7 +12,7 @@ export const CSP = [
   "connect-src 'self' https://www.googleapis.com https://accounts.google.com/gsi/ https://oauth2.googleapis.com",
   'frame-src https://accounts.google.com/gsi/',
   "style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://creynia.goatcounter.com",
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",
