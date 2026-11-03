@@ -162,7 +162,14 @@ export function Play({ query }: ScreenProps) {
         }
         return;
       }
-      if (e.key === ' ' || e.key === 'Enter') {
+      if (e.key === ' ') {
+        // Space always spins, even with a board cell focused after a tap (otherwise it would
+        // re-place chips there). Captured so the focused control never sees it; Enter still
+        // activates the focused control for keyboard placement.
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.repeat) k.doSpin();
+      } else if (e.key === 'Enter') {
         const t = e.target as HTMLElement | null;
         // A focused control does its own thing (the Spin button spins by itself).
         if (t && t !== document.body && t.closest?.(INTERACTIVE)) return;
@@ -177,8 +184,8 @@ export function Play({ query }: ScreenProps) {
         if (d !== undefined) k.setDenom(d);
       }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
   }, []);
 
   // Layouts for the sheet. `#/play?layout=<id>` opens it with that layout selected.
@@ -422,7 +429,8 @@ export function Play({ query }: ScreenProps) {
             Place a layout
           </Button>
           <p class="muted play-keys">
-            Keys: Space or Enter spin · R rebet · D double · U or Ctrl+Z undo · C clear · 1–
+            Keys: Space spins (Enter too, off the board) · R rebet · D double · U or Ctrl+Z undo · C
+            clear · 1–
             {DENOMS.length} chip
           </p>
         </div>
