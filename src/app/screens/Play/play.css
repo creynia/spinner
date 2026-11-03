@@ -1,0 +1,352 @@
+/* Play mode (#/play). Tokens only, plus the fixed pocket colours of the roulette UI. */
+.play {
+  --play-red: #b3261e;
+  --play-black: #1a1a1a;
+  --play-green: #1b6b45;
+  --play-good: #1b7a43;
+  --play-bad: var(--danger);
+  min-width: 0;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .play {
+    --play-red: #c9372c;
+    --play-good: #7fd1a8;
+  }
+}
+:root[data-theme='dark'] .play {
+  --play-red: #c9372c;
+  --play-good: #7fd1a8;
+}
+.play-tone-good {
+  color: var(--play-good);
+}
+.play-tone-bad {
+  color: var(--play-bad);
+}
+.play-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.play-top h1 {
+  margin: 0;
+}
+.play-top-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* ---- header strip */
+.play-head {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin: 8px 0 12px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.play-head > div {
+  min-width: 0;
+  text-align: center;
+}
+.play-head dt {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.play-head dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* ---- result */
+.play-result {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.play-pocket {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid #e9e4d0;
+  color: #fff;
+  line-height: 1.05;
+  animation: play-reveal 320ms ease-out;
+}
+.play-pocket--none {
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--border);
+  font-size: 1.5rem;
+  animation: none;
+}
+.play-pocket--red {
+  background: var(--play-red);
+}
+.play-pocket--black {
+  background: var(--play-black);
+}
+.play-pocket--green {
+  background: var(--play-green);
+}
+.play-pocket-n {
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.play-pocket-c {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+@keyframes play-reveal {
+  0% {
+    transform: rotate(-200deg) scale(0.6);
+    opacity: 0.3;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+.play-result-net {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.play-recent {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 2px;
+  list-style: none;
+  overflow-x: auto;
+}
+.play-dot {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 4px;
+  border-radius: 14px;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.play-dot--red {
+  background: var(--play-red);
+}
+.play-dot--black {
+  background: var(--play-black);
+}
+.play-dot--green {
+  background: var(--play-green);
+}
+
+/* ---- table */
+.play-table {
+  padding: 8px;
+}
+.play-table-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+.play-board {
+  min-width: 0;
+}
+.play-board.is-off {
+  opacity: 0.5;
+}
+.play-table .chip-rack {
+  margin-top: 8px;
+}
+.play-prison {
+  margin: 8px 0 0;
+  color: var(--amber);
+  font-size: 0.9rem;
+}
+
+/* ---- action bar: sticks above the phone tab bar */
+.play-bar {
+  position: sticky;
+  bottom: calc(52px + env(safe-area-inset-bottom));
+  z-index: 5;
+  margin: 12px 0;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 -2px 10px rgb(0 0 0 / 0.12);
+}
+@media (min-width: 768px) {
+  .play-bar {
+    bottom: 8px;
+  }
+}
+.play-problem {
+  margin: 0 0 8px;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+.play-bar-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.6fr);
+  gap: 6px;
+}
+.play-act {
+  min-height: 52px;
+  padding: 0 6px;
+  font-size: 0.95rem;
+}
+.play-spin {
+  font-size: 1.05rem;
+}
+
+/* ---- stats */
+.play-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.play-side-head h2 {
+  margin: 0;
+}
+.play-stats-body.is-closed {
+  display: none;
+}
+.play-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 8px 0;
+}
+.play-stat {
+  min-width: 0;
+}
+.play-stat dt {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.play-stat dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.play-curve .sp-spark,
+.play-curve svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.play-sub {
+  margin: 12px 0 6px;
+  font-size: 1rem;
+}
+.play-log {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+.play-log th,
+.play-log td {
+  padding: 4px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+.play-log th:nth-child(2),
+.play-log td:nth-child(2) {
+  text-align: center;
+}
+.play-log .play-dot {
+  min-width: 24px;
+  height: 22px;
+}
+
+/* ---- sheets */
+.play-form {
+  margin-bottom: 16px;
+}
+.play-field-label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.play-menu {
+  display: grid;
+  gap: 8px;
+}
+.play-keys {
+  font-size: 0.85rem;
+}
+.play-layouts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.play-layout-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.play-history-row {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---- wide: stats in a side column */
+@media (min-width: 1024px) {
+  .play-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .play-side {
+    position: sticky;
+    top: 8px;
+  }
+  .play-stats-toggle {
+    display: none;
+  }
+  .play-stats-body.is-closed {
+    display: block;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .play-pocket {
+    animation: none;
+  }
+}

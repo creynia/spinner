@@ -75,7 +75,7 @@ export function useRoute(): ParsedHash & { hash: string } {
 
 // ---- Back navigation (architecture.md §6.1) ---------------------------------------------------
 
-const TAB_ROOTS = new Set(['/', '/define', '/library', '/more']);
+const TAB_ROOTS = new Set(['/', '/define', '/play', '/library', '/more']);
 
 /** Explicit parent of a non-tab route, or null on a tab root (no Back button there). */
 export function parentOf(path: string): string | null {

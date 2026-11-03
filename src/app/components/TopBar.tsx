@@ -15,6 +15,7 @@ const TITLES: Record<string, string> = {
   watch: 'Watch',
   compare: 'Compare',
   sweep: 'Sweep',
+  play: 'Play',
   library: 'Library',
   gallery: 'Gallery',
   import: 'Import',

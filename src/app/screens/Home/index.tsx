@@ -70,6 +70,7 @@ export function Home() {
         <Button variant="primary" href={href('/define')}>
           New experiment
         </Button>
+        <Button href={href('/play')}>Play a session</Button>
         <Button href={href('/import')}>Import</Button>
       </div>
 

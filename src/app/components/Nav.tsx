@@ -38,6 +38,14 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: svg('M4 20h4L19 9l-4-4L4 16v4zM13 7l4 4'),
   },
   {
+    href: '#/play',
+    path: '/play',
+    label: 'Play',
+    icon: svg(
+      'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8zM12 3v5M12 16v5M3 12h5M16 12h5',
+    ),
+  },
+  {
     href: '#/library',
     path: '/library',
     label: 'Library',

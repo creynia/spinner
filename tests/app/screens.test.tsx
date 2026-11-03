@@ -24,6 +24,7 @@ const addresses: [hash: string, pattern: string][] = [
   ['#/watch/r1/4?round=2', '/watch/:runId/:index'],
   ['#/compare?runs=a,b', '/compare'],
   ['#/sweep/g1', '/sweep/:groupId'],
+  ['#/play', '/play'],
   ['#/library?tab=runs', '/library'],
   ['#/gallery', '/gallery'],
   ['#/gallery/b1', '/gallery/:bundleId'],
@@ -66,12 +67,13 @@ describe('the app shell', () => {
     expect(container.querySelectorAll('h1')).toHaveLength(1);
     expect(container.querySelector('main a[href="#/"]')).not.toBeNull();
   });
-  it('has both navigations with the four primary destinations', () => {
+  it('has both navigations with the five primary destinations', () => {
     const { container } = render(<App />);
     for (const nav of container.querySelectorAll('nav')) {
       expect([...nav.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual([
         '#/',
         '#/define',
+        '#/play',
         '#/library',
         '#/more',
       ]);
