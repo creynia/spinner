@@ -16,9 +16,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { rouletteEnv, type RouletteEnv } from './env';
 import {
   DEFAULT_BANKROLL,
+  HISTORY_KEY,
+  SESSION_KEY,
   loadHistory,
   loadSession,
   saveHistory,
+  parseHistory,
+  parseSession,
   saveSession,
   summarize,
   withSummary,
@@ -68,6 +72,24 @@ export function usePlaySession(): PlayController {
   const env = useMemo(() => rouletteEnv(session.variant), [session.variant]);
 
   useEffect(() => saveSession(session), [session]);
+
+  // Another tab changed the saved session or history: adopt the newer session (by `updatedAt`;
+  // an invalid or removed value is ignored) and the new history list.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === SESSION_KEY) {
+        const incoming = parseSession(e.newValue);
+        if (incoming && incoming.updatedAt > ref.current.updatedAt) {
+          ref.current = incoming;
+          setSession(incoming);
+        }
+      } else if (e.key === HISTORY_KEY) {
+        setHistory(parseHistory(e.newValue));
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const commit = useCallback((s: PlaySession) => {
     ref.current = s;

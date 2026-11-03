@@ -50,12 +50,20 @@ function isSession(x: unknown): x is PlaySession {
   );
 }
 
-export function loadSession(): PlaySession | null {
+/** A stored session from its JSON text; null when absent, malformed or not a session. */
+export function parseSession(raw: string | null): PlaySession | null {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
     const x: unknown = JSON.parse(raw);
     return isSession(x) ? x : null;
+  } catch {
+    return null;
+  }
+}
+
+export function loadSession(): PlaySession | null {
+  try {
+    return parseSession(localStorage.getItem(SESSION_KEY));
   } catch {
     return null;
   }
@@ -70,9 +78,9 @@ export function saveSession(s: PlaySession | null): void {
   }
 }
 
-export function loadHistory(): SessionSummary[] {
+/** The stored history list from its JSON text (empty when absent or malformed). */
+export function parseHistory(raw: string | null): SessionSummary[] {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
     const x: unknown = raw ? JSON.parse(raw) : [];
     return Array.isArray(x)
       ? x.filter(
@@ -80,6 +88,14 @@ export function loadHistory(): SessionSummary[] {
             !!h && typeof h === 'object' && typeof (h as SessionSummary).id === 'string',
         )
       : [];
+  } catch {
+    return [];
+  }
+}
+
+export function loadHistory(): SessionSummary[] {
+  try {
+    return parseHistory(localStorage.getItem(HISTORY_KEY));
   } catch {
     return [];
   }

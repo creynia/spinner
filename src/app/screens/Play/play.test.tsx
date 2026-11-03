@@ -1,9 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { act } from 'preact/test-utils';
 import { createMemoryBackend } from '@core';
 import { BUILTIN_LAYOUTS } from '@game/roulette';
 import { createBackendRepo, setRepoForTests } from '../../services/db';
 import { createSession, type PlayResult, type PlaySession } from '@core/play';
+import { createLayout } from '../../services/layouts';
 import { rouletteEnv } from './env';
 import { Play } from './index';
 import {
@@ -12,6 +14,7 @@ import {
   adjustBet,
   loadHistory,
   loadSession,
+  parseSession,
   saveSession,
   spotsOfBets,
 } from './store';
@@ -187,5 +190,61 @@ describe('Play screen', () => {
     fireEvent.click(button(/^New session \(/));
     expect(stored().endedAt).toBeUndefined();
     expect(stored().stats.spins).toBe(0);
+  });
+
+  it('explains a linked layout from another wheel and starts a session on that wheel', async () => {
+    setRepoForTests(createBackendRepo(createMemoryBackend()));
+    try {
+      const rec = await createLayout({
+        name: 'Double zero special',
+        variant: 'american',
+        spots: [{ bet: 'straight:00', chips: 1 }],
+      });
+      saveSession(seeded());
+      render(<Play params={{}} query={q(`layout=${rec.id}`)} />);
+      const note = await waitFor(() =>
+        screen.getByText(
+          /Double zero special was drawn for the American wheel; this session is European/,
+        ),
+      );
+      expect(note).toBeTruthy();
+      fireEvent.click(button('Start a American session'));
+      expect(stored().variant).toBe('american');
+      await waitFor(() => {
+        expect(screen.queryByText(/was drawn for the/)).toBeNull();
+        expect(screen.getByRole('dialog').textContent).toContain('Double zero special');
+      });
+    } finally {
+      setRepoForTests(null);
+    }
+  });
+
+  it('offers a rebuy when the cash is below the table minimum', () => {
+    const base = seeded();
+    saveSession({ ...base, bankroll: 1000 });
+    render(<Play params={{}} query={q()} />);
+    expect(screen.getByRole('heading', { name: 'Not enough to bet' })).toBeTruthy();
+    expect((button('Spin') as HTMLButtonElement).title).toBe('Not enough to bet');
+    expect(button(/^Rebuy/)).toBeTruthy();
+    expect(button('New session')).toBeTruthy();
+  });
+
+  it('adopts a newer session saved by another tab', async () => {
+    const base = seeded();
+    saveSession(base);
+    render(<Play params={{}} query={q()} />);
+    const newer = { ...base, bankroll: 4200, updatedAt: '2999-01-01T00:00:00.000Z' };
+    const bankroll = () => screen.getByText('Bankroll').nextElementSibling!.textContent;
+    const fire = async (value: string | null) =>
+      act(() => {
+        window.dispatchEvent(new StorageEvent('storage', { key: SESSION_KEY, newValue: value }));
+      });
+    await fire('garbage');
+    expect(parseSession('garbage')).toBeNull();
+    expect(bankroll()).toBe('$1,000');
+    await fire(JSON.stringify({ ...newer, updatedAt: '2000-01-01T00:00:00.000Z' }));
+    expect(bankroll()).toBe('$1,000');
+    await fire(JSON.stringify(newer));
+    expect(bankroll()).toBe('$42');
   });
 });

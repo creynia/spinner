@@ -18,14 +18,23 @@ import {
   type PlayResult,
   type PlaySession,
 } from '@core/play';
-import { Button, Card, ChipRack, PlaceLayoutSheet, Segmented, Sheet, showToast } from '@core/ui';
+import {
+  Button,
+  Card,
+  ChipRack,
+  PlaceLayoutSheet,
+  Segmented,
+  Sheet,
+  layoutMisfit,
+  showToast,
+} from '@core/ui';
 import type { LayoutChoice } from '@core/ui';
 import { rouletteUi } from '@game/roulette/ui';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { navigate } from '../../router';
 import { layoutChoices, variantLabel } from '../../services/layouts';
 import type { ScreenProps } from '../types';
-import type { RouletteEnv } from './env';
+import { isVariant, type RouletteEnv } from './env';
 import { ResultPanel, pocketOf, resultText } from './ResultPanel';
 import { SaveLayoutSheet } from './SaveLayoutSheet';
 import { SessionSheet } from './SessionSheet';
@@ -97,7 +106,10 @@ export function Play({ query }: ScreenProps) {
   );
   const prison = carriedBets(s);
   const ended = !!s.endedAt;
-  const busted = !ended && equityOf(s) <= 0;
+  const equity = equityOf(s);
+  // The smallest stake the table takes at all; below it (with nothing on the felt) play is stuck.
+  const minStake = Math.min(rules.limits.outside.min, rules.limits.inside.minTotal);
+  const busted = !ended && onTableOf(s) === 0 && cashOf(s) < minStake;
   const hasBets = s.bets.length > 0;
   const rebetSpin = !hasBets && s.lastBets.length > 0;
   const lastTotal = betsTotal(s.lastBets);
@@ -205,6 +217,17 @@ export function Play({ query }: ScreenProps) {
       live = false;
     };
   }, [sheet]);
+  const [noticeSeen, setNoticeSeen] = useState(false);
+  const linkedChoice =
+    initialId !== undefined ? layouts.find((c) => c.layout.id === initialId) : undefined;
+  const linkedMisfit =
+    linkedChoice && linkedChoice.layout.game === env.plugin.id
+      ? layoutMisfit(env.plugin, rules, linkedChoice, DENOMS[0] ?? 100)
+      : null;
+  const wrongWheel =
+    !noticeSeen && linkedChoice && linkedMisfit && isVariant(linkedChoice.layout.variant)
+      ? linkedChoice.layout
+      : null;
   const closeSheet = () => {
     setSheet(null);
     if (initialId !== undefined) {
@@ -222,7 +245,9 @@ export function Play({ query }: ScreenProps) {
   const spinBlocked = ended
     ? 'Session ended'
     : busted && !hasBets
-      ? 'Out of money'
+      ? equity > 0
+        ? 'Not enough to bet'
+        : 'Out of money'
       : (problems[0]?.message ?? null);
 
   return (
@@ -287,8 +312,12 @@ export function Play({ query }: ScreenProps) {
               </div>
             </Card>
           ) : busted ? (
-            <Card title="Out of money" class="play-summary">
-              <p>The bankroll is gone. Rebuy to keep playing, or start over.</p>
+            <Card title={equity > 0 ? 'Not enough to bet' : 'Out of money'} class="play-summary">
+              <p>
+                {equity > 0
+                  ? `${formatMoney(cashOf(s))} is below the table minimum of ${formatMoney(minStake)}. Rebuy to keep playing, or start over.`
+                  : 'The bankroll is gone. Rebuy to keep playing, or start over.'}
+              </p>
               <div class="actions">
                 <Button variant="primary" onClick={() => ctl.topUp(s.startBankroll)}>
                   Rebuy {formatMoney(s.startBankroll)}
@@ -452,7 +481,30 @@ export function Play({ query }: ScreenProps) {
         bets={s.bets}
         variant={s.variant}
       />
-      {sheet === 'layouts' ? (
+      {sheet === 'layouts' && wrongWheel ? (
+        <Sheet open title="Layout for another wheel" onClose={closeSheet}>
+          <div class="play-menu">
+            <p role="status">
+              {wrongWheel.name} was drawn for the {variantLabel(wrongWheel.variant)} wheel; this
+              session is {variantLabel(s.variant)}.
+            </p>
+            <Button
+              variant="primary"
+              onClick={() =>
+                ctl.start({
+                  variant: wrongWheel.variant,
+                  bankroll: s.startBankroll,
+                  rng: { kind: 'crypto' },
+                })
+              }
+            >
+              Start a {variantLabel(wrongWheel.variant)} session
+            </Button>
+            <Button onClick={() => setNoticeSeen(true)}>Choose another layout</Button>
+          </div>
+        </Sheet>
+      ) : null}
+      {sheet === 'layouts' && !wrongWheel ? (
         <PlaceLayoutSheet
           open
           onClose={closeSheet}
