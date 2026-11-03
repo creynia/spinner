@@ -29,6 +29,8 @@ test.describe('S6 desktop controls', () => {
       expect(bar.right, where).toBeLessThanOrEqual(side.left);
       expect(bar.top, where).toBeGreaterThanOrEqual(table.bottom - 1);
       expect(bar.top - table.bottom, where).toBeLessThanOrEqual(24);
+      // The whole bar is on screen without scrolling, next to the board.
+      expect(bar.bottom, where).toBeLessThanOrEqual(size.height);
 
       // A session: $25 on Red, then Rebet + Space, with the Stats panel visible.
       await page.getByRole('radio', { name: /25/ }).first().click();

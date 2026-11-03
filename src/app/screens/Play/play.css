@@ -541,15 +541,23 @@
   .play-bar {
     margin-top: 12px;
   }
-  /* Fixed-height result panel: the pocket row and one reserved strip row exist from the first
-     render, so neither the first spin nor a growing log moves anything below it. */
+  /* Fixed-height result panel on one row (pocket, text, recent strip), like the phone layout:
+     nothing below it moves on the first spin or as the log grows, and no height is spent on a
+     second row. */
   .play-result {
-    height: 108px;
-    grid-template-rows: 72px 28px;
-    align-content: start;
-    align-items: center;
+    height: 72px;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 0 16px;
+  }
+  .play-result--empty p {
+    grid-column: 2 / -1;
+    margin: 0;
+  }
+  .play-result-text {
+    white-space: nowrap;
   }
   .play-recent {
+    grid-column: auto;
     flex-wrap: wrap; /* one visible row; dots that do not fit wrap out of sight */
     height: 28px;
     overflow: hidden;
