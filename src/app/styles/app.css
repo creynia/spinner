@@ -1,5 +1,8 @@
 @import '../../core/ui/kit/kit.css';
 /* App shell layout (architecture.md §6.1): TopBar + bottom TabBar under 768px, NavRail from 768px. */
+html {
+  --tabbar-h: 57px; /* 44px link + 12px padding + 1px border */
+}
 *,
 *::before,
 *::after {
@@ -8,11 +11,13 @@
 html,
 body {
   margin: 0;
+  touch-action: manipulation; /* no double-tap zoom; pan and pinch stay */
   background: var(--bg);
   color: var(--text);
 }
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
@@ -27,6 +32,7 @@ a {
 .shell {
   display: grid;
   min-height: 100vh;
+  min-height: 100dvh;
   grid-template-rows: auto 1fr auto;
   padding-top: env(safe-area-inset-top);
 }
@@ -217,6 +223,7 @@ a {
   left: 0;
   right: 0;
   bottom: 0;
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
