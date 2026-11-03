@@ -29,6 +29,7 @@ Specs loop over these with `page.setViewportSize` inside the `phone` project (an
 | S3 | `zoom-guards.spec.ts` | Viewport meta is `width=device-width, initial-scale=1`; every interactive element in the Play screen (buttons, board cells, chip radios, segmented controls) computes `touch-action: manipulation` (no double-tap zoom on fast repeated taps); every text input/select in Play sheets is ≥16px (no focus zoom); nothing in Play is wider than the viewport. |
 | S4 | `long-session.spec.ts` | A 1,000-spin session (built by the real core with a seeded RNG and written to `spinner:play:session`) plus extreme numbers (bankroll $9,999,999, net −$123,456): header, result strip, stats panel (opened), last-spins log and history list stay inside the viewport width; the page height stays bounded (log/strip capped); S1's fit still holds. |
 | S5 | `sheets.spec.ts` | On phone sizes, the Layouts, More, Session and Save-as-layout sheets fit the viewport and scroll internally; closing each restores the previous `scrollY` and the bar position; landscape 844×390: Spin, Rebet and ×2 are reachable without page zoom. |
+| S6 | `desktop-controls.spec.ts` | Desktop (≥1024px, run in the `desktop` project at 1280×800 and 1440×900): the action bar (Undo, Clear, Rebet, ×2, Spin) sits **directly under the board, inside the left column, left of the Stats panel** (its left/right edges within the board column, its top within 24px of the board/chip-rack bottom). After 300 spins (the last-spins log in Stats grows), the action bar's rect is unchanged (±1px) and it never moves to the bottom of the screen. Written by the first fix-baton holder (added after the writers started). |
 | R | existing suites | `npm run check` and the whole Playwright suite (all four projects) stay green; Play is axe-clean on phone. |
 
 ## Fix expectations (what the fixers aim at)
@@ -37,6 +38,7 @@ Specs loop over these with `page.setViewportSize` inside the `phone` project (an
 - Spinning never moves the page: results replace content of fixed size; no focus or scroll jumps; toasts do not shift layout.
 - `touch-action: manipulation` across the Play screen; inputs ≥16px.
 - Nothing grows with session length beyond fixed caps.
+- **Desktop (user report):** the action bar must not sit after the whole two-column grid (the growing Stats log pushes it down). Put it in the board column right under the board and chip rack, to the left of Stats, static (not sticky to the viewport bottom on desktop). Phone keeps the docked bottom layout.
 
 ## Batons (who may edit what)
 
