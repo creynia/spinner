@@ -21,3 +21,4 @@ export * from './harness';
 export * from './store';
 export * from './analysis';
 export * from './sync';
+export * from './play';
