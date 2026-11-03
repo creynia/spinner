@@ -14,8 +14,16 @@ async function badTouchAction(page: Page, root: string): Promise<string[]> {
     ([rootSel, sel]) => {
       const out: string[] = [];
       for (const el of document.querySelectorAll(`${rootSel} :is(${sel}), ${rootSel}:is(${sel})`)) {
-        const ta = getComputedStyle(el).touchAction;
-        // `none` and `pan-*` also disable double-tap zoom only if they exclude it; accept manipulation/none.
+        // The effective touch-action is the intersection along the ancestor chain, so a parent that
+        // sets manipulation also covers its children (e.g. SVG cells inside the board).
+        let ta = 'auto';
+        for (let p: Element | null = el; p; p = p.parentElement) {
+          const v = getComputedStyle(p).touchAction;
+          if (v === 'manipulation' || v === 'none') {
+            ta = v;
+            break;
+          }
+        }
         if (ta !== 'manipulation' && ta !== 'none') {
           const label = (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 20);
           out.push(
@@ -62,11 +70,12 @@ async function tooWide(page: Page, root: string, vw: number): Promise<string[]> 
       }
       return out.slice(0, 8);
     },
-    [root, vw] as [string, number],
+    [root, vw],
   );
 }
 
-test.beforeEach(async ({}, testInfo) => {
+test.beforeEach(({ browserName }, testInfo) => {
+  void browserName;
   test.skip(testInfo.project.name !== 'phone', 'portrait phone sizes loop inside');
 });
 
@@ -127,9 +136,9 @@ for (const vp of VIEWPORTS) {
           await trigger.click();
         }
         await page.locator('.sheet').waitFor();
-        expect(await badTouchAction(page, '.sheet')).toEqual([]);
-        expect(await smallFields(page, '.sheet')).toEqual([]);
-        expect(await tooWide(page, '.sheet', vp.width)).toEqual([]);
+        expect.soft(await badTouchAction(page, '.sheet')).toEqual([]);
+        expect.soft(await smallFields(page, '.sheet')).toEqual([]);
+        expect.soft(await tooWide(page, '.sheet', vp.width)).toEqual([]);
       });
     }
   });

@@ -363,7 +363,14 @@ export function Board(props: BoardProps) {
       ref={svgRef}
       class={`rl-board rl-board--${orientation}${place ? ' rl-board--place' : ''}`}
       viewBox={`${board.view.x} ${board.view.y} ${board.view.w} ${board.view.h}`}
-      style={place ? { aspectRatio: `${board.view.w} / ${board.view.h}` } : undefined}
+      style={
+        place
+          ? {
+              aspectRatio: `${board.view.w} / ${board.view.h}`,
+              '--rl-ar': String(board.view.w / board.view.h),
+            }
+          : undefined
+      }
       role={pick || place ? 'group' : 'img'}
       aria-label={props.label}
       data-orientation={orientation}

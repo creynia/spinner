@@ -254,14 +254,6 @@ export function Play({ query }: ScreenProps) {
     <div class="play">
       <div class="play-top">
         <h1>Play</h1>
-        <div class="play-top-actions">
-          <Button variant="ghost" onClick={() => setSheet('layouts')} disabled={ended}>
-            Layouts
-          </Button>
-          <Button variant="ghost" onClick={() => setSheet('menu')} aria-label="More play actions">
-            More
-          </Button>
-        </div>
       </div>
 
       <dl class="play-head" aria-label="Session">
@@ -328,11 +320,16 @@ export function Play({ query }: ScreenProps) {
           ) : null}
 
           <section class="card play-table" aria-label="Table">
+            <p
+              class={problems.length > 0 && !ended ? 'play-note play-problem' : 'play-note muted'}
+              role={problems.length > 0 && !ended ? 'alert' : undefined}
+              title={problems.length > 0 && !ended ? problems[0]!.message : undefined}
+            >
+              {problems.length > 0 && !ended
+                ? `${problems[0]!.message}${problems.length > 1 ? ` (+${problems.length - 1} more)` : ''}`
+                : `${variantLabel(s.variant)} · min outside ${formatMoney(rules.limits.outside.min)} · inside ${formatMoney(rules.limits.inside.minTotal)}`}
+            </p>
             <div class="play-table-head">
-              <span class="muted">
-                {variantLabel(s.variant)} · min outside {formatMoney(rules.limits.outside.min)} ·
-                inside {formatMoney(rules.limits.inside.minTotal)}
-              </span>
               <Segmented
                 label="Tap to"
                 value={tool}
@@ -342,6 +339,18 @@ export function Play({ query }: ScreenProps) {
                 ]}
                 onChange={setTool}
               />
+              <div class="play-top-actions">
+                <Button variant="ghost" onClick={() => setSheet('layouts')} disabled={ended}>
+                  Layouts
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setSheet('menu')}
+                  aria-label="More play actions"
+                >
+                  More
+                </Button>
+              </div>
             </div>
             <div class={ended ? 'play-board is-off' : 'play-board'} inert={ended}>
               <chipsUi.ChipBoard
@@ -364,6 +373,61 @@ export function Play({ query }: ScreenProps) {
             ) : null}
             <ChipRack denominations={DENOMS} value={denom} onChange={setDenom} label="Chip" />
           </section>
+
+          <div class="play-bar" role="toolbar" aria-label="Bet actions">
+            <div class="play-bar-row">
+              <button
+                type="button"
+                class="btn play-act"
+                onClick={doUndo}
+                disabled={ended || s.undo.length === 0}
+                aria-keyshortcuts="U Control+Z"
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                class="btn play-act"
+                onClick={doClear}
+                disabled={ended || !hasBets}
+                aria-keyshortcuts="C"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                class="btn play-act"
+                onClick={doRebet}
+                disabled={ended || s.lastBets.length === 0}
+                aria-keyshortcuts="R"
+                aria-label={
+                  s.lastBets.length ? `Rebet ${formatMoney(lastTotal)}` : 'Rebet, no previous bets'
+                }
+              >
+                Rebet
+              </button>
+              <button
+                type="button"
+                class="btn play-act"
+                onClick={doDouble}
+                disabled={ended || (!hasBets && s.lastBets.length === 0)}
+                aria-keyshortcuts="D"
+                aria-label="Double bets"
+              >
+                ×2
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary play-act play-spin"
+                onClick={doSpin}
+                disabled={spinBlocked !== null}
+                aria-keyshortcuts="Space Enter"
+                title={spinBlocked ?? undefined}
+              >
+                {spinLabel}
+              </button>
+            </div>
+          </div>
         </div>
 
         <aside class="card play-side" aria-labelledby="play-stats-h">
@@ -386,67 +450,6 @@ export function Play({ query }: ScreenProps) {
             <StatsPanel session={s} />
           </div>
         </aside>
-      </div>
-
-      <div class="play-bar" role="toolbar" aria-label="Bet actions">
-        {problems.length > 0 && !ended ? (
-          <p class="play-problem" role="alert">
-            {problems[0]!.message}
-            {problems.length > 1 ? ` (+${problems.length - 1} more)` : ''}
-          </p>
-        ) : null}
-        <div class="play-bar-row">
-          <button
-            type="button"
-            class="btn play-act"
-            onClick={doUndo}
-            disabled={ended || s.undo.length === 0}
-            aria-keyshortcuts="U Control+Z"
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            class="btn play-act"
-            onClick={doClear}
-            disabled={ended || !hasBets}
-            aria-keyshortcuts="C"
-          >
-            Clear
-          </button>
-          <button
-            type="button"
-            class="btn play-act"
-            onClick={doRebet}
-            disabled={ended || s.lastBets.length === 0}
-            aria-keyshortcuts="R"
-            aria-label={
-              s.lastBets.length ? `Rebet ${formatMoney(lastTotal)}` : 'Rebet, no previous bets'
-            }
-          >
-            Rebet
-          </button>
-          <button
-            type="button"
-            class="btn play-act"
-            onClick={doDouble}
-            disabled={ended || (!hasBets && s.lastBets.length === 0)}
-            aria-keyshortcuts="D"
-            aria-label="Double bets"
-          >
-            ×2
-          </button>
-          <button
-            type="button"
-            class="btn btn-primary play-act play-spin"
-            onClick={doSpin}
-            disabled={spinBlocked !== null}
-            aria-keyshortcuts="Space Enter"
-            title={spinBlocked ?? undefined}
-          >
-            {spinLabel}
-          </button>
-        </div>
       </div>
 
       <Sheet open={sheet === 'menu'} title="Play" onClose={closeSheet}>

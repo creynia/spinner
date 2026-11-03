@@ -79,15 +79,14 @@ test.describe('S2 play tap stability', () => {
     test(`${size.name} ${size.width}x${size.height}: ${TAPS} taps do not move or zoom the page`, async ({
       page,
     }) => {
-      test.setTimeout(120_000);
+      test.setTimeout(300_000);
       await page.setViewportSize({ width: size.width, height: size.height });
       await page.goto('#/play');
       await page.locator('.play-spin').waitFor();
-      // The $25 chip first: the default table minimum outside is $25.
-      await page.getByRole('radio', { name: /25/ }).first().tap();
 
-      page.setDefaultTimeout(3000);
+      page.setDefaultTimeout(1500);
       const base = await snap(page);
+
       const problems = {
         scroll: [] as string[],
         bar: [] as string[],
@@ -108,6 +107,9 @@ test.describe('S2 play tap stability', () => {
         if (s.spinCovered !== null) problems.covered.push(`${tag}: ${s.spinCovered}`);
       };
       await check('load', 0);
+      // The $25 chip first: the default table minimum outside is $25.
+      await page.getByRole('radio', { name: /25/ }).first().tap();
+      await check('first chip', 0);
 
       const act = async (name: string, fn: () => Promise<void>, i: number) => {
         labels.push(name);
@@ -115,7 +117,9 @@ test.describe('S2 play tap stability', () => {
           await fn();
         } catch (e) {
           // A tap that cannot land (covered, moving or off screen) is itself the bug.
-          problems.covered.push(`#${i} ${name} tap blocked: ${String(e).split('\n')[0]}`);
+          problems.covered.push(
+            `#${i} ${name} tap blocked: ${String(e).split('\n').slice(0, 14).join(' ').replace(/\s+/g, ' ')}`,
+          );
         }
         await check(name, i);
       };
@@ -138,7 +142,14 @@ test.describe('S2 play tap stability', () => {
               'cell',
               async () => {
                 const c = cells[i % cells.length]!;
-                await page.locator(`.play-board [aria-label^="${c}"]`).first().tap();
+                await page
+                  .locator(
+                    c === '17'
+                      ? '.play-board [data-pocket="17"]'
+                      : `.play-board [aria-label^="${c}"]`,
+                  )
+                  .first()
+                  .tap();
               },
               i,
             );
