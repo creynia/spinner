@@ -541,4 +541,18 @@
   .play-bar {
     margin-top: 12px;
   }
+  /* Fixed-height result panel: the pocket row and one reserved strip row exist from the first
+     render, so neither the first spin nor a growing log moves anything below it. */
+  .play-result {
+    height: 108px;
+    grid-template-rows: 72px 28px;
+    align-content: start;
+    align-items: center;
+  }
+  .play-recent {
+    flex-wrap: wrap; /* one visible row; dots that do not fit wrap out of sight */
+    height: 28px;
+    overflow: hidden;
+    padding: 0;
+  }
 }
