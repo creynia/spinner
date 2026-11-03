@@ -54,6 +54,8 @@ type Tab = 'table' | 'calls' | 'type';
 export interface ChipSteps {
   chips(bet: string): number;
   onAdjust(bet: string, delta: number): void;
+  /** The most chips one spot may hold (`ChipBoardProps.maxChips`); default `MAX_CHIPS_PER_SPOT`. */
+  max?: number;
 }
 
 /** "− n +" for one bet: buttons move by the bet's step (call bets: their pieces). */
@@ -88,7 +90,7 @@ export function ChipStepper({
         type="button"
         class="rl-btn rl-step__btn"
         aria-label={`Add ${unit} to ${name}`}
-        disabled={n + step > MAX_CHIPS_PER_SPOT}
+        disabled={n + step > (steps.max ?? MAX_CHIPS_PER_SPOT)}
         onClick={() => steps.onAdjust(bet, step)}
       >
         +

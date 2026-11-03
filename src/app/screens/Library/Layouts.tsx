@@ -31,6 +31,8 @@ import {
 
 export const editHref = (id: string): string =>
   `/library?tab=layouts&edit=${encodeURIComponent(id)}`;
+/** Opens Play mode with this layout ready to place (`#/play?layout=<id>`). */
+export const playHref = (id: string): string => href('/play?layout=' + encodeURIComponent(id));
 
 function download(name: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
@@ -186,6 +188,9 @@ export function Layouts({
                     </span>
                   </p>
                   <div class="lib-actions">
+                    <Button aria-label={`Play ${l.name}`} href={playHref(e.id)}>
+                      Play
+                    </Button>
                     {e.builtin ? (
                       <Button
                         variant="primary"

@@ -50,6 +50,12 @@ export interface ChipBoardProps<R = unknown> {
   readOnly?: boolean;
   /** Status text for the shell's live status line (lock mode, the resolved bet: "Split mode", "Split 1|4"). */
   onStatus?(message: string): void;
+  /**
+   * Optional (additive): the most chips one spot may hold; taps and steppers that would exceed it
+   * are refused with a status message. Default `MAX_CHIPS_PER_SPOT` (the layout limit). Play mode
+   * passes `Infinity`, since it counts money in $1 chip units.
+   */
+  maxChips?: number;
 }
 
 /** The game's contribution to the generic layout editor (layouts.md §6.2). */

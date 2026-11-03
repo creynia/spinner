@@ -190,6 +190,33 @@ describe('tools', () => {
     expect(onStatus).toHaveBeenLastCalledWith('Split 17 and 20 · 2 chips');
   });
 
+  it('refuses taps past maxChips (default 1000) and Infinity lifts the cap', () => {
+    const { tap, onAdjust, onStatus, rerender } = mount({
+      spots: [{ bet: 'straight:17', chips: 1000 }],
+    });
+    tap('straight:17');
+    expect(onAdjust).not.toHaveBeenCalled();
+    expect(onStatus).toHaveBeenLastCalledWith('At most 1000 chips on Straight 17');
+    rerender({ spots: [{ bet: 'straight:17', chips: 5 }], maxChips: 5 });
+    tap('straight:17');
+    expect(onAdjust).not.toHaveBeenCalled();
+    expect(onStatus).toHaveBeenLastCalledWith('At most 5 chips on Straight 17');
+    rerender({ spots: [{ bet: 'straight:17', chips: 1000 }], maxChips: Infinity });
+    tap('straight:17');
+    expect(onAdjust).toHaveBeenCalledWith('straight:17', 1);
+  });
+
+  it('sheet steppers honour maxChips', () => {
+    const { container, openCalls } = mount({
+      spots: [{ bet: 'voisins', chips: 18 }],
+      maxChips: 18,
+    });
+    openCalls();
+    expect(
+      q(container, '[data-bet="voisins"] button[aria-label^="Add"]').hasAttribute('disabled'),
+    ).toBe(true);
+  });
+
   it('outside boxes: Enter applies the tool, Delete removes one step', () => {
     const { container, onAdjust } = mount({ spots: [{ bet: 'red', chips: 3 }] });
     const red = q(container, '[data-bet="red"]');

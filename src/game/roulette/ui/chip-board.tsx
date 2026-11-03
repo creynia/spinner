@@ -146,6 +146,7 @@ function Editable(
 ) {
   const { rules, spots, tool, orientation, chips } = props;
   const wheel = rules.wheel;
+  const maxChips = props.maxChips ?? MAX_CHIPS_PER_SPOT;
   const [panel, setPanel] = useState<'mode' | 'calls' | null>(null);
   const modeBtn = useRef<HTMLButtonElement>(null);
   const [lock, setLock] = useState<Lock>(readLock);
@@ -186,8 +187,8 @@ function Editable(
       say(`No chips on ${betName(bet, wheel)}`);
       return;
     }
-    if (delta > 0 && now + delta > MAX_CHIPS_PER_SPOT) {
-      say(`At most ${MAX_CHIPS_PER_SPOT} chips on ${betName(bet, wheel)}`);
+    if (delta > 0 && now + delta > maxChips) {
+      say(`At most ${maxChips} chips on ${betName(bet, wheel)}`);
       return;
     }
     props.onAdjust(bet, delta);
@@ -201,6 +202,7 @@ function Editable(
 
   const steps: ChipSteps = {
     chips: chipsOn,
+    max: maxChips,
     onAdjust: (bet, delta) => change(bet, delta < 0 ? -1 : 1, delta),
   };
   const placedNeighbours = spots.map((s) => s.bet).filter((b) => b.startsWith('neighbours:'));

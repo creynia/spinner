@@ -13,6 +13,7 @@ import {
   type Repo,
 } from '@core';
 import { readStageChips, validateChipLayout } from '@core/strategy';
+import type { LayoutChoice } from '@core/ui';
 import { BUILTIN_LAYOUTS, resolveRules, RULE_PRESET_IDS } from '@game/roulette';
 import { validationContext } from '../screens/Define/doc';
 import { libraryRepo, libraryVersion } from '../screens/Define/data';
@@ -128,6 +129,18 @@ export async function listLayoutEntries(): Promise<LayoutEntry[]> {
         usedIn: used(r.id, false),
       })),
   ];
+}
+
+/**
+ * Every layout of this game as a `LayoutChoice` (built-ins first, then the library newest first):
+ * what the builder's "Use a saved layout" and Play's "Place a layout" offer.
+ */
+export async function layoutChoices(): Promise<LayoutChoice[]> {
+  return (await listLayoutEntries()).map((e) => ({
+    layout: e.layout,
+    hash: e.hash,
+    builtin: e.builtin,
+  }));
 }
 
 export async function usedInOf(
