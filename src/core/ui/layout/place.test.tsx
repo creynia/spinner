@@ -279,7 +279,7 @@ describe('LayoutEditor: scale and play', () => {
     expect(onSave).not.toHaveBeenCalled();
     expect(onPlay).toHaveBeenLastCalledWith([{ bet: COIN_BET, chips: 3 }]);
     fireEvent.click(screen.getByText('tap heads'));
-    const btn = screen.getByRole('button', { name: 'Save and play' });
+    const btn = screen.getByRole('button', { name: 'Save & play' });
     expect(btn.textContent).toBe('Save & play');
     fireEvent.click(btn);
     await vi.waitFor(() => expect(onPlay).toHaveBeenCalledTimes(2));
@@ -291,7 +291,7 @@ describe('LayoutEditor: scale and play', () => {
     const onPlay = vi.fn();
     render(editor({ onPlay, onSave: () => Promise.reject(new Error('x')) }));
     fireEvent.click(screen.getByText('tap heads'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save and play' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save & play' }));
     await new Promise((r) => setTimeout(r, 0));
     expect(onPlay).not.toHaveBeenCalled();
   });

@@ -387,11 +387,7 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
         Save
       </Button>
       {props.onPlay ? (
-        <Button
-          disabled={whyNot !== null || saving}
-          aria-label={dirty ? 'Save and play' : 'Play'}
-          onClick={() => void play()}
-        >
+        <Button disabled={whyNot !== null || saving} onClick={() => void play()}>
           {dirty ? 'Save & play' : 'Play'}
         </Button>
       ) : null}
