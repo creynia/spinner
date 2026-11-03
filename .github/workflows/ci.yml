@@ -51,7 +51,8 @@ jobs:
   e2e:
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The suite takes about 19 minutes with the phone Play suites (tests/e2e/play-mobile), plus setup.
+    timeout-minutes: 35
     env:
       PW_WORKERS: '2'
     steps:
