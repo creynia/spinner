@@ -190,6 +190,77 @@ describe('tools', () => {
     expect(onStatus).toHaveBeenLastCalledWith('Split 17 and 20 · 2 chips');
   });
 
+  it('refuses taps past maxChips (default 1000) and Infinity lifts the cap', () => {
+    const { tap, onAdjust, onStatus, rerender } = mount({
+      spots: [{ bet: 'straight:17', chips: 1000 }],
+    });
+    tap('straight:17');
+    expect(onAdjust).not.toHaveBeenCalled();
+    expect(onStatus).toHaveBeenLastCalledWith('At most 1000 chips on Straight 17');
+    rerender({ spots: [{ bet: 'straight:17', chips: 5 }], maxChips: 5 });
+    tap('straight:17');
+    expect(onAdjust).not.toHaveBeenCalled();
+    expect(onStatus).toHaveBeenLastCalledWith('At most 5 chips on Straight 17');
+    rerender({ spots: [{ bet: 'straight:17', chips: 1000 }], maxChips: Infinity });
+    tap('straight:17');
+    expect(onAdjust).toHaveBeenCalledWith('straight:17', 1);
+  });
+
+  it('sheet steppers honour maxChips', () => {
+    const { container, openCalls } = mount({
+      spots: [{ bet: 'voisins', chips: 18 }],
+      maxChips: 18,
+    });
+    openCalls();
+    expect(
+      q(container, '[data-bet="voisins"] button[aria-label^="Add"]').hasAttribute('disabled'),
+    ).toBe(true);
+  });
+
+  it('tapValue: sheet steppers show money and name the chip a + adds', () => {
+    const { container, onAdjust, getByRole } = mount({
+      spots: [{ bet: 'straight:1', chips: 50 }],
+      chipValue: 100,
+      tapValue: 2500,
+    });
+    fireEvent.keyDown(q(container, '[data-pocket="1"]'), { key: 'Enter' });
+    const dialog = getByRole('dialog');
+    expect(dialog.textContent).toContain('Each + adds a $25 chip');
+    const row = q(dialog, '[data-bet-row="straight:1"]');
+    expect(q(row, 'output').textContent).toBe('$50');
+    fireEvent.click(q(row, 'button[aria-label="Add $25 to Straight 1"]'));
+    expect(onAdjust).toHaveBeenLastCalledWith('straight:1', 1);
+    fireEvent.click(q(row, 'button[aria-label="Remove $25 from Straight 1"]'));
+    expect(onAdjust).toHaveBeenLastCalledWith('straight:1', -1);
+  });
+
+  it('tapValue: call bet + adds its pieces and says so', () => {
+    const { container, openCalls } = mount({
+      spots: [{ bet: 'voisins', chips: 9 }],
+      chipValue: 100,
+      tapValue: 2500,
+    });
+    openCalls();
+    const row = q(container, '[data-bet="voisins"]');
+    expect(q(row, 'output').textContent).toBe('$9');
+    expect(
+      row.querySelector('button[aria-label="Add $225 (9 × $25) to Voisins du zéro"]'),
+    ).not.toBeNull();
+  });
+
+  it('without tapValue the sheet keeps the chip count', () => {
+    const { container, getByRole } = mount({
+      spots: [{ bet: 'straight:1', chips: 2 }],
+      chipValue: 100,
+    });
+    fireEvent.keyDown(q(container, '[data-pocket="1"]'), { key: 'Enter' });
+    const dialog = getByRole('dialog');
+    expect(dialog.textContent).not.toContain('Each + adds');
+    const row = q(dialog, '[data-bet-row="straight:1"]');
+    expect(q(row, 'output').textContent).toBe('2');
+    expect(row.querySelector('button[aria-label="Add 1 chip to Straight 1"]')).not.toBeNull();
+  });
+
   it('outside boxes: Enter applies the tool, Delete removes one step', () => {
     const { container, onAdjust } = mount({ spots: [{ bet: 'red', chips: 3 }] });
     const red = q(container, '[data-bet="red"]');

@@ -11,6 +11,7 @@ import { Import } from './screens/Import';
 import { Library } from './screens/Library';
 import { More } from './screens/More';
 import { NotFound } from './screens/NotFound';
+import { Play } from './screens/Play';
 import { Research } from './screens/Research';
 import { Run } from './screens/Run';
 import { Benchmark } from './screens/Settings/Benchmark';
@@ -36,6 +37,7 @@ export const routes: readonly Route[] = [
   { pattern: '/watch/:runId/:index', screen: Watch },
   { pattern: '/compare', screen: Compare },
   { pattern: '/sweep/:groupId', screen: Sweep },
+  { pattern: '/play', screen: Play },
   { pattern: '/library', screen: Library },
   { pattern: '/gallery', screen: Gallery },
   { pattern: '/gallery/:bundleId', screen: Gallery },

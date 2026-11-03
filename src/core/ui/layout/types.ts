@@ -144,6 +144,12 @@ export interface LayoutEditorProps<R = unknown> {
   onSave(result: LayoutEditorResult): void | Promise<void>;
   /** Back / close; the editor has already run its unsaved-changes guard. */
   onClose(): void;
+  /**
+   * Optional (additive): shows a Play button beside Save. With unsaved changes it reads
+   * "Save & play" and saves first (through `onSave`); it calls this only once saved, with a copy of
+   * the spots.
+   */
+  onPlay?(spots: LayoutSpot[]): void;
 }
 
 /** A library or built-in layout offered by "Use a saved layout" (§7.2). */

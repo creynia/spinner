@@ -496,7 +496,8 @@ describe('settings survive a memory-only repo', () => {
 
 describe('back navigation', () => {
   it('has explicit parents, none on tab roots', () => {
-    for (const root of ['/', '/define', '/library', '/more']) expect(parentOf(root)).toBeNull();
+    for (const root of ['/', '/define', '/play', '/library', '/more'])
+      expect(parentOf(root)).toBeNull();
     expect(parentOf('/settings')).toBe('/more');
     expect(parentOf('/gallery')).toBe('/more');
     expect(parentOf('/import')).toBe('/more');

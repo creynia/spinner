@@ -1,6 +1,6 @@
 // Small helpers the shell needs (layouts.md §4.3). Spot arithmetic is `adjustSpot` from core/strategy.
 import type { BetCatalogEntry, BetId, Cents } from '../../contracts/game';
-import type { LayoutSpot } from '../../contracts/layout';
+import { MAX_CHIPS_PER_SPOT, type LayoutSpot } from '../../contracts/layout';
 
 /** Order-sensitive deep equality (a reorder is a change). */
 export function sameSpotsInOrder(a: readonly LayoutSpot[], b: readonly LayoutSpot[]): boolean {
@@ -43,4 +43,42 @@ export function spotCents(chips: number, value: Cents | null): Cents | null {
 
 export function makeRows(spots: readonly LayoutSpot[], value: Cents) {
   return spots.map((s) => ({ bet: s.bet, cents: s.chips * value }));
+}
+
+/** Why a whole-layout scale was refused (the first spot at fault in `bet`). */
+export type ScaleRefusal =
+  { reason: 'empty' } | { reason: 'max-chips'; bet: BetId } | { reason: 'uneven'; bet: BetId };
+
+export type ScaleResult = { ok: true; spots: LayoutSpot[] } | ({ ok: false } & ScaleRefusal);
+
+/**
+ * Every spot ×2, in the same order. Refused when empty or when a spot would pass `maxChips`
+ * (default `MAX_CHIPS_PER_SPOT`). Multiples of a bet's step stay multiples.
+ */
+export function doubleSpots(
+  spots: readonly LayoutSpot[],
+  maxChips: number = MAX_CHIPS_PER_SPOT,
+): ScaleResult {
+  if (spots.length === 0) return { ok: false, reason: 'empty' };
+  const over = spots.find((s) => s.chips * 2 > maxChips);
+  if (over) return { ok: false, reason: 'max-chips', bet: over.bet };
+  return { ok: true, spots: spots.map((s) => ({ bet: s.bet, chips: s.chips * 2 })) };
+}
+
+/**
+ * Every spot ÷2, in the same order. Refused when empty or when any spot would not halve to a
+ * whole multiple of its bet's `step` (a voisins ×1 of 9 chips cannot halve; ×2 of 18 can).
+ */
+export function halveSpots(
+  spots: readonly LayoutSpot[],
+  step: (bet: BetId) => number,
+): ScaleResult {
+  if (spots.length === 0) return { ok: false, reason: 'empty' };
+  const odd = spots.find((s) => {
+    const half = s.chips / 2;
+    const st = Math.max(1, step(s.bet));
+    return !Number.isInteger(half) || half < st || half % st !== 0;
+  });
+  if (odd) return { ok: false, reason: 'uneven', bet: odd.bet };
+  return { ok: true, spots: spots.map((s) => ({ bet: s.bet, chips: s.chips / 2 })) };
 }

@@ -35,7 +35,7 @@ import { EXTRA_TARGETS } from '@game/roulette';
 import { navigate } from '../../router';
 import { trackEvent } from '../../analytics';
 import { game } from '../../services/game';
-import { listLayoutEntries, saveLayout } from '../../services/layouts';
+import { layoutChoices, listLayoutEntries, saveLayout } from '../../services/layouts';
 import { quickCheck } from '../../services/quickCheck';
 import { RunBadge, stubLine } from '../../components/RunBadge';
 import { listRunRows, startRun } from '../../services/runs';
@@ -639,12 +639,7 @@ export function Define({ params, query }: ScreenProps) {
               ui: rouletteUi as unknown as BuilderChipsEnv['ui'],
               plugin: game.plugin,
               layouts: {
-                list: async () =>
-                  (await listLayoutEntries()).map((e) => ({
-                    layout: e.layout,
-                    hash: e.hash,
-                    builtin: e.builtin,
-                  })),
+                list: layoutChoices,
                 save: (l) => saveLayout(l),
               },
               bankroll: doc.bankroll,

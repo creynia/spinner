@@ -9,7 +9,16 @@ import { Button, Field, Select, Sheet, Tabs, TextInput, useId } from '../kit';
 import { ChipRack } from './ChipRack';
 import { SpotList } from './SpotList';
 import { adjustSpot } from '../../strategy';
-import { betLabel, makeRows, money, plural, sameSpotsInOrder, totalChips } from './adjust';
+import {
+  betLabel,
+  doubleSpots,
+  halveSpots,
+  makeRows,
+  money,
+  plural,
+  sameSpotsInOrder,
+  totalChips,
+} from './adjust';
 import { checkAtTable, minimumHint } from './check';
 import { useChipHistory } from './history';
 import type { ChipTool, LayoutEditorProps } from './types';
@@ -190,13 +199,34 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
     say('Cleared all chips');
     setLast(null);
   };
+  // Whole-layout scaling (More sheet): one undo step each.
+  const doubled = useMemo(() => doubleSpots(spots), [spots]);
+  const halved = useMemo(() => halveSpots(spots, step), [spots, ui.chips]);
+  const scale = (by: 'double' | 'halve') => {
+    const r = by === 'double' ? doubled : halved;
+    if (!r.ok) return;
+    const text = by === 'double' ? 'Doubled all spots' : 'Halved all spots';
+    commit(r.spots, text);
+    say(`${text}: ${plural(totalChips(r.spots), 'chip')}`);
+    setLast(null);
+  };
+  const scaleWhyNot = (r: typeof doubled): string | null =>
+    r.ok
+      ? null
+      : r.reason === 'empty'
+        ? 'Add chips first'
+        : r.reason === 'max-chips'
+          ? `${label(r.bet)} would pass ${MAX_CHIPS_PER_SPOT} chips`
+          : `${label(r.bet)} does not split evenly`;
+
   const chooseTool = (t: ChipTool) => {
     setTool(t);
     say(t === 'add' ? 'Add mode' : 'Remove mode');
   };
 
-  const save = async () => {
-    if (spots.length === 0 || !nameOk || saving) return;
+  /** True when the layout was saved. */
+  const save = async (): Promise<boolean> => {
+    if (spots.length === 0 || !nameOk || saving) return false;
     setSaving(true);
     try {
       const trimmed = notes.trim();
@@ -208,11 +238,20 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
       });
       setSaved({ spots, name, notes, variant: props.variant });
       say('Saved');
+      return true;
     } catch {
       say('Could not save');
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+  // Play saves unsaved changes first, so the host plays exactly what is stored.
+  const play = async () => {
+    if (!props.onPlay || spots.length === 0) return;
+    const current = spots.map((s) => ({ ...s }));
+    if (dirty && !(await save())) return;
+    props.onPlay(current);
   };
   const close = () => (dirty ? setGuardOpen(true) : props.onClose());
 
@@ -347,6 +386,11 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
       <Button variant="primary" disabled={whyNot !== null || saving} onClick={() => void save()}>
         Save
       </Button>
+      {props.onPlay ? (
+        <Button disabled={whyNot !== null || saving} onClick={() => void play()}>
+          {dirty ? 'Save & play' : 'Play'}
+        </Button>
+      ) : null}
       {whyNot ? <span class="le-hint">{whyNot}</span> : null}
     </div>
   );
@@ -384,18 +428,28 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
   const chips = totalChips(spots);
   const problems = check?.perSpot.filter((p) => p.status !== 'ok') ?? [];
   const notPlaced = problems.filter((p) => p.status === 'rejected').length;
+  const counts = `${plural(chips, 'chip')} · ${plural(spots.length, 'spot')}`;
   const summary =
-    spots.length === 0
-      ? 'Empty: tap the table to add chips'
-      : `${plural(chips, 'chip')} · ${plural(spots.length, 'spot')}` +
-        (hint !== null
-          ? ` · at ${money(value!)}: ${hint}`
-          : (notPlaced > 0
-              ? ` · ${spots.length - notPlaced} of ${spots.length} spots placed`
-              : '') +
-            (check && value !== null
-              ? ` · at ${money(value)}: ${money(check.total)} ${problems.length ? '!' : '✓'}`
-              : ''));
+    spots.length === 0 ? (
+      'Empty: tap the table to add chips'
+    ) : hint !== null ? (
+      `${counts} · at ${money(value!)}: ${hint}`
+    ) : (
+      <>
+        {counts}
+        {notPlaced > 0 ? ` · ${spots.length - notPlaced} of ${spots.length} spots placed` : ''}
+        {check && value !== null ? (
+          <>
+            {' · '}
+            <strong class="le-total">{money(check.total)}</strong>
+            {` total at ${money(value)} chips `}
+            <span class={problems.length ? 'le-mark is-bad' : 'le-mark'}>
+              {problems.length ? '!' : '✓'}
+            </span>
+          </>
+        ) : null}
+      </>
+    );
 
   return (
     <div class={`layout-editor${wide ? ' is-wide' : ''}`} ref={rootRef}>
@@ -480,6 +534,27 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
               onInput={(e) => setNotes(e.currentTarget.value)}
             />
           </Field>
+          <div class="field">
+            <span class="le-label">Scale every spot</span>
+            <div class="le-scale">
+              <Button disabled={!doubled.ok} onClick={() => scale('double')}>
+                Double all (×2)
+              </Button>
+              <Button disabled={!halved.ok} onClick={() => scale('halve')}>
+                Halve all (÷2)
+              </Button>
+            </div>
+            {spots.length > 0 && (scaleWhyNot(doubled) ?? scaleWhyNot(halved)) ? (
+              <p class="le-hint">
+                {[
+                  scaleWhyNot(doubled) && `Double: ${scaleWhyNot(doubled)}`,
+                  scaleWhyNot(halved) && `Halve: ${scaleWhyNot(halved)}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            ) : null}
+          </div>
           <div class="field">
             <span class="le-label">Preview chip value</span>
             <ChipRack

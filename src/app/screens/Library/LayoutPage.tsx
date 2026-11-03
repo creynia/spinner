@@ -1,12 +1,14 @@
 // The editor page (layouts.md §4.7): hosts the real `LayoutEditor` full-page inside the Library at
 // `#/library?tab=layouts&edit=<id|new>`. Save creates or updates a library layout; closing runs
 // through the editor's own unsaved-changes guard.
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ChipLayout, LayoutRecord } from '@core/contracts/layout';
 import { Button, EmptyState, LayoutEditor, defaultDenom, showToast } from '@core/ui';
 import { DEFAULT_RULE_PRESET, resolveRules, roulette } from '@game/roulette';
 import { rouletteUi } from '@game/roulette/ui';
+import { navigate } from '../../router';
 import { libraryRepo } from '../Define/data';
+import { playHref } from './Layouts';
 import {
   createLayout,
   isBuiltinId,
@@ -27,6 +29,9 @@ type Loaded =
 export function LayoutPage({ id: routeId, onClose }: { id: string; onClose: () => void }) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [savedId, setSavedId] = useState<string | null>(routeId === 'new' ? null : routeId);
+  // Read by Play right after a first save, before the state update has re-rendered.
+  const savedIdRef = useRef(savedId);
+  savedIdRef.current = savedId;
   const [variant, setVariant] = useState(DEFAULT_RULE_PRESET as string);
 
   useEffect(() => {
@@ -93,6 +98,7 @@ export function LayoutPage({ id: routeId, onClose }: { id: string; onClose: () =
           spots: r.spots,
           ...(r.notes !== undefined ? { notes: r.notes } : {}),
         });
+        savedIdRef.current = created.id;
         setSavedId(created.id);
       }
       showToast(`Saved ${r.name}`);
@@ -122,6 +128,11 @@ export function LayoutPage({ id: routeId, onClose }: { id: string; onClose: () =
       chipValue={chipValue}
       bankroll={BANKROLL}
       onSave={onSave}
+      // The editor saves unsaved changes before calling this, so the stored layout is what plays.
+      onPlay={() => {
+        const id = savedIdRef.current;
+        if (id) navigate(playHref(id));
+      }}
       onClose={onClose}
     />
   );

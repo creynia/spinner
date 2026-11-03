@@ -8,3 +8,5 @@ export { LayoutThumb } from './LayoutThumb';
 export { useChipHistory } from './history';
 export { checkAtTable } from './check';
 export { defaultDenom } from './denoms';
+export { PlaceLayoutSheet, layoutMisfit } from './PlaceLayoutSheet';
+export type { PlaceLayoutSheetProps, PlaceMode } from './PlaceLayoutSheet';

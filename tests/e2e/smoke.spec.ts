@@ -60,7 +60,7 @@ test('tap targets in the navigation are at least 44px', async ({ page }) => {
   await page.goto('./?e2e#/');
   const links = page.getByRole('navigation').getByRole('link');
   const count = await links.count();
-  expect(count).toBe(4);
+  expect(count).toBe(5);
   for (let i = 0; i < count; i++) {
     const box = await links.nth(i).boundingBox();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);

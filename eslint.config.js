@@ -21,6 +21,7 @@ const CORE_MODULES = [
   'store',
   'analysis',
   'sync',
+  'play',
   'ui',
 ];
 /** Which core modules each core module may import (itself is always allowed). */
@@ -34,7 +35,18 @@ const CORE_ALLOWED = {
   store: ['contracts', 'money', 'experiment'],
   analysis: ['contracts', 'money'],
   sync: ['contracts', 'experiment', 'store'],
-  ui: ['contracts', 'money', 'rng', 'strategy', 'experiment', 'harness', 'store', 'analysis'],
+  play: ['contracts', 'money', 'rng'],
+  ui: [
+    'contracts',
+    'money',
+    'rng',
+    'strategy',
+    'experiment',
+    'harness',
+    'store',
+    'analysis',
+    'play',
+  ],
   testing: [
     'contracts',
     'money',
@@ -45,6 +57,7 @@ const CORE_ALLOWED = {
     'store',
     'analysis',
     'sync',
+    'play',
   ],
 };
 /** Bare packages each zone may import (tests additionally get TEST_PACKAGES). */
