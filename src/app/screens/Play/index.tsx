@@ -353,6 +353,7 @@ export function Play({ query }: ScreenProps) {
                 last={last}
                 flagged={flagged}
                 maxChips={Infinity}
+                tapValue={denom}
               />
             </div>
             {prison.length > 0 ? (

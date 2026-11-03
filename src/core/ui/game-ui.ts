@@ -56,6 +56,11 @@ export interface ChipBoardProps<R = unknown> {
    * passes `Infinity`, since it counts money in $1 chip units.
    */
   maxChips?: number;
+  /**
+   * Optional (additive): money one tap adds, when the host maps a tap to a chip of its own (play
+   * mode); the sheet then shows money and says what + adds. Needs a non-null `chipValue`.
+   */
+  tapValue?: Cents;
 }
 
 /** The game's contribution to the generic layout editor (layouts.md §6.2). */

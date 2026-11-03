@@ -217,14 +217,19 @@ export function undoBets(s: PlaySession): PlayResult {
   if (s.endedAt) return refuse('ended', 'This session has ended');
   if (s.undo.length === 0) return refuse('nothing-to-undo', 'Nothing to undo');
   const undo = s.undo.slice(0, -1);
-  return okS({ ...s, bets: cloneBets(s.undo[s.undo.length - 1]!), undo });
+  return okS({
+    ...s,
+    bets: cloneBets(s.undo[s.undo.length - 1]!),
+    undo,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export function clearBets(s: PlaySession): PlayResult {
   if (s.endedAt) return refuse('ended', 'This session has ended');
   if (s.bets.length === 0) return refuse('no-bets', 'No bets to clear');
   const undo = [...s.undo, cloneBets(s.bets)].slice(-PLAY_UNDO_LIMIT);
-  return okS({ ...s, bets: [], undo });
+  return okS({ ...s, bets: [], undo, updatedAt: new Date().toISOString() });
 }
 
 /** Bets := the last spin's bets. */

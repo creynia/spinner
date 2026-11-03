@@ -7,6 +7,7 @@ import { betDef, familyOf, fixedBetIds, parseBet } from '../bets';
 import { pocketIndexOf, pocketLabels } from '../pockets';
 import type { Family, RouletteRules, WheelKind } from '../types';
 import { MAX_CHIPS_PER_SPOT } from '@core/contracts/layout';
+import { formatMoney, type Cents } from '@core/money';
 import { Board } from './board';
 import { stepOf } from './chips';
 import { buildBoard, type Rect } from './geometry';
@@ -56,6 +57,11 @@ export interface ChipSteps {
   onAdjust(bet: string, delta: number): void;
   /** The most chips one spot may hold (`ChipBoardProps.maxChips`); default `MAX_CHIPS_PER_SPOT`. */
   max?: number;
+  /**
+   * Play mode (`ChipBoardProps.tapValue`): `chip` is the money one counted chip stands for and
+   * `tap` the money one + adds; the steppers then show money instead of a chip count.
+   */
+  money?: { chip: Cents; tap: Cents };
 }
 
 /** "− n +" for one bet: buttons move by the bet's step (call bets: their pieces). */
@@ -71,25 +77,35 @@ export function ChipStepper({
   const n = steps.chips(bet);
   const step = stepOf(bet);
   const name = betName(bet, wheel);
+  const m = steps.money;
   const unit = step === 1 ? '1 chip' : `${step} chips`;
+  const amount = m
+    ? step === 1
+      ? formatMoney(m.tap)
+      : `${formatMoney(m.tap * step)} (${step} × ${formatMoney(m.tap)})`
+    : unit;
+  const shown = m ? formatMoney(n * m.chip) : String(n);
   return (
     <span class="rl-step" data-stepper={bet}>
       <button
         type="button"
         class="rl-btn rl-step__btn"
-        aria-label={`Remove ${unit} from ${name}`}
+        aria-label={`Remove ${amount} from ${name}`}
         disabled={n < step}
         onClick={() => steps.onAdjust(bet, -step)}
       >
         −
       </button>
-      <output class="rl-step__n" aria-label={`${n} ${n === 1 ? 'chip' : 'chips'} on ${name}`}>
-        {n}
+      <output
+        class="rl-step__n"
+        aria-label={m ? `${shown} on ${name}` : `${n} ${n === 1 ? 'chip' : 'chips'} on ${name}`}
+      >
+        {shown}
       </output>
       <button
         type="button"
         class="rl-btn rl-step__btn"
-        aria-label={`Add ${unit} to ${name}`}
+        aria-label={`Add ${amount} to ${name}`}
         disabled={n + step > (steps.max ?? MAX_CHIPS_PER_SPOT)}
         onClick={() => steps.onAdjust(bet, step)}
       >
@@ -205,6 +221,11 @@ export function BetSheet(props: {
             Close
           </button>
         </header>
+        {props.steps?.money && (
+          <p class="rl-muted rl-sheet__hint">
+            Each + adds a {formatMoney(props.steps.money.tap)} chip
+          </p>
+        )}
         <ul class="rl-rows">
           {items.map((id) =>
             props.steps ? (

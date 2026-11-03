@@ -203,6 +203,10 @@ function Editable(
   const steps: ChipSteps = {
     chips: chipsOn,
     max: maxChips,
+    money:
+      props.tapValue !== undefined && props.chipValue !== null
+        ? { chip: props.chipValue, tap: props.tapValue }
+        : undefined,
     onAdjust: (bet, delta) => change(bet, delta < 0 ? -1 : 1, delta),
   };
   const placedNeighbours = spots.map((s) => s.bet).filter((b) => b.startsWith('neighbours:'));
