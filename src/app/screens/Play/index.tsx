@@ -433,7 +433,7 @@ export function Play({ query }: ScreenProps) {
                 onClick={doAddEach}
                 disabled={ended || (!hasBets && s.lastBets.length === 0)}
                 aria-keyshortcuts="A"
-                aria-label={`Add one ${formatMoney(denom)} chip to every bet`}
+                aria-label={`+1: add one ${formatMoney(denom)} chip to every bet`}
                 title={`Add one ${formatMoney(denom)} chip to every bet`}
               >
                 +1

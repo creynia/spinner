@@ -367,7 +367,7 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
       <button
         type="button"
         class="le-btn"
-        aria-label="Add a chip to every spot"
+        aria-label="+1: add a chip to every spot"
         title="Add a chip to every spot"
         disabled={!plusOne.ok}
         onClick={() => scale('plus-one')}

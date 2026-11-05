@@ -256,7 +256,7 @@ describe('table limits and +1 each', () => {
     saveSession(s);
     render(<Play params={{}} query={q()} />);
     fireEvent.click(screen.getByRole('radio', { name: '$5' }));
-    fireEvent.click(button(/^Add one \$5 chip to every bet/));
+    fireEvent.click(button(/^\+1: add one \$5 chip to every bet/));
     await waitFor(() =>
       expect(stored().bets).toEqual([
         { bet: 'red', amount: 3000 },
