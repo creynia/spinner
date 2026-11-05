@@ -2,7 +2,7 @@
 // refusal. Bets are kept as whole stakes per bet id and are only handed to the engine at spin
 // time, through the plugin's own reconcile/apply, so the table enforces exactly the rules a
 // simulation would. Nothing here knows which game is played.
-import type { BetId, Cents, LayoutEntry, Rng } from '../contracts/game';
+import type { BetId, Cents, Json, LayoutEntry, Rng } from '../contracts/game';
 import type { LayoutSpot } from '../contracts/layout';
 import { formatMoney } from '../money';
 import { rngFor, seededState } from './rng';
@@ -80,7 +80,13 @@ function restoreState<S>(env: PlayEnv<S>, snapshot: unknown, rng: Rng): S {
 /** A new session at a fresh table. */
 export function createSession<S, R>(
   env: PlayEnv<S, R>,
-  opts: { variant: string; bankroll: Cents; rng?: PlayRngSpec; id?: string },
+  opts: {
+    variant: string;
+    bankroll: Cents;
+    rng?: PlayRngSpec;
+    id?: string;
+    rulesOverrides?: Record<string, Json>;
+  },
 ): PlaySession {
   if (!Number.isSafeInteger(opts.bankroll) || opts.bankroll <= 0)
     throw new RangeError(`play: bankroll must be positive cents: ${opts.bankroll}`);
@@ -93,6 +99,9 @@ export function createSession<S, R>(
     id: opts.id ?? randomId(),
     game: env.plugin.id,
     variant: opts.variant,
+    ...(opts.rulesOverrides && Object.keys(opts.rulesOverrides).length
+      ? { rulesOverrides: structuredClone(opts.rulesOverrides) }
+      : {}),
     rng: spec,
     bankIn: opts.bankroll,
     startBankroll: opts.bankroll,
@@ -247,6 +256,34 @@ export function doubleBets<S, R>(env: PlayEnv<S, R>, s: PlaySession): PlayResult
     s,
     base.map((b) => ({ bet: b.bet, amount: b.amount * 2 })),
   );
+}
+
+/**
+ * One more chip of `chip` on every bet being placed (with none, on the last spin's bets): `step`
+ * gives a bet's pieces (a call bet takes one chip per piece). One undo step.
+ */
+export function addChipEach<S, R>(
+  env: PlayEnv<S, R>,
+  s: PlaySession,
+  chip: Cents,
+  step: (bet: BetId) => number = () => 1,
+): PlayResult {
+  if (!Number.isSafeInteger(chip) || chip <= 0) return refuse('bad-amount', 'Choose a chip first');
+  const base = s.bets.length ? s.bets : s.lastBets;
+  if (base.length === 0) return refuse('no-bets', 'No bets to add to');
+  return commitBets(
+    env,
+    s,
+    base.map((b) => ({ bet: b.bet, amount: b.amount + chip * Math.max(1, step(b.bet)) })),
+  );
+}
+
+/** Replace the rules overrides (e.g. new table limits); the host re-resolves its env's rules. */
+export function setRulesOverrides(s: PlaySession, overrides: Record<string, Json>): PlaySession {
+  const next: PlaySession = { ...s, updatedAt: new Date().toISOString() };
+  if (Object.keys(overrides).length) next.rulesOverrides = structuredClone(overrides);
+  else delete next.rulesOverrides;
+  return next;
 }
 
 /** Add cash to the bankroll (a rebuy). */

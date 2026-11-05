@@ -1,6 +1,7 @@
 // Play mode: hand-played sessions at a table with a bankroll (types.ts). Game-agnostic.
 export * from './types';
 export {
+  addChipEach,
   betsTotal,
   checkBets,
   clearBets,
@@ -14,6 +15,7 @@ export {
   rebet,
   removeBet,
   setBets,
+  setRulesOverrides,
   spin,
   spotsFromBets,
   topUp,

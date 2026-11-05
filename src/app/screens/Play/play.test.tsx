@@ -248,3 +248,38 @@ describe('Play screen', () => {
     expect(bankroll()).toBe('$42');
   });
 });
+
+describe('table limits and +1 each', () => {
+  it('+1 adds the selected chip to every bet (key A too)', async () => {
+    let s = ok(adjustBet(env, seeded(), 'red', 1, 2500));
+    s = ok(adjustBet(env, s, 'black', 1, 2500));
+    saveSession(s);
+    render(<Play params={{}} query={q()} />);
+    fireEvent.click(screen.getByRole('radio', { name: '$5' }));
+    fireEvent.click(button(/^\+1: add one \$5 chip to every bet/));
+    await waitFor(() =>
+      expect(stored().bets).toEqual([
+        { bet: 'red', amount: 3000 },
+        { bet: 'black', amount: 3000 },
+      ]),
+    );
+    fireEvent.keyDown(document.body, { key: 'a' });
+    await waitFor(() => expect(stored().bets[0]!.amount).toBe(3500));
+  });
+
+  it('applies new table limits to the running session', async () => {
+    saveSession(ok(adjustBet(env, seeded(), 'red', 1, 500)));
+    render(<Play params={{}} query={q()} />);
+    // $5 on red is below the default $25 outside minimum: Spin is blocked.
+    expect(screen.getByRole('alert').textContent).toMatch(/minimum/i);
+    fireEvent.click(button('More play actions'));
+    fireEvent.click(button(/^Session: limits/));
+    const min = screen.getByLabelText<HTMLInputElement>('Outside minimum');
+    fireEvent.input(min, { target: { value: '5' } });
+    fireEvent.blur(min);
+    fireEvent.click(button('Apply to this session'));
+    await waitFor(() =>
+      expect(stored().rulesOverrides).toEqual({ limits: { outside: { min: 500 } } }),
+    );
+  });
+});

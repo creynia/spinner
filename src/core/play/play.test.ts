@@ -3,6 +3,8 @@ import { coin, COIN_BET, type CoinRules, type CoinState } from '../testing';
 import type { Rng } from '../contracts/game';
 import {
   CryptoRng,
+  addChipEach,
+  setRulesOverrides,
   betsTotal,
   checkBets,
   clearBets,
@@ -229,5 +231,36 @@ describe('spotsFromBets', () => {
       { bet: 'voisins', chips: 9 },
       { bet: 'red', chips: 2 },
     ]);
+  });
+});
+
+describe('addChipEach and rules overrides', () => {
+  it('adds one chip (times the step) to every bet, or to the last bets when none are placed', () => {
+    let s = seeded();
+    s = ok(placeBet(env, s, COIN_BET, 300));
+    s = ok(addChipEach(env, s, 100));
+    expect(s.bets).toEqual([{ bet: COIN_BET, amount: 400 }]);
+    s = ok(addChipEach(env, s, 100, () => 3));
+    expect(s.bets).toEqual([{ bet: COIN_BET, amount: 700 }]);
+    s = ok(undoBets(s));
+    expect(betsTotal(s.bets)).toBe(400);
+    const r = spun(spin(env, s));
+    s = ok(addChipEach(env, r.session, 100));
+    expect(s.bets).toEqual([{ bet: COIN_BET, amount: 500 }]);
+    const empty = addChipEach(env, seeded(), 100);
+    expect(empty.ok === false && empty.code).toBe('no-bets');
+  });
+
+  it('stores and clears rules overrides', () => {
+    let s = createSession(env, {
+      variant: 'standard',
+      bankroll: 1000,
+      rulesOverrides: { min: 200 },
+    });
+    expect(s.rulesOverrides).toEqual({ min: 200 });
+    s = setRulesOverrides(s, { max: 500 });
+    expect(s.rulesOverrides).toEqual({ max: 500 });
+    s = setRulesOverrides(s, {});
+    expect(s.rulesOverrides).toBeUndefined();
   });
 });

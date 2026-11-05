@@ -4,7 +4,7 @@
  * is a plain JSON value (persisted by the app); every operation is a pure function that returns a
  * new session or a refusal, so the UI can keep it in state, undo it and save it as-is.
  */
-import type { BetId, Cents, GamePlugin, Rng, RoundOutcome } from '../contracts/game';
+import type { BetId, Cents, GamePlugin, Json, Rng, RoundOutcome } from '../contracts/game';
 
 /** One bet on the felt in play mode: the whole stake on that bet id. */
 export interface PlayBet {
@@ -76,6 +76,11 @@ export interface PlaySession {
   game: string;
   /** Rules preset id the table was opened with. */
   variant: string;
+  /**
+   * Overrides on top of the preset (e.g. table limits), as in a definition's `RulesRef`. The host
+   * resolves `{ preset: variant, overrides }` into the env's rules; they may change between spins.
+   */
+  rulesOverrides?: Record<string, Json>;
   rng: PlayRngSpec;
   /** Starting bankroll plus every top-up. */
   bankIn: Cents;

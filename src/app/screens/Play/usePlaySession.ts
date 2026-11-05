@@ -5,6 +5,7 @@ import type { Cents } from '@core/contracts/game';
 import {
   createSession,
   endSession,
+  setRulesOverrides,
   spin as spinSession,
   topUp as topUpSession,
   type PlayResult,
@@ -13,7 +14,7 @@ import {
   type SpinResult,
 } from '@core/play';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { rouletteEnv, type RouletteEnv } from './env';
+import { envOf, rouletteEnv, type RouletteEnv, type RulesOverrides } from './env';
 import {
   DEFAULT_BANKROLL,
   HISTORY_KEY,
@@ -33,6 +34,8 @@ export interface NewSessionOptions {
   variant: string;
   bankroll: Cents;
   rng: PlayRngSpec;
+  /** Table limits and other rules overrides on top of the wheel preset. */
+  rulesOverrides?: RulesOverrides;
 }
 
 export interface PlayController {
@@ -47,11 +50,14 @@ export interface PlayController {
   start: (opts: NewSessionOptions) => void;
   topUp: (amount: Cents) => void;
   end: () => void;
+  /** New table limits (rules overrides) for this session, from the next check and spin on. */
+  setRules: (overrides: RulesOverrides) => void;
 }
 
 function fresh(opts: NewSessionOptions): PlaySession {
-  return createSession(rouletteEnv(opts.variant), {
+  return createSession(rouletteEnv(opts.variant, opts.rulesOverrides), {
     variant: opts.variant,
+    ...(opts.rulesOverrides ? { rulesOverrides: opts.rulesOverrides } : {}),
     bankroll: opts.bankroll,
     rng: opts.rng,
   });
@@ -69,7 +75,8 @@ export function usePlaySession(): PlayController {
   );
   const [history, setHistory] = useState<SessionSummary[]>(loadHistory);
   const ref = useRef(session);
-  const env = useMemo(() => rouletteEnv(session.variant), [session.variant]);
+  const rulesKey = JSON.stringify(session.rulesOverrides ?? null);
+  const env = useMemo(() => envOf(session), [session.variant, rulesKey]);
 
   useEffect(() => saveSession(session), [session]);
 
@@ -107,7 +114,7 @@ export function usePlaySession(): PlayController {
 
   const apply = useCallback(
     (op: (env: RouletteEnv, s: PlaySession) => PlayResult): PlayResult => {
-      const r = op(rouletteEnv(ref.current.variant), ref.current);
+      const r = op(envOf(ref.current), ref.current);
       if (r.ok) commit(r.session);
       return r;
     },
@@ -115,7 +122,7 @@ export function usePlaySession(): PlayController {
   );
 
   const spin = useCallback((): SpinResult => {
-    const r = spinSession(rouletteEnv(ref.current.variant), ref.current);
+    const r = spinSession(envOf(ref.current), ref.current);
     if (r.ok) commit(r.session);
     return r;
   }, [commit]);
@@ -143,7 +150,12 @@ export function usePlaySession(): PlayController {
     commit(s);
   }, [commit, remember]);
 
+  const setRules = useCallback(
+    (overrides: RulesOverrides) => commit(setRulesOverrides(ref.current, overrides)),
+    [commit],
+  );
+
   const current = useCallback(() => ref.current, []);
 
-  return { session, env, history, current, apply, spin, start, topUp, end };
+  return { session, env, history, current, apply, spin, start, topUp, end, setRules };
 }
