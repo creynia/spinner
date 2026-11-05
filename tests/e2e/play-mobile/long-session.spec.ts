@@ -218,7 +218,7 @@ for (const vp of VIEWPORTS) {
     }) => {
       await page.getByRole('button', { name: 'More play actions' }).click();
       await page
-        .getByRole('button', { name: /Session: top up/ })
+        .getByRole('button', { name: /^Session:/ })
         .evaluate((el) => (el as HTMLElement).click());
       const dialog = page.getByRole('dialog', { name: /session/i });
       await expect(dialog).toBeVisible();

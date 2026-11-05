@@ -6,6 +6,7 @@ import type { BetId, Cents } from '@core/contracts/game';
 import type { LayoutSpot } from '@core/contracts/layout';
 import { formatMoney } from '@core/money';
 import {
+  addChipEach,
   betsTotal,
   checkBets,
   clearBets,
@@ -39,6 +40,7 @@ import { ResultPanel, pocketOf, resultText } from './ResultPanel';
 import { SaveLayoutSheet } from './SaveLayoutSheet';
 import { SessionSheet } from './SessionSheet';
 import { StatsPanel } from './StatsPanel';
+import { limitsLine } from './LimitsSection';
 import { adjustBet, carriedBets, cashOf, netOf, onTableOf, spotsOfBets } from './store';
 import { usePlaySession } from './usePlaySession';
 import './play.css';
@@ -138,6 +140,13 @@ export function Play({ query }: ScreenProps) {
       doubleBets,
       `Bets doubled to ${formatMoney(2 * betsTotal(ctl.current().bets.length ? ctl.current().bets : ctl.current().lastBets))}`,
     );
+  const doAddEach = () => {
+    const base = ctl.current().bets.length ? ctl.current().bets : ctl.current().lastBets;
+    act(
+      (e, cur) => addChipEach(e, cur, denom, (b) => chipsUi.step(b)),
+      `Added a ${formatMoney(denom)} chip to ${base.length === 1 ? 'the bet' : `each of ${base.length} bets`}`,
+    );
+  };
   const doUndo = () => act((_, cur) => undoBets(cur), 'Undone');
   const doClear = () => act((_, cur) => clearBets(cur), 'Bets cleared');
   const doSpin = () => {
@@ -159,8 +168,8 @@ export function Play({ query }: ScreenProps) {
   };
 
   // Keyboard shortcuts; the handlers are read through a ref so the listener is added once.
-  const keys = useRef({ doSpin, doRebet, doDouble, doUndo, doClear, setDenom });
-  keys.current = { doSpin, doRebet, doDouble, doUndo, doClear, setDenom };
+  const keys = useRef({ doSpin, doRebet, doDouble, doAddEach, doUndo, doClear, setDenom });
+  keys.current = { doSpin, doRebet, doDouble, doAddEach, doUndo, doClear, setDenom };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (ignoreKey(e)) return;
@@ -189,6 +198,7 @@ export function Play({ query }: ScreenProps) {
         k.doSpin();
       } else if (key === 'r') k.doRebet();
       else if (key === 'd') k.doDouble();
+      else if (key === 'a') k.doAddEach();
       else if (key === 'u') k.doUndo();
       else if (key === 'c') k.doClear();
       else if (/^[1-9]$/.test(e.key)) {
@@ -295,6 +305,7 @@ export function Play({ query }: ScreenProps) {
                       variant: s.variant,
                       bankroll: s.startBankroll,
                       rng: { kind: 'crypto' },
+                      ...(s.rulesOverrides ? { rulesOverrides: s.rulesOverrides } : {}),
                     })
                   }
                 >
@@ -327,7 +338,7 @@ export function Play({ query }: ScreenProps) {
             >
               {problems.length > 0 && !ended
                 ? `${problems[0]!.message}${problems.length > 1 ? ` (+${problems.length - 1} more)` : ''}`
-                : `${variantLabel(s.variant)} · min outside ${formatMoney(rules.limits.outside.min)} · inside ${formatMoney(rules.limits.inside.minTotal)}`}
+                : `${variantLabel(s.variant)} · ${limitsLine(rules)}`}
             </p>
             <div class="play-table-head">
               <Segmented
@@ -418,6 +429,17 @@ export function Play({ query }: ScreenProps) {
               </button>
               <button
                 type="button"
+                class="btn play-act"
+                onClick={doAddEach}
+                disabled={ended || (!hasBets && s.lastBets.length === 0)}
+                aria-keyshortcuts="A"
+                aria-label={`Add one ${formatMoney(denom)} chip to every bet`}
+                title={`Add one ${formatMoney(denom)} chip to every bet`}
+              >
+                +1
+              </button>
+              <button
+                type="button"
                 class="btn btn-primary play-act play-spin"
                 onClick={doSpin}
                 disabled={spinBlocked !== null}
@@ -454,7 +476,7 @@ export function Play({ query }: ScreenProps) {
 
       <Sheet open={sheet === 'menu'} title="Play" onClose={closeSheet}>
         <div class="play-menu">
-          <Button onClick={() => setSheet('session')}>Session: top up, end, new</Button>
+          <Button onClick={() => setSheet('session')}>Session: limits, top up, end, new</Button>
           <Button onClick={() => setSheet('save')} disabled={!hasBets}>
             Save bets as layout
           </Button>
@@ -462,8 +484,8 @@ export function Play({ query }: ScreenProps) {
             Place a layout
           </Button>
           <p class="muted play-keys">
-            Keys: Space spins (Enter too, off the board) · R rebet · D double · U or Ctrl+Z undo · C
-            clear · 1–
+            Keys: Space spins (Enter too, off the board) · R rebet · D double · A add a chip to
+            every bet · U or Ctrl+Z undo · C clear · 1–
             {DENOMS.length} chip
           </p>
         </div>
@@ -477,6 +499,11 @@ export function Play({ query }: ScreenProps) {
           onStart={ctl.start}
           onTopUp={ctl.topUp}
           onEnd={ctl.end}
+          rules={rules}
+          onSetRules={(ov) => {
+            ctl.setRules(ov);
+            setStatus('Table limits updated');
+          }}
         />
       ) : null}
       <SaveLayoutSheet

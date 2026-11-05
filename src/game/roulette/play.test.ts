@@ -20,7 +20,7 @@ const envFor = (
 ): PlayEnv<RouletteState, RouletteRules> => ({
   plugin: roulette,
   rules,
-  restore: (snap, rng: Rng) => ({ ...roulette.deserialize(snap), rng }),
+  restore: (snap, rng: Rng) => ({ ...roulette.deserialize(snap), rng, rules }),
 });
 const ok = (r: PlayResult): PlaySession => {
   if (!r.ok) throw new Error(`${r.code}: ${r.message}`);
@@ -62,5 +62,27 @@ describe('play mode on the roulette table', () => {
       expect(equityOf(s)).toBe(r.spin.equity);
     }
     expect(sawCarry).toBe(true);
+  });
+});
+
+describe('play mode table limits', () => {
+  it('limits changed between spins apply to the next check and spin', () => {
+    const base = envFor('european');
+    let s = createSession(base, {
+      variant: 'european',
+      bankroll: 100_000,
+      rng: { kind: 'seeded', seed: 11 },
+    });
+    s = ok(placeBet(base, s, 'red', 1000));
+    expect(checkBets(base, s).map((p) => p.code)).toEqual(['below-min']);
+    const lowMin = resolveRules({
+      preset: 'european',
+      overrides: { limits: { outside: { min: 500 } } },
+    });
+    const env = envFor('european', lowMin);
+    expect(checkBets(env, s)).toEqual([]);
+    const r = spin(env, s);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.spin.wagered).toBe(1000);
   });
 });

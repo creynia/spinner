@@ -10,6 +10,7 @@ import { ChipRack } from './ChipRack';
 import { SpotList } from './SpotList';
 import { adjustSpot } from '../../strategy';
 import {
+  addOneEach,
   betLabel,
   doubleSpots,
   halveSpots,
@@ -202,10 +203,16 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
   // Whole-layout scaling (More sheet): one undo step each.
   const doubled = useMemo(() => doubleSpots(spots), [spots]);
   const halved = useMemo(() => halveSpots(spots, step), [spots, ui.chips]);
-  const scale = (by: 'double' | 'halve') => {
-    const r = by === 'double' ? doubled : halved;
+  const plusOne = useMemo(() => addOneEach(spots, step), [spots, ui.chips]);
+  const scale = (by: 'double' | 'halve' | 'plus-one') => {
+    const r = by === 'double' ? doubled : by === 'halve' ? halved : plusOne;
     if (!r.ok) return;
-    const text = by === 'double' ? 'Doubled all spots' : 'Halved all spots';
+    const text =
+      by === 'double'
+        ? 'Doubled all spots'
+        : by === 'halve'
+          ? 'Halved all spots'
+          : 'Added a chip to every spot';
     commit(r.spots, text);
     say(`${text}: ${plural(totalChips(r.spots), 'chip')}`);
     setLast(null);
@@ -356,6 +363,16 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
         onClick={redo}
       >
         <Icon>↷</Icon>
+      </button>
+      <button
+        type="button"
+        class="le-btn"
+        aria-label="Add a chip to every spot"
+        title="Add a chip to every spot"
+        disabled={!plusOne.ok}
+        onClick={() => scale('plus-one')}
+      >
+        <Icon>+1</Icon>
       </button>
       <button
         type="button"
@@ -542,6 +559,9 @@ export function LayoutEditor<R>(props: LayoutEditorProps<R>) {
               </Button>
               <Button disabled={!halved.ok} onClick={() => scale('halve')}>
                 Halve all (÷2)
+              </Button>
+              <Button disabled={!plusOne.ok} onClick={() => scale('plus-one')}>
+                +1 chip on every spot
               </Button>
             </div>
             {spots.length > 0 && (scaleWhyNot(doubled) ?? scaleWhyNot(halved)) ? (

@@ -82,3 +82,19 @@ export function halveSpots(
   if (odd) return { ok: false, reason: 'uneven', bet: odd.bet };
   return { ok: true, spots: spots.map((s) => ({ bet: s.bet, chips: s.chips / 2 })) };
 }
+
+/**
+ * One more chip on every spot (a call bet gets one step: its pieces), in the same order. Refused
+ * when empty or when a spot would pass `maxChips`.
+ */
+export function addOneEach(
+  spots: readonly LayoutSpot[],
+  step: (bet: BetId) => number,
+  maxChips: number = MAX_CHIPS_PER_SPOT,
+): ScaleResult {
+  if (spots.length === 0) return { ok: false, reason: 'empty' };
+  const add = (s: LayoutSpot) => s.chips + Math.max(1, step(s.bet));
+  const over = spots.find((s) => add(s) > maxChips);
+  if (over) return { ok: false, reason: 'max-chips', bet: over.bet };
+  return { ok: true, spots: spots.map((s) => ({ bet: s.bet, chips: add(s) })) };
+}
