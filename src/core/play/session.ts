@@ -459,8 +459,10 @@ export function spin<S, R>(env: PlayEnv<S, R>, s: PlaySession): SpinResult {
     if (outcome.net > 0) {
       st.wins += 1;
       if (run.spins > 0) {
-        record.cost = { amount: run.amount, spins: run.spins };
-        st.lastWinCost = { amount: run.amount, spins: run.spins, win: outcome.net };
+        // What the win cost: the losing run it ended plus the stake on the winning spin itself.
+        const cost = { amount: run.amount + outcome.wagered, spins: run.spins + 1 };
+        record.cost = cost;
+        st.lastWinCost = { ...cost, win: outcome.net };
       }
       st.lossRun = { amount: 0, spins: 0 };
       st.streak = st.streak > 0 ? st.streak + 1 : 1;

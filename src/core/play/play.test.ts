@@ -285,10 +285,11 @@ describe('cost of a win', () => {
     s = flip(s, 'T', 100).session;
     expect(s.stats.lossRun).toEqual({ amount: 200, spins: 2 });
     const w = flip(s, 'H', 100);
-    expect(w.spin.cost).toEqual({ amount: 200, spins: 2 });
+    // The win's own $1 stake counts: $2 lost + $1 staked, over 3 spins.
+    expect(w.spin.cost).toEqual({ amount: 300, spins: 3 });
     s = w.session;
     expect(s.stats.lossRun).toEqual({ amount: 0, spins: 0 });
-    const cost = { amount: 200, spins: 2, win: 100 };
+    const cost = { amount: 300, spins: 3, win: 100 };
     expect(s.stats.lastWinCost).toEqual(cost);
     const w2 = flip(s, 'H', 300);
     expect(w2.spin.cost).toBeUndefined();
