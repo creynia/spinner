@@ -63,6 +63,8 @@ export interface BoardProps {
   onRemove?: (bet: string) => void;
   /** Place mode: a long-press (500 ms) on a pocket. */
   onLongPress?: (label: string, opener: Element) => void;
+  /** Text under a number, keyed by pocket label (play mode: what the number would win). */
+  notes?: ReadonlyMap<string, string>;
 }
 
 export const LONG_PRESS_MS = 500;
@@ -102,8 +104,10 @@ function Cell(props: {
   onPick?: (opener: Element, e?: Event) => void;
   /** Place mode: accessible name override. */
   name?: string;
+  /** Small text near the cell's bottom edge. */
+  note?: string;
 }) {
-  const { label, rect, covered, dolly, interactive, wheel } = props;
+  const { label, rect, covered, dolly, interactive, wheel, note } = props;
   const color = colorOfLabel(label);
   const id = `straight:${label}`;
   const body = (
@@ -118,12 +122,24 @@ function Cell(props: {
       <text
         class="rl-num"
         x={rect.x + rect.w / 2}
-        y={rect.y + rect.h / 2}
+        y={rect.y + rect.h / 2 - (note ? 7 : 0)}
         text-anchor="middle"
         dominant-baseline="central"
       >
         {label}
       </text>
+      {note && (
+        <text
+          class="rl-note"
+          data-note={label}
+          x={rect.x + rect.w / 2}
+          y={rect.y + rect.h - 9}
+          text-anchor="middle"
+          dominant-baseline="central"
+        >
+          {note}
+        </text>
+      )}
       {dolly && (
         <g class="rl-dolly" data-pocket-dolly={label}>
           <rect x={rect.x + 2} y={rect.y + 2} width={rect.w - 4} height={rect.h - 4} rx="4" />
@@ -410,9 +426,10 @@ export function Board(props: BoardProps) {
           dolly={props.dolly === label}
           interactive={pick || place}
           wheel={wheel}
+          note={props.notes?.get(label)}
           name={
             place
-              ? `${betName(`straight:${label}`, wheel)} (${colorOfLabel(label)}), ${chipsText(`straight:${label}`)}, ${paysText(`straight:${label}`, wheel)}. Opens the bets on ${label}.`
+              ? `${betName(`straight:${label}`, wheel)} (${colorOfLabel(label)}), ${chipsText(`straight:${label}`)}${props.notes?.has(label) ? `, wins ${props.notes.get(label)}` : ''}, ${paysText(`straight:${label}`, wheel)}. Opens the bets on ${label}.`
               : undefined
           }
           onPick={(el, e) => {

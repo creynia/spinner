@@ -514,3 +514,19 @@ describe('rouletteUi.chips', () => {
     expect(chips.denominations).toContain(500);
   });
 });
+
+describe('pocket notes', () => {
+  it('draws a note on a noted number only and names it on the cell', () => {
+    const { container } = mount({ pocketNotes: new Map([['17', '+$175']]) });
+    expect(q(container, '[data-pocket="17"] .rl-note').textContent).toBe('+$175');
+    expect(container.querySelectorAll('.rl-note')).toHaveLength(1);
+    expect(container.querySelector('[data-pocket="18"] .rl-note')).toBeNull();
+    expect(q(container, '[data-pocket="17"]').getAttribute('aria-label')).toContain('wins +$175');
+    expect(q(container, '[data-pocket="18"]').getAttribute('aria-label')).not.toContain('wins');
+  });
+
+  it('draws nothing without the prop', () => {
+    const { container } = mount();
+    expect(container.querySelector('.rl-note')).toBeNull();
+  });
+});

@@ -21,14 +21,23 @@ export function resultText(r: SpinRecord): string {
   return 'Push';
 }
 
-/** Secondary line: a win's cost, a long losing run, else the stake. Derived from the log alone. */
-export function detailText(log: readonly SpinRecord[]): string {
+/**
+ * Secondary line: a win's cost, a long losing run, else the stake. `lossRun` (the session's exact
+ * running total) wins over counting back through the log, which is capped at 500 spins.
+ */
+export function detailText(
+  log: readonly SpinRecord[],
+  lossRun?: { amount: number; spins: number },
+): string {
   const last = log[log.length - 1]!;
   const head = `Spin ${last.n}`;
   const spins = (n: number): string => `${n} spin${n === 1 ? '' : 's'}`;
   if (last.net > 0 && last.cost)
     return `${head} · cost ${formatMoney(last.cost.amount)} over ${spins(last.cost.spins)}`;
-  if (last.net < 0) {
+  if (last.net < 0 && lossRun) {
+    if (lossRun.spins >= 2)
+      return `${head} · down ${formatMoney(lossRun.amount)} over ${spins(lossRun.spins)}`;
+  } else if (last.net < 0) {
     let amount = 0;
     let n = 0;
     for (let i = log.length - 1; i >= 0 && log[i]!.net <= 0; i--) {
@@ -42,7 +51,13 @@ export function detailText(log: readonly SpinRecord[]): string {
   return last.wagered > 0 ? `${head} · staked ${formatMoney(last.wagered)}` : head;
 }
 
-export function ResultPanel({ log }: { log: readonly SpinRecord[] }) {
+export function ResultPanel({
+  log,
+  lossRun,
+}: {
+  log: readonly SpinRecord[];
+  lossRun?: { amount: number; spins: number };
+}) {
   const last = log[log.length - 1];
   const recent = log.slice(-RECENT).reverse();
   if (!last) {
@@ -70,7 +85,7 @@ export function ResultPanel({ log }: { log: readonly SpinRecord[] }) {
       </div>
       <div class="play-result-text">
         <div class={`play-result-net play-tone-${tone}`}>{resultText(last)}</div>
-        <div class="muted">{detailText(log)}</div>
+        <div class="muted">{detailText(log, lossRun)}</div>
       </div>
       <ol class="play-recent" aria-label="Recent numbers, newest first">
         {recent.map((r) => {

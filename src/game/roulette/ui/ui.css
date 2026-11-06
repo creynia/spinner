@@ -143,6 +143,14 @@
   stroke-width: 1;
   stroke-dasharray: 3 2;
 }
+.rl-note {
+  /* Cells are dark in both themes, so a light gold reads on red, black and green. */
+  fill: #ffe08a;
+  font:
+    700 13px/1 system-ui,
+    sans-serif;
+  pointer-events: none;
+}
 .rl-chip text {
   fill: var(--rl-chip-ink);
   font:
