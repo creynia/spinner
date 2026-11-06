@@ -38,6 +38,11 @@ export interface SpinRecord {
   events: { type: string; bet?: BetId }[];
   /** ISO time. */
   at: string;
+  /**
+   * Winning spins only, when a losing run came before: what that win cost (the run it ended).
+   * Absent on consecutive wins and on old saved sessions.
+   */
+  cost?: { amount: Cents; spins: number };
 }
 
 /** Running totals over every spin of the session (not just the kept log). */
@@ -66,6 +71,17 @@ export interface PlayStats {
   streak: number;
   longestWinStreak: number;
   longestLossStreak: number;
+  /**
+   * The current run since the most recent win: sum of the losses (positive cents) and the number
+   * of losing spins. Pushes and spins with nothing at stake neither add to nor break it. Resets to
+   * zero on a win. Absent in old saved sessions: read as `{ amount: 0, spins: 0 }`.
+   */
+  lossRun: { amount: Cents; spins: number };
+  /**
+   * The losing run the latest win ended, with that win's net. A win with an empty run (consecutive
+   * wins) leaves it untouched. `null` before the first such win. Absent in old saved sessions.
+   */
+  lastWinCost: { amount: Cents; spins: number; win: Cents } | null;
 }
 
 export interface PlaySession {
