@@ -5,6 +5,7 @@ import type { ComponentType } from 'preact';
 import { ChCashout } from './ChCashout';
 import { ChCurve } from './ChCurve';
 import { ChEdge } from './ChEdge';
+import { ChHits } from './ChHits';
 import { ChLevels } from './ChLevels';
 import { ChLimits } from './ChLimits';
 import { ChMartingale } from './ChMartingale';
@@ -19,6 +20,7 @@ export type ChapterChart = ComponentType<{ chapter: Chapter }>;
 export const CHAPTER_CHARTS: Record<string, ChapterChart> = {
   start: ChStart,
   edge: ChEdge,
+  hits: ChHits,
   martingale: ChMartingale,
   levels: ChLevels,
   placement: ChPlacement,
