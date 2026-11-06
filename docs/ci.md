@@ -14,7 +14,9 @@
 | `e2e` | aggregate | succeeds only when every shard did; keeps the historical check name |
 | `perf` | Node perf suite and the Playwright `perf` project | |
 
-`node_modules` (keyed by `.nvmrc` and `package-lock.json`) and the Playwright browsers are cached; a cache hit skips `npm ci` and the browser download.
+`node_modules` is cached (keyed by `.nvmrc` and `package-lock.json`); a cache hit skips `npm ci`.
+
+The `e2e (n/4)` and `perf` jobs run in the official Playwright image (`mcr.microsoft.com/playwright:v<version>-noble`), which ships Chromium and its system packages, so there is no browser download or apt install. Keep its tag equal to `@playwright/test` in `package.json`: `tests/build/ci-playwright-image.test.ts` fails when they differ. Those jobs keep their own `node_modules` cache (`node-modules-playwright-image-…`), since the container is not the runner's environment.
 
 ## Coverage
 
