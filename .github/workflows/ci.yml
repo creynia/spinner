@@ -8,18 +8,74 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
+
+# Jobs run in parallel; the slow Playwright suite is sharded. `check` and `e2e` are small aggregate
+# jobs that keep the historical check names (so branch protection and anything else that waits on
+# them does not change) and fail when any job they stand for failed.
+#
+# node_modules is cached by lockfile and Node version; on a hit `npm ci` is skipped.
+
 jobs:
-  check:
+  lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      VITEST_MAX_WORKERS: '3'
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version-file: .nvmrc, cache: npm }
-      - run: npm ci
-      - run: npm run check
+        with: { node-version-file: .nvmrc }
+      - id: deps
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('.nvmrc', 'package-lock.json') }}
+      - if: steps.deps.outputs.cache-hit != 'true'
+        run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc }
+      - id: deps
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('.nvmrc', 'package-lock.json') }}
+      - if: steps.deps.outputs.cache-hit != 'true'
+        run: npm ci
+      - run: npm run typecheck
+
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITEST_MAX_WORKERS: '4'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc }
+      - id: deps
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('.nvmrc', 'package-lock.json') }}
+      - if: steps.deps.outputs.cache-hit != 'true'
+        run: npm ci
+      # Fails when coverage drops below the floors in vitest.config.ts (coverage.thresholds).
+      - run: npm run test:coverage
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            node scripts/coverage-summary.mjs coverage/coverage-summary.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: coverage, path: coverage, retention-days: 14 }
 
   gallery:
     runs-on: ubuntu-latest
@@ -30,14 +86,34 @@ jobs:
         with: { node-version-file: .nvmrc }
       - run: npm run gallery:check
 
+  check:
+    # Stands for everything `npm run check` covers: lint, format, typecheck, gallery, unit tests.
+    needs: [lint, typecheck, unit, gallery]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: |
+          echo 'lint=${{ needs.lint.result }} typecheck=${{ needs.typecheck.result }} unit=${{ needs.unit.result }} gallery=${{ needs.gallery.result }}'
+          test '${{ needs.lint.result }}' = success
+          test '${{ needs.typecheck.result }}' = success
+          test '${{ needs.unit.result }}' = success
+          test '${{ needs.gallery.result }}' = success
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version-file: .nvmrc, cache: npm }
-      - run: npm ci
+        with: { node-version-file: .nvmrc }
+      - id: deps
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('.nvmrc', 'package-lock.json') }}
+      - if: steps.deps.outputs.cache-hit != 'true'
+        run: npm ci
       - run: npm run build
       - name: Assert the sim worker is a separate chunk
         run: ls dist/assets/sim.worker-*.js
@@ -48,25 +124,54 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: dist, path: dist, retention-days: 7 }
 
-  e2e:
+  e2e-shard:
+    name: e2e (${{ matrix.shard }}/4)
     needs: build
     runs-on: ubuntu-latest
-    # The suite takes about 19 minutes with the phone Play suites (tests/e2e/play-mobile), plus setup.
-    timeout-minutes: 35
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       PW_WORKERS: '2'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version-file: .nvmrc, cache: npm }
-      - run: npm ci
+        with: { node-version-file: .nvmrc }
+      - id: deps
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('.nvmrc', 'package-lock.json') }}
+      - if: steps.deps.outputs.cache-hit != 'true'
+        run: npm ci
       - uses: actions/download-artifact@v4
         with: { name: dist, path: dist }
-      - run: npx playwright install --with-deps chromium
-      - run: npx playwright test
+      - id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npx playwright test --shard=${{ matrix.shard }}/4
       - if: failure()
         uses: actions/upload-artifact@v4
-        with: { name: playwright-report, path: playwright-report }
+        with: { name: 'playwright-report-${{ matrix.shard }}', path: playwright-report }
+
+  e2e:
+    # Stands for the whole Playwright suite (all four shards).
+    needs: e2e-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: |
+          echo 'shards=${{ needs.e2e-shard.result }}'
+          test '${{ needs.e2e-shard.result }}' = success
 
   perf:
     needs: build
@@ -79,12 +184,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version-file: .nvmrc, cache: npm }
-      - run: npm ci
+        with: { node-version-file: .nvmrc }
+      - id: deps
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('.nvmrc', 'package-lock.json') }}
+      - if: steps.deps.outputs.cache-hit != 'true'
+        run: npm ci
       - uses: actions/download-artifact@v4
         with: { name: dist, path: dist }
       # Node-side perf: R19 heap/throughput (strategy.md §17.9) and the 10,000 x 500 reference run
       # on the real plugin (tests/perf/vitest.config.ts); needs no browser.
       - run: npx vitest run -c tests/perf/vitest.config.ts
-      - run: npx playwright install --with-deps chromium
+      - id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
       - run: npx playwright test --project=perf
