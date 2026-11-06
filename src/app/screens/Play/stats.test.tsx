@@ -44,7 +44,7 @@ describe('cost of a win display', () => {
       '$15 over 3 losing spins',
     );
     expect(screen.getByText('Cost of last win').nextSibling?.textContent).toBe(
-      '$200 over 8 losing spins (won $35)',
+      '$200 over 8 spins (won $35)',
     );
   });
 

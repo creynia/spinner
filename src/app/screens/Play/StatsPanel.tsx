@@ -12,6 +12,8 @@ const toneOf = (c: number): string | undefined =>
   c > 0 ? 'play-tone-good' : c < 0 ? 'play-tone-bad' : undefined;
 
 const spinsText = (n: number): string => `${n} losing spin${n === 1 ? '' : 's'}`;
+/** The cost of a win counts the winning spin too, so it is not all losing spins. */
+const allSpinsText = (n: number): string => `${n} spin${n === 1 ? '' : 's'}`;
 
 function Row({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -62,7 +64,7 @@ export function StatsPanel({ session }: { session: PlaySession }) {
           label="Cost of last win"
           value={
             cost
-              ? `${formatMoney(cost.amount)} over ${spinsText(cost.spins)} (won ${formatMoney(cost.win)})`
+              ? `${formatMoney(cost.amount)} over ${allSpinsText(cost.spins)} (won ${formatMoney(cost.win)})`
               : '–'
           }
         />
