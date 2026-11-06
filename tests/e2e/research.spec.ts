@@ -16,6 +16,7 @@ const CHAPTERS = [
   'cashout',
   'limits',
   'try',
+  'hits',
 ];
 const SHOTS = process.env.SHOTS_DIR;
 const URL = './?e2e#/research';
@@ -23,7 +24,7 @@ const URL = './?e2e#/research';
 /** The chapter nav the CSS currently shows (chips on phones, the sticky column from 768px). */
 const visibleNav = (page: Page) => page.locator('nav.research-nav:visible');
 
-test('structure: one h1, ten chapters in order, each with an h2 and "The math"', async ({
+test('structure: one h1, every chapter in order, each with an h2 and "The math"', async ({
   page,
   guard,
 }) => {

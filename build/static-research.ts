@@ -631,7 +631,46 @@ function tryTables(): Table[] {
   ];
 }
 
+/** Chance of at least one hit in n spins with k of `pockets` numbers covered (chapter "hits"). */
+const hitWithin = (k: number, pockets: number, n: number): number => 1 - (1 - k / pockets) ** n;
+/** Spins needed to reach chance p (rounded up: spins come whole). */
+const spinsTo = (k: number, pockets: number, p: number): number =>
+  Math.ceil(Math.log(1 - p) / Math.log(1 - k / pockets));
+const HIT_COUNTS = [1, 2, 3, 4, 6, 12, 18, 24];
+const hitPct = (p: number): string =>
+  p < 1 && p * 100 >= 99.95 ? '> 99.9 %' : `${(p * 100).toFixed(1)} %`;
+
+function hitsTables(): Table[] {
+  return [
+    {
+      caption: 'Spins needed for a chance of at least one hit, European wheel (37 pockets)',
+      head: ['Numbers covered', '50 %', '90 %', '95 %', '99 %'],
+      rows: HIT_COUNTS.map((k) => [
+        String(k),
+        ...[0.5, 0.9, 0.95, 0.99].map((p) => String(spinsTo(k, 37, p))),
+      ]),
+    },
+    {
+      caption: 'Chance of at least one hit within n spins, European wheel (37 pockets)',
+      head: ['Numbers covered', '10 spins', '37 spins', '50 spins', '100 spins'],
+      rows: HIT_COUNTS.map((k) => [
+        String(k),
+        ...[10, 37, 50, 100].map((n) => hitPct(hitWithin(k, 37, n))),
+      ]),
+    },
+    {
+      caption: 'Spins needed for a 50 % chance by wheel',
+      head: ['Numbers covered', 'European (37)', 'American (38)', 'Triple zero (39)'],
+      rows: HIT_COUNTS.map((k) => [
+        String(k),
+        ...[37, 38, 39].map((n) => String(spinsTo(k, n, 0.5))),
+      ]),
+    },
+  ];
+}
+
 const CHAPTER_TABLES: Record<string, () => Table[]> = {
+  hits: hitsTables,
   start: startTables,
   edge: edgeTables,
   martingale: martingaleTables,
@@ -718,6 +757,14 @@ const CHAPTER_SEO: Record<string, ChapterSeo> = {
     h1: 'What breaks it: American wheel, long sessions and table minimums',
     description: () =>
       'Other seeds, a bigger bankroll and la partage change little; long sessions, $25 table minimums and the double-zero wheel break roulette ladders. Simulated.',
+  },
+  hits: {
+    title: 'Roulette Odds of Hitting a Number in N Spins',
+    h1: 'How long until it hits? The chance of hitting a number within n spins',
+    description: () =>
+      `Roulette odds of hitting one number: ${spinsTo(1, 37, 0.5)} spins for a 50 % chance on a European wheel, ${spinsTo(1, 37, 0.95)} for 95 %. Tables for 1 to 24 numbers covered.`,
+    answer: () =>
+      `With k numbers covered on a wheel of N pockets, the chance of at least one hit within n spins is 1 − (1 − k/N)^n. One number on a European wheel needs ${spinsTo(1, 37, 0.5)} spins for a 50 % chance and ${spinsTo(1, 37, 0.95)} for 95 %; after a full lap of 37 spins it has hit only ${hitPct(hitWithin(1, 37, 37))} of the time. Six numbers need ${spinsTo(6, 37, 0.5)} spins for 50 %. No number of spins makes a hit certain, and a past miss never makes the next spin more likely.`,
   },
   try: {
     title: 'Try a Roulette Ladder: Candidates and Calculator',

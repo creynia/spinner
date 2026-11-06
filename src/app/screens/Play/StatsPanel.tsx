@@ -11,6 +11,8 @@ const signed = (c: number): string => formatMoney(Math.round(c), { sign: true })
 const toneOf = (c: number): string | undefined =>
   c > 0 ? 'play-tone-good' : c < 0 ? 'play-tone-bad' : undefined;
 
+const spinsText = (n: number): string => `${n} losing spin${n === 1 ? '' : 's'}`;
+
 function Row({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div class="play-stat">
@@ -30,6 +32,8 @@ export function StatsPanel({ session }: { session: PlaySession }) {
       : st.streak < 0
         ? `${-st.streak} loss${st.streak === -1 ? '' : 'es'}`
         : '–';
+  const run = st.lossRun ?? { amount: 0, spins: 0 };
+  const cost = st.lastWinCost ?? null;
   const rows = session.log.slice(-LOG_ROWS).reverse();
   return (
     <div class="play-stats">
@@ -50,6 +54,18 @@ export function StatsPanel({ session }: { session: PlaySession }) {
         <Row label="Trough" value={formatMoney(st.trough)} />
         <Row label="Max drawdown" value={formatMoney(st.maxDrawdown)} />
         <Row label="Streak" value={streak} />
+        <Row
+          label="Since last win"
+          value={run.spins > 0 ? `${formatMoney(run.amount)} over ${spinsText(run.spins)}` : '–'}
+        />
+        <Row
+          label="Cost of last win"
+          value={
+            cost
+              ? `${formatMoney(cost.amount)} over ${spinsText(cost.spins)} (won ${formatMoney(cost.win)})`
+              : '–'
+          }
+        />
         <Row
           label="Longest streaks"
           value={`${st.longestWinStreak} won · ${st.longestLossStreak} lost`}

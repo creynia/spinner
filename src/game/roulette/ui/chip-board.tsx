@@ -277,6 +277,7 @@ function Editable(
           onCell={openSheet}
           onLongPress={openSheet}
           onHover={setHover}
+          notes={props.pocketNotes}
         />
         <button
           ref={modeBtn}
