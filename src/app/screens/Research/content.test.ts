@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHAPTERS } from './content';
+import { hitChance, spinsFor } from './hitChance';
 
 const ORDER = [
   'start',
@@ -12,6 +13,7 @@ const ORDER = [
   'cashout',
   'limits',
   'try',
+  'hits',
 ];
 const BANNED = /\b(variance|quantile|skew\w*|cvar|expectation)\b/i;
 // The brief's pattern was /^[a-z0-9-]+:.../, but one results file is e7b-mart-L7stop.json.
@@ -19,14 +21,17 @@ const KEY = /^[A-Za-z0-9-]+:[A-Za-z0-9@_.-]+$/;
 const words = (ps: string[]) => ps.join(' ').split(/\s+/).filter(Boolean).length;
 
 describe('Research content', () => {
-  it('has the ten chapters of app-plan section 3 in order', () => {
+  it('has the chapters of app-plan section 3, plus the hit-chance chapter, in order', () => {
     expect(CHAPTERS.map((c) => c.id)).toEqual(ORDER);
   });
 
   it('fills every field of every chapter', () => {
     for (const c of CHAPTERS) {
       for (const s of [c.id, c.title, c.lead]) expect(s.trim()).not.toBe('');
-      for (const list of [c.body, c.takeaways, c.math.text, c.math.formulas, c.dataKeys]) {
+      // The hit-chance chapter is pure maths: it draws no simulation rows.
+      const lists = [c.body, c.takeaways, c.math.text, c.math.formulas];
+      if (c.id !== 'hits') lists.push(c.dataKeys);
+      for (const list of lists) {
         expect(list.length, c.id).toBeGreaterThan(0);
         for (const s of list) expect(s.trim(), c.id).not.toBe('');
       }
@@ -60,5 +65,16 @@ describe('Research content', () => {
       const c = CHAPTERS.find((x) => x.id === id)!;
       expect([c.lead, ...c.body, ...c.takeaways].join(' ').toLowerCase()).toContain(sentence);
     }
+  });
+
+  it('quotes hit-chance numbers that match hitChance.ts', () => {
+    const c = CHAPTERS.find((x) => x.id === 'hits')!;
+    const text = [...c.body, ...c.takeaways, ...c.math.formulas].join(' ');
+    expect(text).toContain(`${spinsFor(1, 37, 0.5)} spins and 95 % after ${spinsFor(1, 37, 0.95)}`);
+    expect(text).toContain(
+      `Six numbers get there in ${spinsFor(6, 37, 0.5)} and ${spinsFor(6, 37, 0.95)}`,
+    );
+    expect(text).toContain(`${(hitChance(1, 37, 37) * 100).toFixed(1)} %`);
+    expect(text).toContain(`${spinsFor(2, 37, 0.5)} with two, ${spinsFor(4, 37, 0.5)} with four`);
   });
 });

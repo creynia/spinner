@@ -1,0 +1,94 @@
+/* Chapter "hits": controls above the chart, the readout under it. Tokens only. */
+.hits {
+  margin: 12px 0;
+  min-width: 0;
+}
+.hits-group {
+  min-width: 0;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+}
+.hits-group legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.hits-chip {
+  justify-content: center;
+  min-width: var(--tap);
+  padding: 0 12px;
+}
+.hits-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.hits-custom label {
+  font-size: 0.875rem;
+}
+.hits-custom .input {
+  width: 7rem;
+  min-height: var(--tap);
+}
+.hits-custom .btn {
+  min-height: var(--tap);
+}
+.hits-note {
+  min-height: 1.2em;
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.hits-chart .hits-svg {
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+.hits-line {
+  pointer-events: none;
+}
+.hits-guide,
+.hits-dot {
+  pointer-events: none;
+}
+.hits-readout {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.hits-readout-head {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+}
+.hits-readout ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 2px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hits-readout li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.hits-readout li strong {
+  margin-left: auto;
+}
+.hits-caption {
+  caption-side: top;
+  padding: 4px 8px;
+  text-align: left;
+  font-size: 0.875rem;
+  color: var(--muted);
+}

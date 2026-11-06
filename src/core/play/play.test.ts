@@ -264,3 +264,49 @@ describe('addChipEach and rules overrides', () => {
     expect(s.rulesOverrides).toBeUndefined();
   });
 });
+
+describe('cost of a win', () => {
+  /** Spin once with `stake` on heads, forcing the flip ('H' win, 'T' loss); stake 0 spins bare. */
+  const flip = (
+    s: PlaySession,
+    face: 'H' | 'T',
+    stake: number,
+  ): Extract<SpinResult, { ok: true }> => {
+    const st = coin.force!(coin.deserialize(s.engine), [face]);
+    const forced = { ...s, engine: coin.serialize(st) };
+    return spun(spin(env, stake ? ok(placeBet(env, forced, COIN_BET, stake)) : forced));
+  };
+
+  it('tracks the losing run, the cost of the last win and ignores pushes and consecutive wins', () => {
+    let s = seeded();
+    expect(s.stats.lossRun).toEqual({ amount: 0, spins: 0 });
+    expect(s.stats.lastWinCost).toBeNull();
+    s = flip(s, 'T', 100).session;
+    s = flip(s, 'T', 100).session;
+    expect(s.stats.lossRun).toEqual({ amount: 200, spins: 2 });
+    const w = flip(s, 'H', 100);
+    expect(w.spin.cost).toEqual({ amount: 200, spins: 2 });
+    s = w.session;
+    expect(s.stats.lossRun).toEqual({ amount: 0, spins: 0 });
+    const cost = { amount: 200, spins: 2, win: 100 };
+    expect(s.stats.lastWinCost).toEqual(cost);
+    const w2 = flip(s, 'H', 300);
+    expect(w2.spin.cost).toBeUndefined();
+    s = w2.session;
+    expect(s.stats.lastWinCost).toEqual(cost);
+    s = flip(s, 'T', 100).session;
+    s = flip(s, 'T', 0).session; // nothing at stake: neither adds nor breaks
+    s = flip(s, 'T', 100).session;
+    expect(s.stats.lossRun).toEqual({ amount: 200, spins: 2 });
+    expect(s.stats.lastWinCost).toEqual(cost);
+  });
+
+  it('reads sessions saved before the fields existed', () => {
+    const old = seeded();
+    delete (old.stats as Partial<typeof old.stats>).lossRun;
+    delete (old.stats as Partial<typeof old.stats>).lastWinCost;
+    const r = flip(old, 'T', 100);
+    expect(r.session.stats.lossRun).toEqual({ amount: 100, spins: 1 });
+    expect(r.session.stats.lastWinCost).toBeNull();
+  });
+});

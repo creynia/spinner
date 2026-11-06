@@ -61,6 +61,8 @@ function emptyStats(start: Cents): PlayStats {
     streak: 0,
     longestWinStreak: 0,
     longestLossStreak: 0,
+    lossRun: { amount: 0, spins: 0 },
+    lastWinCost: null,
   };
 }
 
@@ -443,6 +445,9 @@ export function spin<S, R>(env: PlayEnv<S, R>, s: PlaySession): SpinResult {
     at,
   };
   const st = { ...s.stats };
+  const run = s.stats.lossRun ?? { amount: 0, spins: 0 };
+  st.lossRun = run;
+  st.lastWinCost = s.stats.lastWinCost ?? null;
   st.spins = n;
   st.wagered += outcome.wagered;
   st.net += outcome.net;
@@ -453,10 +458,16 @@ export function spin<S, R>(env: PlayEnv<S, R>, s: PlaySession): SpinResult {
     st.betSpins += 1;
     if (outcome.net > 0) {
       st.wins += 1;
+      if (run.spins > 0) {
+        record.cost = { amount: run.amount, spins: run.spins };
+        st.lastWinCost = { amount: run.amount, spins: run.spins, win: outcome.net };
+      }
+      st.lossRun = { amount: 0, spins: 0 };
       st.streak = st.streak > 0 ? st.streak + 1 : 1;
       st.longestWinStreak = Math.max(st.longestWinStreak, st.streak);
     } else if (outcome.net < 0) {
       st.losses += 1;
+      st.lossRun = { amount: run.amount - outcome.net, spins: run.spins + 1 };
       st.streak = st.streak < 0 ? st.streak - 1 : -1;
       st.longestLossStreak = Math.max(st.longestLossStreak, -st.streak);
     } else st.pushes += 1;

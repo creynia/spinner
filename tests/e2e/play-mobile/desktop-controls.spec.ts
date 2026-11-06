@@ -32,7 +32,15 @@ test.describe('S6 desktop controls', () => {
       // The whole bar is on screen without scrolling, next to the board.
       expect(bar.bottom, where).toBeLessThanOrEqual(size.height);
 
-      // A session: $25 on Red, then Rebet + Space, with the Stats panel visible.
+      // A session that cannot go broke in 300 spins of $25 (the default $1,000 can, about 1 run in
+      // 15), so "Spin 300" is always reached: start a $1,000,000 session from the Session sheet.
+      await page.getByRole('button', { name: 'More play actions' }).click();
+      await page.getByRole('button', { name: /^Session:/ }).click();
+      await page.getByLabel('Bankroll', { exact: true }).fill('1000000');
+      await page.getByRole('button', { name: 'Start new session' }).click();
+      await expect(page.locator('.play-head')).toContainText('$1,000,000');
+
+      // $25 on Red, then Rebet + Space, with the Stats panel visible.
       await page.getByRole('radio', { name: /25/ }).first().click();
       await page.locator('.play-board [aria-label^="Red"]').first().click();
       await expect(page.locator('#play-stats-body')).toBeVisible();

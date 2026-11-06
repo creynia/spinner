@@ -61,6 +61,11 @@ export interface ChipBoardProps<R = unknown> {
    * mode); the sheet then shows money and says what + adds. Needs a non-null `chipValue`.
    */
   tapValue?: Cents;
+  /**
+   * Optional (additive): text drawn on numbers, keyed by pocket label (play mode: what each covered
+   * number would win). Absent: nothing is drawn.
+   */
+  pocketNotes?: ReadonlyMap<string, string>;
 }
 
 /** The game's contribution to the generic layout editor (layouts.md §6.2). */

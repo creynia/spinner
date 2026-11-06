@@ -37,6 +37,7 @@ import { layoutChoices, variantLabel } from '../../services/layouts';
 import type { ScreenProps } from '../types';
 import { isVariant, type RouletteEnv } from './env';
 import { ResultPanel, pocketOf, resultText } from './ResultPanel';
+import { compactNet, payoutsByPocket } from './payouts';
 import { SaveLayoutSheet } from './SaveLayoutSheet';
 import { SessionSheet } from './SessionSheet';
 import { StatsPanel } from './StatsPanel';
@@ -101,6 +102,11 @@ export function Play({ query }: ScreenProps) {
   };
 
   const spots = useMemo(() => spotsOfBets(s.bets, chipUnit), [s.bets, chipUnit]);
+  const pocketNotes = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const [pocket, net] of payoutsByPocket(rules, s.bets)) m.set(pocket, compactNet(net));
+    return m;
+  }, [rules, s.bets]);
   const problems = useMemo(() => (s.endedAt ? [] : checkBets(env, s)), [env, s]);
   const flagged = useMemo(
     () => new Map(problems.filter((p) => p.bet).map((p) => [p.bet, p.message])),
@@ -289,7 +295,7 @@ export function Play({ query }: ScreenProps) {
 
       <div class="play-grid">
         <div class="play-main">
-          <ResultPanel log={s.log} />
+          <ResultPanel log={s.log} {...(s.stats.lossRun ? { lossRun: s.stats.lossRun } : {})} />
           <p class="visually-hidden" role="status" aria-live="polite">
             {status}
           </p>
@@ -374,6 +380,7 @@ export function Play({ query }: ScreenProps) {
                 flagged={flagged}
                 maxChips={Infinity}
                 tapValue={denom}
+                pocketNotes={pocketNotes}
               />
             </div>
             {prison.length > 0 ? (

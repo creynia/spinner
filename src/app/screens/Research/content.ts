@@ -3,6 +3,7 @@
 // (European wheel, $5,000 bankroll, 500 spins, 10,000 sessions, seed 20261031 unless the text says
 // otherwise). dataKeys are "<results file>:<experiment id>", the rows a chapter's chart draws; the
 // curve chapter's scatter also uses data.json `curve` (from docs/research/briefs/E5.md).
+
 export interface Chapter {
   id: string;
   title: string;
@@ -12,6 +13,17 @@ export interface Chapter {
   math: { text: string[]; formulas: string[] };
   dataKeys: string[];
 }
+
+// Spin-by-spin versions of the hit-chance formulas of ./hitChance.ts. This file is also compiled by
+// tsconfig.node.json, which lists no other source file, so it carries its own copy (content.test.ts
+// checks the prose against hitChance.ts).
+const missChance = (k: number, n: number): number => (1 - k / 37) ** n;
+function spinsFor(k: number, target: number): number {
+  let n = 1;
+  while (1 - missChance(k, n) < target) n++;
+  return n;
+}
+const hitWithin = (k: number, n: number): number => 1 - missChance(k, n);
 
 const seeds = (file: string, id: string, list: string[]): string[] =>
   list.map((s) => `${file}:${id}@${s}`);
@@ -384,5 +396,31 @@ export const CHAPTERS: readonly Chapter[] = [
       ...seeds('e6-full', 'b3-two-streets-l29', ['20261031', '1', '2']),
       'e8-seed3:b3-two-streets-l29@3',
     ],
+  },
+  {
+    id: 'hits',
+    title: 'How long until it hits?',
+    lead: 'The more numbers a bet covers, the sooner it is likely to hit, but no number of spins makes a hit certain.',
+    body: [
+      'Cover k of the N pockets on the wheel and each spin hits with chance k out of N. The chance of at least one hit within n spins is one minus the chance of missing every time. It climbs fast at first, then flattens, and never reaches 100 %.',
+      `On a European wheel one number reaches 50 % after ${spinsFor(1, 0.5)} spins and 95 % after ${spinsFor(1, 0.95)}. Six numbers get there in ${spinsFor(6, 0.5)} and ${spinsFor(6, 0.95)}. Pick the wheel and the counts below, then tap the chart to read any point.`,
+    ],
+    takeaways: [
+      `One number is not due after a full lap of the wheel: after 37 spins it has hit only ${(hitWithin(1, 37) * 100).toFixed(1)} % of the time.`,
+      `Doubling the numbers covered roughly halves the wait: ${spinsFor(1, 0.5)} spins for 50 % with one number, ${spinsFor(2, 0.5)} with two, ${spinsFor(4, 0.5)} with four.`,
+      'Extra zeros slow every line a little, because each spin has more pockets to miss in.',
+    ],
+    math: {
+      text: [
+        'With k numbers covered on a wheel of N pockets, one spin misses with chance 1 − k/N. Spins are independent, so n misses in a row have chance (1 − k/N)^n, and the chance of at least one hit is what is left.',
+        'Solving for the spin count gives the wait for a target chance p. The result is rounded up, because spins come whole. A past miss changes nothing: the next spin hits with chance k/N whatever came before.',
+      ],
+      formulas: [
+        'P(n) = 1 − (1 − k/N)^n',
+        'n(p) = ceil( ln(1 − p) / ln(1 − k/N) )',
+        `one number, N = 37: n(50 %) = ${spinsFor(1, 0.5)}, n(95 %) = ${spinsFor(1, 0.95)}`,
+      ],
+    },
+    dataKeys: [],
   },
 ];
