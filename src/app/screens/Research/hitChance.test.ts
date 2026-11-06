@@ -116,3 +116,11 @@ describe('helpers', () => {
     expect(tableSpins(300).at(-1)).toBe(300);
   });
 });
+
+describe('pct2', () => {
+  it('never shows a hit chance as 100.00%', () => {
+    expect(pct2(1 / 37)).toBe('2.70%');
+    expect(pct2(hitChance(12, 37, 37))).toBe('> 99.99%');
+    expect(pct2(0.99994)).toBe('99.99%');
+  });
+});

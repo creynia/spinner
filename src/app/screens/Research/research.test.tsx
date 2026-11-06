@@ -11,7 +11,6 @@ afterEach(cleanup);
 const ORDER = [
   'start',
   'edge',
-  'hits',
   'martingale',
   'levels',
   'placement',
@@ -20,6 +19,7 @@ const ORDER = [
   'cashout',
   'limits',
   'try',
+  'hits',
 ];
 
 const view = (qs = '') => render(<Research params={{}} query={new URLSearchParams(qs)} />);

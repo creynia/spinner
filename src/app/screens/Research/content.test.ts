@@ -5,7 +5,6 @@ import { hitChance, spinsFor } from './hitChance';
 const ORDER = [
   'start',
   'edge',
-  'hits',
   'martingale',
   'levels',
   'placement',
@@ -14,6 +13,7 @@ const ORDER = [
   'cashout',
   'limits',
   'try',
+  'hits',
 ];
 const BANNED = /\b(variance|quantile|skew\w*|cvar|expectation)\b/i;
 // The brief's pattern was /^[a-z0-9-]+:.../, but one results file is e7b-mart-L7stop.json.

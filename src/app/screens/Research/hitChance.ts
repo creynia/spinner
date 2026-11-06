@@ -44,7 +44,12 @@ export function spinsFor(k: number, pockets: number, target: number): number {
 export const medianSpins = (k: number, pockets: number): number => spinsFor(k, pockets, 0.5);
 
 /** "63.21%": two decimals, as the readout shows it. */
-export const pct2 = (p: number): string => `${(p * 100).toFixed(2)}%`;
+/**
+ * A chance as a percentage with 2 decimals. A hit chance is never certain, so values that would
+ * round up to 100 read "> 99.99%" instead of a misleading "100.00%".
+ */
+export const pct2 = (p: number): string =>
+  p < 1 && p * 100 >= 99.995 ? '> 99.99%' : `${(p * 100).toFixed(2)}%`;
 
 /** True for a whole number of covered numbers from 1 to 36. */
 export const validCount = (k: number): boolean => Number.isInteger(k) && k >= 1 && k <= MAX_CUSTOM;
