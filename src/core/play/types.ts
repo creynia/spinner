@@ -39,9 +39,9 @@ export interface SpinRecord {
   /** ISO time. */
   at: string;
   /**
-   * Winning spins only, when a losing run came before: what that win cost, i.e. the losses of the
-   * run it ended plus the stake on the winning spin, over those spins and the winning one.
-   * Absent on consecutive wins and on old saved sessions.
+   * Winning spins only: what that win cost, i.e. the losses of the losing run it ended plus what
+   * was lost on the winning spin itself (chips that lost; the winning chip stays on the table), over
+   * those spins and the winning one. Absent on old saved sessions.
    */
   cost?: { amount: Cents; spins: number };
 }
@@ -79,9 +79,9 @@ export interface PlayStats {
    */
   lossRun: { amount: Cents; spins: number };
   /**
-   * What the latest win cost: the losing run it ended plus the winning spin's stake (amount, and
-   * spins including the winning one), with that win's net. A win with an empty run (consecutive
-   * wins) leaves it untouched. `null` before the first such win. Absent in old saved sessions.
+   * What the latest win cost (as `SpinRecord.cost`: the losing run it ended plus what was lost on
+   * the winning spin, spins including the winning one), with that win's net. `null` before the
+   * first win. Absent in old saved sessions.
    */
   lastWinCost: { amount: Cents; spins: number; win: Cents } | null;
 }

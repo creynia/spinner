@@ -277,7 +277,7 @@ describe('cost of a win', () => {
     return spun(spin(env, stake ? ok(placeBet(env, forced, COIN_BET, stake)) : forced));
   };
 
-  it('tracks the losing run, the cost of the last win and ignores pushes and consecutive wins', () => {
+  it('tracks the losing run and the cost of each win (the winning chip stays on the table)', () => {
     let s = seeded();
     expect(s.stats.lossRun).toEqual({ amount: 0, spins: 0 });
     expect(s.stats.lastWinCost).toBeNull();
@@ -285,15 +285,16 @@ describe('cost of a win', () => {
     s = flip(s, 'T', 100).session;
     expect(s.stats.lossRun).toEqual({ amount: 200, spins: 2 });
     const w = flip(s, 'H', 100);
-    // The win's own $1 stake counts: $2 lost + $1 staked, over 3 spins.
-    expect(w.spin.cost).toEqual({ amount: 300, spins: 3 });
+    // $2 lost before; the winning $1 chip is not lost (it stays on the table): $2 over 3 spins.
+    expect(w.spin.cost).toEqual({ amount: 200, spins: 3 });
     s = w.session;
     expect(s.stats.lossRun).toEqual({ amount: 0, spins: 0 });
-    const cost = { amount: 300, spins: 3, win: 100 };
-    expect(s.stats.lastWinCost).toEqual(cost);
+    expect(s.stats.lastWinCost).toEqual({ amount: 200, spins: 3, win: 100 });
+    // A win straight after a win cost nothing: $0 over 1 spin.
     const w2 = flip(s, 'H', 300);
-    expect(w2.spin.cost).toBeUndefined();
+    expect(w2.spin.cost).toEqual({ amount: 0, spins: 1 });
     s = w2.session;
+    const cost = { amount: 0, spins: 1, win: 300 };
     expect(s.stats.lastWinCost).toEqual(cost);
     s = flip(s, 'T', 100).session;
     s = flip(s, 'T', 0).session; // nothing at stake: neither adds nor breaks
