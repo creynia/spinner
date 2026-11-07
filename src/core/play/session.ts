@@ -458,12 +458,15 @@ export function spin<S, R>(env: PlayEnv<S, R>, s: PlaySession): SpinResult {
     st.betSpins += 1;
     if (outcome.net > 0) {
       st.wins += 1;
-      if (run.spins > 0) {
-        // What the win cost: the losing run it ended plus the stake on the winning spin itself.
-        const cost = { amount: run.amount + outcome.wagered, spins: run.spins + 1 };
-        record.cost = cost;
-        st.lastWinCost = { ...cost, win: outcome.net };
-      }
+      // What the win cost: the losing run it ended plus what was lost on the winning spin itself.
+      // A chip that wins stays on the table (it is paid and returned), so only the chips that lost
+      // on that spin count: one $5 chip that hits costs $0; two $5 chips with one hit cost $5.
+      // Imprisoned bets that stay are not lost yet and do not count.
+      let lostOnWin = 0;
+      for (const r of outcome.resolutions) if (r.profit < 0) lostOnWin -= r.profit;
+      const cost = { amount: run.amount + lostOnWin, spins: run.spins + 1 };
+      record.cost = cost;
+      st.lastWinCost = { ...cost, win: outcome.net };
       st.lossRun = { amount: 0, spins: 0 };
       st.streak = st.streak > 0 ? st.streak + 1 : 1;
       st.longestWinStreak = Math.max(st.longestWinStreak, st.streak);

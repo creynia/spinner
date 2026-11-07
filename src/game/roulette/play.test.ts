@@ -86,3 +86,41 @@ describe('play mode table limits', () => {
     expect(r.spin.wagered).toBe(1000);
   });
 });
+
+describe('play mode cost of a win on the roulette table', () => {
+  // An inside minimum of $1 so single $5 straight-ups are legal on their own.
+  const env = envFor(
+    'european',
+    resolveRules({ preset: 'european', overrides: { limits: { inside: { minTotal: 100 } } } }),
+  );
+  /** A fresh session, the bets placed, one spin forced to `pocket`. */
+  const spinOn = (pocket: string, bets: [string, number][]) => {
+    let s = createSession(env, {
+      variant: 'european',
+      bankroll: 100_000,
+      rng: { kind: 'seeded', seed: 5 },
+    });
+    s = {
+      ...s,
+      engine: roulette.serialize(roulette.force!(roulette.deserialize(s.engine), [pocket])),
+    };
+    for (const [bet, amount] of bets) s = ok(placeBet(env, s, bet, amount));
+    const r = spin(env, s);
+    if (!r.ok) throw new Error(r.message);
+    return r;
+  };
+
+  it('one $5 chip that hits costs $0: the winning chip stays on the table', () => {
+    const r = spinOn('17', [['straight:17', 500]]);
+    expect(r.spin.cost).toEqual({ amount: 0, spins: 1 });
+  });
+
+  it('two $5 chips with one hit cost $5: only the losing chip counts', () => {
+    const r = spinOn('17', [
+      ['straight:17', 500],
+      ['straight:20', 500],
+    ]);
+    expect(r.spin.cost).toEqual({ amount: 500, spins: 1 });
+    expect(r.session.stats.lastWinCost).toEqual({ amount: 500, spins: 1, win: 17_000 });
+  });
+});
